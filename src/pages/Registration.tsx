@@ -35,7 +35,7 @@ export default function Registration() {
     }
   }, [user?.registeredForDemo, navigate]);
 
-  const { register, handleSubmit, getValues, formState: { errors } } = useForm<RegistrationFormData>({
+  const { register, handleSubmit, getValues, watch, formState: { errors } } = useForm<RegistrationFormData>({
     defaultValues: {
       fullName: user?.name || '',
       email: user?.email || '',
@@ -43,6 +43,9 @@ export default function Registration() {
       demoMode: 'online'
     }
   });
+
+  const watchExperience = watch('experienceYears');
+  const isFresher = watchExperience === 'Fresher';
 
   const onSubmit = async (data: RegistrationFormData) => {
     console.log('Registration Data:', data);
@@ -259,34 +262,37 @@ export default function Registration() {
                 {errors.experienceYears && <p className="text-red-500 text-xs mt-1">{errors.experienceYears.message}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Current Role</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Current Role{!isFresher && ' *'}</label>
                 <input
-                  {...register('currentRole', { required: 'Current role is required' })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white"
-                  placeholder="e.g., Developer"
+                  {...register('currentRole', { required: !isFresher ? 'Current role is required' : false })}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white disabled:opacity-50"
+                  placeholder={isFresher ? "Not applicable (Fresher)" : "e.g., Developer"}
+                  disabled={isFresher}
                 />
-                {errors.currentRole && <p className="text-red-500 text-xs mt-1">{errors.currentRole.message}</p>}
+                {!isFresher && errors.currentRole && <p className="text-red-500 text-xs mt-1">{errors.currentRole.message}</p>}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company{!isFresher && ' *'}</label>
               <input
-                {...register('company', { required: 'Company is required' })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white"
-                placeholder="e.g., Tech Corp"
+                {...register('company', { required: !isFresher ? 'Company is required' : false })}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white disabled:opacity-50"
+                placeholder={isFresher ? "Not applicable (Fresher)" : "e.g., Tech Corp"}
+                disabled={isFresher}
               />
-              {errors.company && <p className="text-red-500 text-xs mt-1">{errors.company.message}</p>}
+              {!isFresher && errors.company && <p className="text-red-500 text-xs mt-1">{errors.company.message}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Work Location</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Work Location{!isFresher && ' *'}</label>
               <input
-                {...register('workLocation', { required: 'Work location is required' })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white"
-                placeholder="e.g., New York, NY"
+                {...register('workLocation', { required: !isFresher ? 'Work location is required' : false })}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white disabled:opacity-50"
+                placeholder={isFresher ? "Not applicable (Fresher)" : "e.g., New York, NY"}
+                disabled={isFresher}
               />
-              {errors.workLocation && <p className="text-red-500 text-xs mt-1">{errors.workLocation.message}</p>}
+              {!isFresher && errors.workLocation && <p className="text-red-500 text-xs mt-1">{errors.workLocation.message}</p>}
             </div>
 
             <div>

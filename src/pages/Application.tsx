@@ -36,8 +36,8 @@ const applicationSchema = z.object({
   university: z.string().min(2, 'University/College is required'),
   graduationYear: z.string().regex(/^\d{4}$/, 'Must be a valid 4-digit year'),
   educationProof: z.string().min(1, 'Education proof is required'),
-  currentRole: z.string().min(1, 'Current role is required'),
-  company: z.string().min(1, 'Company is required'),
+  currentRole: z.string().optional().or(z.literal('')),
+  company: z.string().optional().or(z.literal('')),
   experienceYears: z.string().min(1, 'Experience years is required'),
   homeAddress: z.string().min(5, 'Home address is required'),
   temporaryAddress: z.string().min(5, 'Temporary address is required'),
@@ -94,7 +94,13 @@ export default function Application() {
       graduationYear: user?.applicationData?.graduationYear || '',
       currentRole: user?.applicationData?.currentRole || user?.demoData?.currentRole || '',
       company: user?.applicationData?.company || user?.demoData?.company || '',
-      experienceYears: user?.applicationData?.experienceYears || user?.demoData?.experienceYears || '',
+      experienceYears: user?.applicationData?.experienceYears || (
+        user?.demoData?.experienceYears === 'Fresher' ? '0' :
+        user?.demoData?.experienceYears === '1-3' ? '2' :
+        user?.demoData?.experienceYears === '3-5' ? '4' :
+        user?.demoData?.experienceYears === '5+' ? '5' :
+        user?.demoData?.experienceYears || ''
+      ),
       homeAddress: user?.applicationData?.homeAddress || '',
       temporaryAddress: user?.applicationData?.temporaryAddress || '',
       sameAsHomeAddress: user?.applicationData?.sameAsHomeAddress || false,
@@ -174,7 +180,7 @@ export default function Application() {
 
   const validateStep = async () => {
     let fieldsToValidate: (keyof ApplicationFormData)[] = [];
-    if (currentStep === 1) fieldsToValidate = ['fullName', 'dob', 'placeOfBirth', 'nationality', 'gender', 'mobileNumber', 'emergencyContact', 'bloodGroup', 'photo', 'homeAddress', 'temporaryAddress'];
+    if (currentStep === 1) fieldsToValidate = ['fullName', 'dob', 'placeOfBirth', 'nationality', 'gender', 'mobileCountryCode', 'mobileNumber', 'emergencyCountryCode', 'emergencyContact', 'bloodGroup', 'photo', 'homeAddress', 'temporaryAddress'];
     else if (currentStep === 2) fieldsToValidate = ['qualification', 'university', 'graduationYear', 'educationProof'];
     else if (currentStep === 3) fieldsToValidate = ['currentRole', 'company', 'experienceYears', 'addressProof'];
     else if (currentStep === 4) fieldsToValidate = ['requestedCourses', 'modeOfStudy', 'branch'];

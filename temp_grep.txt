@@ -1,0 +1,550 @@
+src/pages/ProjectDetail.tsx:import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+src/pages/ProjectDetail.tsx:  const handleUpdateAdobeLink = async () => {
+src/pages/ProjectDetail.tsx:      await updateDoc(doc(db, 'student_projects', project.id), {
+src/pages/ProjectDetail.tsx:        updatedAt: new Date().toISOString()
+src/pages/ProjectDetail.tsx:      alert('Adobe Cloud link updated successfully.');
+src/pages/ProjectDetail.tsx:  const handleUpdateFinalFileLink = async () => {
+src/pages/ProjectDetail.tsx:      await updateDoc(doc(db, 'student_projects', project.id), {
+src/pages/ProjectDetail.tsx:        updatedAt: new Date().toISOString()
+src/pages/ProjectDetail.tsx:      alert('Final Project file link updated successfully.');
+src/pages/ProjectDetail.tsx:    const updates: any = {
+src/pages/ProjectDetail.tsx:      updatedAt: new Date().toISOString()
+src/pages/ProjectDetail.tsx:        updates.isTimerRunning = true;
+src/pages/ProjectDetail.tsx:        updates.lastTimerStart = new Date().toISOString();
+src/pages/ProjectDetail.tsx:        updates.isTimerRunning = false;
+src/pages/ProjectDetail.tsx:        updates.lastTimerStart = null;
+src/pages/ProjectDetail.tsx:        updates.actualTime = (project.actualTime || 0) + sessionTimeMinutes;
+src/pages/ProjectDetail.tsx:        updates.status = stages[nextIndex];
+src/pages/ProjectDetail.tsx:        updates.workStatus = 'Not Started';
+src/pages/ProjectDetail.tsx:      await updateDoc(doc(db, 'student_projects', project.id), updates);
+src/pages/ProjectDetail.tsx:      await updateDoc(doc(db, 'student_projects', project.id), {
+src/pages/ProjectDetail.tsx:        updatedAt: new Date().toISOString()
+src/pages/ProjectDetail.tsx:                            await updateDoc(projectRef, { digitalPreflight: data });
+src/pages/ProjectDetail.tsx:                            onClick={handleUpdateAdobeLink}
+src/pages/ProjectDetail.tsx:                                await updateDoc(projectRef, { digitalProduction: data });
+src/pages/ProjectDetail.tsx:                          // Auto update project record with the new link
+src/pages/ProjectDetail.tsx:                          await updateDoc(doc(db, 'student_projects', project.id), {
+src/pages/ProjectDetail.tsx:                            updatedAt: new Date().toISOString()
+src/pages/ProjectDetail.tsx:                    onClick={handleUpdateFinalFileLink}
+src/pages/TelecallerPanel.tsx:import { collection, query, onSnapshot, addDoc, updateDoc, doc, deleteDoc, orderBy } from 'firebase/firestore';
+src/pages/TelecallerPanel.tsx:        await updateDoc(doc(db, 'leads', editingLeadDetails.id), {
+src/pages/TelecallerPanel.tsx:          updatedAt: new Date().toISOString(),
+src/pages/TelecallerPanel.tsx:          updatedAt: new Date().toISOString(),
+src/pages/TelecallerPanel.tsx:  const handleUpdateLeadStatus = async (leadId: string, newStatus: Lead['status']) => {
+src/pages/TelecallerPanel.tsx:      await updateDoc(doc(db, 'leads', leadId), {
+src/pages/TelecallerPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/TelecallerPanel.tsx:        date: new Date().toISOString(),
+src/pages/TelecallerPanel.tsx:      const updateData: any = {
+src/pages/TelecallerPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/TelecallerPanel.tsx:        updateData.nextFollowUpDate = nextFollowUp;
+src/pages/TelecallerPanel.tsx:      await updateDoc(doc(db, 'leads', leadId), updateData);
+src/pages/TelecallerPanel.tsx:      // Update lead status
+src/pages/TelecallerPanel.tsx:      await updateDoc(doc(db, 'leads', leadToConvert.id), {
+src/pages/TelecallerPanel.tsx:        updatedAt: new Date().toISOString(),
+src/pages/TelecallerPanel.tsx:              type="date"
+src/pages/TelecallerPanel.tsx:              type="date"
+src/pages/TelecallerPanel.tsx:                    onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value as Lead['status'])}
+src/pages/TelecallerPanel.tsx:                          <span>{new Date(note.date).toLocaleString()}</span>
+src/pages/TelecallerPanel.tsx:                    type="date"
+src/pages/InterviewRoom.tsx:import { doc, getDoc, updateDoc } from 'firebase/firestore';
+src/pages/InterviewRoom.tsx:      await updateDoc(doc(db, 'live_sessions', session.id), {
+src/pages/TermsOfService.tsx:              <p className="text-orange-100 text-xs">Last updated: March 16, 2026</p>
+src/pages/TermsOfService.tsx:                <h3 className="font-bold text-gray-900 uppercase text-sm tracking-wider mb-2">Attendance Mandate</h3>
+src/pages/TermsOfService.tsx:                <p>Signed cheque(s) covering EMI amounts and dates.</p>
+src/pages/TermsOfService.tsx:                <h3 className="font-bold text-gray-900 uppercase text-sm tracking-wider mb-2">Virtual Candidate Laptop Access</h3>
+src/pages/TermsOfService.tsx:                <p>In cases where the virtual candidate’s company does not provide a laptop, students can access the virtual class system using Team Viewer. This flexibility ensures that every student can participate, regardless of their access to personal laptops.</p>
+src/pages/CommunicationAgent.tsx:                let updated = prev;
+src/pages/CommunicationAgent.tsx:                  updated = [...prev];
+src/pages/CommunicationAgent.tsx:                  updated[updated.length - 1] = { ...last, text: fullText };
+src/pages/CommunicationAgent.tsx:                  updated = [...prev, { id: newId, sender: 'agent', text: modelTranscript }];
+src/pages/CommunicationAgent.tsx:                return updated;
+src/pages/Dashboard.tsx:import { collection, doc, onSnapshot, query, setDoc, where, or, updateDoc } from 'firebase/firestore';
+src/pages/Dashboard.tsx:  const { user: authUser, updateUser: authUpdateUser, changePassword: authChangePassword } = useAuth();
+src/pages/Dashboard.tsx:  // Mock updates if in preview mode
+src/pages/Dashboard.tsx:  const updateUser = previewUser ? async () => {
+src/pages/Dashboard.tsx:  } : authUpdateUser;
+src/pages/Dashboard.tsx:      await updateDoc(doc(db, 'users', user.id), {
+src/pages/Dashboard.tsx:      await updateUser({ scores });
+src/pages/Dashboard.tsx:    if (dailyAttendance.some(a => a.date === today)) {
+src/pages/Dashboard.tsx:    dailyAttendance.push({ date: today, status: 'pending' });
+src/pages/Dashboard.tsx:    updateUser({ dailyAttendance });
+src/pages/Dashboard.tsx:                    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+src/pages/Dashboard.tsx:                            {new Date(holiday.date).toLocaleDateString('en-US', { weekday: 'long' })}
+src/pages/Dashboard.tsx:                            {new Date(holiday.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+src/pages/Dashboard.tsx:                    type="date"
+src/pages/Dashboard.tsx:                    type="date"
+src/pages/Dashboard.tsx:                const sortedHolidays = [...holidays].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+src/pages/Dashboard.tsx:                            {new Date(holiday.date).toLocaleDateString('en-IN', { weekday: 'long' })}
+src/pages/Dashboard.tsx:                        <span className="text-[10px] text-gray-500">{new Date(holiday.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+src/pages/Dashboard.tsx:                              updateUser({ photo: reader.result as string });
+src/pages/Dashboard.tsx:                        updateUser({ photo: image });
+src/pages/Dashboard.tsx:                    const updatedEmis = invoice.emis.map((e: any) => 
+src/pages/Dashboard.tsx:                    await updateDoc(doc(db, 'invoices', invoice.id), { emis: updatedEmis });
+src/pages/Dashboard.tsx:                    const updatedEmis = invoice.emis.map((e: any) => ({ ...e, status: 'paid', paidAt: new Date().toISOString(), paymentId }));
+src/pages/Dashboard.tsx:                    await updateDoc(doc(db, 'invoices', invoice.id), { emis: updatedEmis });
+src/pages/Dashboard.tsx:              <h2 className="text-2xl font-bold text-gray-900">Security Update Required</h2>
+src/pages/Dashboard.tsx:                Update Password & Continue
+src/pages/Dashboard.tsx:                      updatedAt: new Date().toISOString()
+src/pages/Dashboard.tsx:                    <p className="text-sm text-gray-500 max-w-md">Upon completing your enrolled course successfully, you will become eligible for campus placements. Auto-updates will appear here.</p>
+src/pages/Quiz.tsx:  const { user, updateUser } = useAuth();
+src/pages/Quiz.tsx:          updateUser({ quizCompleted: true }).catch(console.error);
+src/pages/Quiz.tsx:  }, [user, category, topic, navigate, updateUser]);
+src/pages/Quiz.tsx:    // Update score card regardless of passing
+src/pages/Quiz.tsx:      updateUser({ quizCompleted: true, scores: newScores });
+src/pages/Quiz.tsx:    // For multiple choice, score was already updated via setScore in handleOptionSelect, but state might be behind if running fast.
+src/pages/CourseModules.tsx:  const { user, updateUser } = useAuth();
+src/pages/CourseModules.tsx:      // Update score card for video completion (20 marks)
+src/pages/CourseModules.tsx:      updateUser({ completedModules: newCompleted, scores: newScores });
+src/pages/CourseModules.tsx:            updatedAt: new Date().toISOString()
+src/pages/CourseModules.tsx:    updateUser({ scores: newScores }).then(() => {
+src/pages/CourseModules.tsx:    updateUser({ scores: newScores });
+src/pages/CourseModules.tsx:    updateUser({ scores: newScores });
+src/pages/Registration.tsx:  const { user, updateUser } = useAuth();
+src/pages/Registration.tsx:      await updateUser({ 
+src/pages/Registration.tsx:      console.error("Failed to update user:", err);
+src/pages/Registration.tsx:      alert("Failed to update registration status. Please try again.");
+src/pages/Registration.tsx:                  type="date"
+src/pages/VideoIntro.tsx:  const { updateUser } = useAuth();
+src/pages/VideoIntro.tsx:        updateUser({ 
+src/pages/VideoIntro.tsx:      updateUser({ videoRecorded: true });
+src/pages/EntranceTest.tsx:import { doc, getDoc, updateDoc } from 'firebase/firestore';
+src/pages/EntranceTest.tsx:  const { user, updateUser } = useAuth();
+src/pages/EntranceTest.tsx:      await updateDoc(doc(db, 'users', user!.id), {
+src/pages/EntranceTest.tsx:      await updateUser({
+src/pages/StudentProjects.tsx:import { collection, onSnapshot, query, where, updateDoc, doc } from 'firebase/firestore';
+src/pages/StudentProjects.tsx:    const updates: any = {
+src/pages/StudentProjects.tsx:      updatedAt: new Date().toISOString()
+src/pages/StudentProjects.tsx:        updates.isTimerRunning = true;
+src/pages/StudentProjects.tsx:        updates.lastTimerStart = new Date().toISOString();
+src/pages/StudentProjects.tsx:        updates.isTimerRunning = false;
+src/pages/StudentProjects.tsx:        updates.lastTimerStart = null;
+src/pages/StudentProjects.tsx:        updates.actualTime = (project.actualTime || 0) + sessionTimeMinutes;
+src/pages/StudentProjects.tsx:        updates.status = stages[nextIndex];
+src/pages/StudentProjects.tsx:        updates.workStatus = 'Not Started';
+src/pages/StudentProjects.tsx:      await updateDoc(doc(db, 'student_projects', project.id), updates);
+src/pages/StudentProjects.tsx:                                      const updates: any = {
+src/pages/StudentProjects.tsx:                                        updatedAt: new Date().toISOString()
+src/pages/StudentProjects.tsx:                                        updates.isTimerRunning = false;
+src/pages/StudentProjects.tsx:                                        updates.lastTimerStart = null;
+src/pages/StudentProjects.tsx:                                        updates.actualTime = (project.actualTime || 0) + sessionTimeMinutes;
+src/pages/StudentProjects.tsx:                                        await updateDoc(doc(db, 'student_projects', project.id), updates);
+src/pages/AccountsPanel.tsx:import { collection, onSnapshot, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
+src/pages/AccountsPanel.tsx:  const isWithinDateRange = (dateStr: string) => {
+src/pages/AccountsPanel.tsx:    const date = new Date(dateStr);
+src/pages/AccountsPanel.tsx:    if (start && date < start) return false;
+src/pages/AccountsPanel.tsx:    if (end && date > end) return false;
+src/pages/AccountsPanel.tsx:          updatedAt: new Date().toISOString(),
+src/pages/AccountsPanel.tsx:          updatedBy: 'system'
+src/pages/AccountsPanel.tsx:      await updateDoc(doc(db, 'invoices', payoutModal.invoiceId), {
+src/pages/AccountsPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AccountsPanel.tsx:    let updatedWaivers = [...(invoice.waivers || [])];
+src/pages/AccountsPanel.tsx:      updatedWaivers[waiverModal.editIndex] = {
+src/pages/AccountsPanel.tsx:        ...updatedWaivers[waiverModal.editIndex],
+src/pages/AccountsPanel.tsx:        date: new Date().toISOString()
+src/pages/AccountsPanel.tsx:      updatedWaivers.push({
+src/pages/AccountsPanel.tsx:        date: new Date().toISOString()
+src/pages/AccountsPanel.tsx:      await updateDoc(doc(db, 'invoices', waiverModal.invoiceId), {
+src/pages/AccountsPanel.tsx:        waivers: updatedWaivers,
+src/pages/AccountsPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AccountsPanel.tsx:    const updatedWaivers = [...(invoice.waivers || [])];
+src/pages/AccountsPanel.tsx:    updatedWaivers.splice(waiverIndex, 1);
+src/pages/AccountsPanel.tsx:      await updateDoc(doc(db, 'invoices', invoiceId), {
+src/pages/AccountsPanel.tsx:        waivers: updatedWaivers,
+src/pages/AccountsPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AccountsPanel.tsx:    const updatedEmis = invoice.emis.map((emi: any) => {
+src/pages/AccountsPanel.tsx:      await updateDoc(doc(db, 'invoices', invoiceId), {
+src/pages/AccountsPanel.tsx:        emis: updatedEmis,
+src/pages/AccountsPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AccountsPanel.tsx:      // If there's a referral, update bonusEarnedSoFar
+src/pages/AccountsPanel.tsx:        const paidEmi = updatedEmis.find((e: any) => e.emiNumber === emiNumber);
+src/pages/AccountsPanel.tsx:        await updateDoc(doc(db, 'invoices', invoiceId), {
+src/pages/AccountsPanel.tsx:    let updatedCount = 0;
+src/pages/AccountsPanel.tsx:      let hasUpdates = false;
+src/pages/AccountsPanel.tsx:      const updatedEmis = invoice.emis.map((emi: any) => {
+src/pages/AccountsPanel.tsx:            hasUpdates = true;
+src/pages/AccountsPanel.tsx:      if (hasUpdates) {
+src/pages/AccountsPanel.tsx:          await updateDoc(doc(db, 'invoices', invoice.id), {
+src/pages/AccountsPanel.tsx:            emis: updatedEmis,
+src/pages/AccountsPanel.tsx:            updatedAt: new Date().toISOString()
+src/pages/AccountsPanel.tsx:          updatedCount++;
+src/pages/AccountsPanel.tsx:    alert(`Penalty checks completed. Updated ${updatedCount} invoices.`);
+src/pages/AccountsPanel.tsx:                        updatedAt: new Date().toISOString(),
+src/pages/AccountsPanel.tsx:                        updatedBy: user?.id || 'unknown'
+src/pages/AccountsPanel.tsx:                      type="date"
+src/pages/AccountsPanel.tsx:                      type="date"
+src/pages/ResumeBuilder.tsx:  const updateEducation = (id: string, field: keyof Education, value: string) => {
+src/pages/ResumeBuilder.tsx:                            onChange={(e) => updateEducation(edu.id, 'degree', e.target.value)}
+src/pages/ResumeBuilder.tsx:                            onChange={(e) => updateEducation(edu.id, 'institution', e.target.value)}
+src/pages/ResumeBuilder.tsx:                            onChange={(e) => updateEducation(edu.id, 'duration', e.target.value)}
+src/pages/ResumeBuilder.tsx:                            onChange={(e) => updateEducation(edu.id, 'score', e.target.value)}
+src/pages/PrivacyPolicy.tsx:              <p className="text-pink-100 text-xs">Last updated: March 16, 2026</p>
+src/pages/PrivacyPolicy.tsx:              <li>Communicate with you about updates, support, and administrative messages.</li>
+src/pages/Application.tsx:  const { user, updateUser } = useAuth();
+src/pages/Application.tsx:      setValue('temporaryAddress', homeAddress || '', { shouldValidate: true });
+src/pages/Application.tsx:        updateUser({ applicationData: formData });
+src/pages/Application.tsx:  }, [formData, updateUser]);
+src/pages/Application.tsx:      setValue(currentCropField, croppedImage, { shouldValidate: true });
+src/pages/Application.tsx:  const validateStep = async () => {
+src/pages/Application.tsx:    let fieldsToValidate: (keyof ApplicationFormData)[] = [];
+src/pages/Application.tsx:    if (currentStep === 1) fieldsToValidate = ['fullName', 'dob', 'placeOfBirth', 'nationality', 'gender', 'mobileNumber', 'emergencyContact', 'bloodGroup', 'photo', 'homeAddress', 'temporaryAddress'];
+src/pages/Application.tsx:    else if (currentStep === 2) fieldsToValidate = ['qualification', 'university', 'graduationYear', 'educationProof'];
+src/pages/Application.tsx:    else if (currentStep === 3) fieldsToValidate = ['currentRole', 'company', 'experienceYears', 'addressProof'];
+src/pages/Application.tsx:    else if (currentStep === 4) fieldsToValidate = ['requestedCourses', 'modeOfStudy', 'branch'];
+src/pages/Application.tsx:    const isValid = await trigger(fieldsToValidate);
+src/pages/Application.tsx:    await updateUser({ applicationData: currentData });
+src/pages/Application.tsx:    const isValid = await validateStep();
+src/pages/Application.tsx:      await updateUser({ 
+src/pages/Application.tsx:                        type="date" 
+src/pages/FacultyPanel.tsx:import { collection, doc, onSnapshot, query, updateDoc, where, addDoc, deleteDoc } from 'firebase/firestore';
+src/pages/FacultyPanel.tsx:  const [sessionToUpdateRecording, setSessionToUpdateRecording] = useState<string | null>(null);
+src/pages/FacultyPanel.tsx:      await updateDoc(doc(db, 'users', studentId), {
+src/pages/FacultyPanel.tsx:  const handleUpdateDailyAttendance = async (studentId: string, date: string, status: 'approved' | 'rejected') => {
+src/pages/FacultyPanel.tsx:        a.date === date ? { ...a, status } : a
+src/pages/FacultyPanel.tsx:      await updateDoc(doc(db, 'users', studentId), {
+src/pages/FacultyPanel.tsx:  const handleUpdateStatus = async (studentId: string, course: CourseType, topic: string, field: 'assignmentStatus' | 'videoStatus' | 'attendanceStatus' | 'worksheetStatus' | 'projectStatus' | 'mindMapStatus', status: 'approved' | 'rejected', mark?: number) => {
+src/pages/FacultyPanel.tsx:      await updateDoc(doc(db, 'users', studentId), { scores });
+src/pages/FacultyPanel.tsx:  const handleUpdateLeaveStatus = async (leaveId: string, status: 'approved' | 'rejected') => {
+src/pages/FacultyPanel.tsx:      await updateDoc(doc(db, 'leave_requests', leaveId), { status });
+src/pages/FacultyPanel.tsx:                        topic: `Daily Attendance: ${a.date}`,
+src/pages/FacultyPanel.tsx:                        date: a.date
+src/pages/FacultyPanel.tsx:                                handleUpdateDailyAttendance(item.student.id, (item as any).date, 'approved');
+src/pages/FacultyPanel.tsx:                                handleUpdateStatus(item.student.id, item.course, item.topic, item.field as any, 'approved');
+src/pages/FacultyPanel.tsx:                                handleUpdateDailyAttendance(item.student.id, (item as any).date, 'rejected');
+src/pages/FacultyPanel.tsx:                                handleUpdateStatus(item.student.id, item.course, item.topic, item.field as any, 'rejected');
+src/pages/FacultyPanel.tsx:                            Validate & Approve
+src/pages/FacultyPanel.tsx:                              onClick={() => handleUpdateLeaveStatus(leave.id, 'approved')}
+src/pages/FacultyPanel.tsx:                              onClick={() => handleUpdateLeaveStatus(leave.id, 'rejected')}
+src/pages/FacultyPanel.tsx:                              await updateDoc(doc(db, 'live_sessions', session.id), { status: 'live' });
+src/pages/FacultyPanel.tsx:                            await updateDoc(doc(db, 'live_sessions', session.id), { status: 'completed' });
+src/pages/FacultyPanel.tsx:                        // Format date for datetime-local input
+src/pages/FacultyPanel.tsx:                        const date = new Date(session.scheduledFor);
+src/pages/FacultyPanel.tsx:                        const formattedDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+src/pages/FacultyPanel.tsx:                        setSessionToUpdateRecording(session.id);
+src/pages/FacultyPanel.tsx:                  handleUpdateStatus(
+src/pages/FacultyPanel.tsx:                <p className="text-pink-100 text-xs mt-1">{editingSessionId ? 'Update virtual classroom details' : 'Start a new virtual classroom'}</p>
+src/pages/FacultyPanel.tsx:                  type="datetime-local"
+src/pages/FacultyPanel.tsx:                    alert('Please select a date and time');
+src/pages/FacultyPanel.tsx:                    updateDoc(doc(db, 'live_sessions', editingSessionId), {
+src/pages/FacultyPanel.tsx:      {/* Update Recording URL Modal */}
+src/pages/FacultyPanel.tsx:      {sessionToUpdateRecording && (
+src/pages/FacultyPanel.tsx:                onClick={() => setSessionToUpdateRecording(null)}
+src/pages/FacultyPanel.tsx:                onClick={() => setSessionToUpdateRecording(null)}
+src/pages/FacultyPanel.tsx:                  updateDoc(doc(db, 'live_sessions', sessionToUpdateRecording), {
+src/pages/FacultyPanel.tsx:                    setSessionToUpdateRecording(null);
+src/pages/FacultyPanel.tsx:                  }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `live_sessions/${sessionToUpdateRecording}`));
+src/pages/AdminPanel.tsx:  updateDoc, 
+src/pages/AdminPanel.tsx:        await updateDoc(doc(db, 'team_members', editingTeamMember.id), {
+src/pages/AdminPanel.tsx:          updatedAt: serverTimestamp()
+src/pages/AdminPanel.tsx:  const [sessionToUpdateRecording, setSessionToUpdateRecording] = useState<string | null>(null);
+src/pages/AdminPanel.tsx:  const [newHoliday, setNewHoliday] = useState({ date: '', title: '' });
+src/pages/AdminPanel.tsx:      'Check if all links are updated and not missing'
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'course_modules', moduleId), { [field]: url });
+src/pages/AdminPanel.tsx:      alert(`${fieldName} updated successfully.`);
+src/pages/AdminPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:        await updateDoc(doc(db, 'training_records', editingTrainingRecord.id), record);
+src/pages/AdminPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), { assignedFacultyId: facultyId });
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), { nativeLanguage: language });
+src/pages/AdminPanel.tsx:        date: newHoliday.date,
+src/pages/AdminPanel.tsx:      setNewHoliday({ date: '', title: '' });
+src/pages/AdminPanel.tsx:        updatedAt: now.toISOString()
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', approvingStudentId), {
+src/pages/AdminPanel.tsx:        updatedAt: new Date().toISOString(),
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), {
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', reschedulingDemoStudentId), {
+src/pages/AdminPanel.tsx:    let updatedCount = 0;
+src/pages/AdminPanel.tsx:      let hasUpdates = false;
+src/pages/AdminPanel.tsx:      const updatedEmis = invoice.emis.map((emi: any) => {
+src/pages/AdminPanel.tsx:            hasUpdates = true;
+src/pages/AdminPanel.tsx:      if (hasUpdates) {
+src/pages/AdminPanel.tsx:          await updateDoc(doc(db, 'invoices', invoice.id), {
+src/pages/AdminPanel.tsx:            emis: updatedEmis,
+src/pages/AdminPanel.tsx:            updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:          updatedCount++;
+src/pages/AdminPanel.tsx:    alert(`Penalty checks completed. Updated ${updatedCount} invoices.`);
+src/pages/AdminPanel.tsx:    const updatedEmis = invoice.emis.map((emi: any) => {
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'invoices', invoiceId), {
+src/pages/AdminPanel.tsx:        emis: updatedEmis,
+src/pages/AdminPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:      // If there's a referral, update bonusEarnedSoFar
+src/pages/AdminPanel.tsx:        const paidEmi = updatedEmis.find((e: any) => e.emiNumber === emiNumber);
+src/pages/AdminPanel.tsx:        await updateDoc(doc(db, 'invoices', invoiceId), {
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'invoices', payoutModal.invoiceId), {
+src/pages/AdminPanel.tsx:        updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:      await updateDoc(studentRef, { scores: newScores });
+src/pages/AdminPanel.tsx:      alert('Failed to update submission status');
+src/pages/AdminPanel.tsx:      const updateData: any = {
+src/pages/AdminPanel.tsx:        updateData.expiryDate = expiryDate;
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), updateData);
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), { 
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), { idCardApproved: !student.idCardApproved });
+src/pages/AdminPanel.tsx:      const updates: any = { certificateApproved: !currentStatus };
+src/pages/AdminPanel.tsx:        updates.certificateIssuedDate = new Date().toISOString();
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), updates);
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), { 
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), {
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', facultyId), { mustChangePassword: true });
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', telecallerId), { mustChangePassword: true });
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', userId), { role: 'faculty', applicationStatus: 'approved', isApproved: true });
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', userId), { role: 'telecaller', applicationStatus: 'approved', isApproved: true });
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', userId), { role: 'accounts_executive', applicationStatus: 'approved', isApproved: true });
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', userId), { role: 'qc', applicationStatus: 'approved', isApproved: true });
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', userId), { role: 'student' });
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), { mustChangePassword: true });
+src/pages/AdminPanel.tsx:  const handleUpdateScore = async (studentId: string, course: CourseType, topic: string, field: keyof TopicScore, value: any) => {
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'users', studentId), { scores });
+src/pages/AdminPanel.tsx:          const [date, title] = line.split(',');
+src/pages/AdminPanel.tsx:          if (date && title) {
+src/pages/AdminPanel.tsx:              date: date.trim(),
+src/pages/AdminPanel.tsx:  const handleUpdateModule = async (e: React.FormEvent) => {
+src/pages/AdminPanel.tsx:      await updateDoc(doc(db, 'course_modules', module.id), module as any);
+src/pages/AdminPanel.tsx:      alert('Module updated successfully.');
+src/pages/AdminPanel.tsx:        let updatedCount = 0;
+src/pages/AdminPanel.tsx:            updatedCount++;
+src/pages/AdminPanel.tsx:          batch.update(doc(db, 'users', u.id), { scores });
+src/pages/AdminPanel.tsx:        alert(`Successfully updated ${updatedCount} mark entries.`);
+src/pages/AdminPanel.tsx:        await updateDoc(doc(db, 'software_videos', editingSoftwareVideoId), {
+src/pages/AdminPanel.tsx:          updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:        alert('Signature updated successfully.');
+src/pages/AdminPanel.tsx:        alert('Logo updated successfully.');
+src/pages/AdminPanel.tsx:        alert('Landing Page Title Image updated successfully.');
+src/pages/AdminPanel.tsx:      const updatedBranches = [...branches, newBranch.trim()];
+src/pages/AdminPanel.tsx:      await setDoc(doc(db, 'settings', 'admin'), { branches: updatedBranches }, { merge: true });
+src/pages/AdminPanel.tsx:      const updatedBranches = branches.filter(b => b !== branchToRemove);
+src/pages/AdminPanel.tsx:      await setDoc(doc(db, 'settings', 'admin'), { branches: updatedBranches }, { merge: true });
+src/pages/AdminPanel.tsx:          const updatedAdminBanners = adminData.banners.filter((b: any) => b.id !== editingBannerId);
+src/pages/AdminPanel.tsx:          if (updatedAdminBanners.length !== adminData.banners.length) {
+src/pages/AdminPanel.tsx:            await setDoc(doc(db, 'settings', 'admin'), { banners: updatedAdminBanners }, { merge: true });
+src/pages/AdminPanel.tsx:        const updatedAdminBanners = adminData.banners.filter((b: any) => b.id !== bannerId);
+src/pages/AdminPanel.tsx:        if (updatedAdminBanners.length !== adminData.banners.length) {
+src/pages/AdminPanel.tsx:          await setDoc(doc(db, 'settings', 'admin'), { banners: updatedAdminBanners }, { merge: true });
+src/pages/AdminPanel.tsx:      // Update local state immediately for better UX
+src/pages/AdminPanel.tsx:                                await updateDoc(doc(db, 'live_sessions', session.id), { status: 'live' });
+src/pages/AdminPanel.tsx:                              await updateDoc(doc(db, 'live_sessions', session.id), { status: 'completed' });
+src/pages/AdminPanel.tsx:                          setSessionToUpdateRecording(session.id);
+src/pages/AdminPanel.tsx:                <p className="text-sm text-gray-500">Update training videos for each course module.</p>
+src/pages/AdminPanel.tsx:                  <form onSubmit={handleUpdateModule} className="space-y-6">
+src/pages/AdminPanel.tsx:                                  const updatedUrls = { ...(editingModule.module.videoUrls || {}) };
+src/pages/AdminPanel.tsx:                                  updatedUrls[lang] = e.target.value;
+src/pages/AdminPanel.tsx:                                      videoUrls: updatedUrls,
+src/pages/AdminPanel.tsx:                                const updatedUrls = { ...(newModuleData.videoUrls || {}) };
+src/pages/AdminPanel.tsx:                                updatedUrls[lang] = e.target.value;
+src/pages/AdminPanel.tsx:                                  videoUrls: updatedUrls,
+src/pages/AdminPanel.tsx:                <p className="text-sm text-gray-500">Update worksheet, project, and attendance marks for live classes.</p>
+src/pages/AdminPanel.tsx:                                onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'assignment', parseInt(e.target.value) || 0)}
+src/pages/AdminPanel.tsx:                              onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'video', parseInt(e.target.value) || 0)}
+src/pages/AdminPanel.tsx:                              onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'worksheet', parseInt(e.target.value) || 0)}
+src/pages/AdminPanel.tsx:                              onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'project', parseInt(e.target.value) || 0)}
+src/pages/AdminPanel.tsx:                              onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'mindMap', parseInt(e.target.value) || 0)}
+src/pages/AdminPanel.tsx:                              onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'quiz', parseInt(e.target.value) || 0)}
+src/pages/AdminPanel.tsx:                                onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'onlineTest', parseInt(e.target.value) || 0)}
+src/pages/AdminPanel.tsx:                                  onClick={() => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'onlineTestAssigned', !scores.onlineTestAssigned)}
+src/pages/AdminPanel.tsx:                              onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'attendance', parseInt(e.target.value) || 0)}
+src/pages/AdminPanel.tsx:                type="date"
+src/pages/AdminPanel.tsx:                value={newHoliday.date}
+src/pages/AdminPanel.tsx:                onChange={(e) => setNewHoliday({ ...newHoliday, date: e.target.value })}
+src/pages/AdminPanel.tsx:                    <p className="text-xs text-gray-500">{new Date(h.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+src/pages/AdminPanel.tsx:                        alert('Audio uploaded and URL updated! Click Save Test Settings to persist.');
+src/pages/AdminPanel.tsx:                          alert('AI Knowledge Base updated successfully!');
+src/pages/AdminPanel.tsx:                      {editingSoftwareVideoId ? 'Update Video' : 'Save Video'}
+src/pages/AdminPanel.tsx:                              await updateDoc(doc(db, 'live_sessions', session.id), { status: 'live' });
+src/pages/AdminPanel.tsx:                            await updateDoc(doc(db, 'live_sessions', session.id), { status: 'completed' });
+src/pages/AdminPanel.tsx:                        // Format date for datetime-local input
+src/pages/AdminPanel.tsx:                        const date = new Date(session.scheduledFor);
+src/pages/AdminPanel.tsx:                        const formattedDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+src/pages/AdminPanel.tsx:                        setSessionToUpdateRecording(session.id);
+src/pages/AdminPanel.tsx:                        'Check if all links are updated and not missing'
+src/pages/AdminPanel.tsx:                                              await updateDoc(doc(db, 'student_projects', assignment.id), {
+src/pages/AdminPanel.tsx:                                                updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:                              const { id, createdAt, updatedAt, ...projectData } = master;
+src/pages/AdminPanel.tsx:                                updatedAt: now.toISOString()
+src/pages/AdminPanel.tsx:                                'Check if all links are updated and not missing'
+src/pages/AdminPanel.tsx:                ? 'Update the EMI, rules, and financials for this student.'
+src/pages/AdminPanel.tsx:                <p className="text-pink-100 text-xs mt-1">Update demo date and time</p>
+src/pages/AdminPanel.tsx:                  type="date"
+src/pages/AdminPanel.tsx:                <p className="text-pink-100 text-xs mt-1">{editingSessionId ? 'Update virtual classroom details' : 'Start a new virtual classroom'}</p>
+src/pages/AdminPanel.tsx:                  type="datetime-local"
+src/pages/AdminPanel.tsx:                    alert('Please select a date and time');
+src/pages/AdminPanel.tsx:                    updateDoc(doc(db, 'live_sessions', editingSessionId), {
+src/pages/AdminPanel.tsx:      {/* Update Recording URL Modal */}
+src/pages/AdminPanel.tsx:      {sessionToUpdateRecording && (
+src/pages/AdminPanel.tsx:                onClick={() => setSessionToUpdateRecording(null)}
+src/pages/AdminPanel.tsx:                onClick={() => setSessionToUpdateRecording(null)}
+src/pages/AdminPanel.tsx:                  updateDoc(doc(db, 'live_sessions', sessionToUpdateRecording), {
+src/pages/AdminPanel.tsx:                    setSessionToUpdateRecording(null);
+src/pages/AdminPanel.tsx:                  }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `live_sessions/${sessionToUpdateRecording}`));
+src/pages/AdminPanel.tsx:                    updatedAt: now.toISOString()
+src/pages/AdminPanel.tsx:                      await updateDoc(doc(db, 'master_projects', editingProjectId), baseProjectData);
+src/pages/AdminPanel.tsx:                          // Update all existing projects. Handling duplicates.
+src/pages/AdminPanel.tsx:                            const updateData: any = { ...baseProjectData };
+src/pages/AdminPanel.tsx:                              updateData.adobeCloudLink = assignment.adobeCloudLink;
+src/pages/AdminPanel.tsx:                            if (updateData.clientBrief) {
+src/pages/AdminPanel.tsx:                              updateData.clientBrief = {
+src/pages/AdminPanel.tsx:                                ...updateData.clientBrief,
+src/pages/AdminPanel.tsx:                                fileName: `${existingProject.projectCode}_${updateData.clientBrief.brandName}_${updateData.clientBrief.packType}_${updateData.clientBrief.variantName}_${updateData.clientBrief.netWeight}`
+src/pages/AdminPanel.tsx:                            batch.update(doc(db, 'student_projects', existingProject.id), updateData);
+src/pages/AdminPanel.tsx:                            await updateDoc(doc(db, 'student_projects', projectToReview.id), {
+src/pages/AdminPanel.tsx:                              updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:                            alert('Correction PDF link updated.');
+src/pages/AdminPanel.tsx:                        Update
+src/pages/AdminPanel.tsx:                    await updateDoc(doc(db, 'student_projects', projectToReview.id), {
+src/pages/AdminPanel.tsx:                      updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:                    await updateDoc(doc(db, 'student_projects', projectToReview.id), {
+src/pages/AdminPanel.tsx:                      updatedAt: new Date().toISOString()
+src/pages/AdminPanel.tsx:                        updatedAt: now.toISOString()
+src/pages/CourseOverview.tsx:        updatedAt: new Date().toISOString(),
+src/pages/LeadCapture.tsx:        updatedAt: new Date().toISOString(),
+src/components/FacultySchedule.tsx:      where('date', '==', selectedDate)
+src/components/FacultySchedule.tsx:        alert("End date cannot be before start date.");
+src/components/FacultySchedule.tsx:          const dateString = currentDate.toISOString().split('T')[0];
+src/components/FacultySchedule.tsx:            date: dateString,
+src/components/FacultySchedule.tsx:              type="date" 
+src/components/FacultySchedule.tsx:                type="date" 
+src/components/FacultySchedule.tsx:            No slots scheduled for this date.
+src/components/AdminWhatsAppSettings.tsx:        updatedAt: new Date().toISOString()
+src/components/PlacementAdminView.tsx:    const updated = current.map(y => {
+src/components/PlacementAdminView.tsx:    handleSaveGlobal({ id: 'placements', yearlyRecords: updated });
+src/components/PlacementAdminView.tsx:    const updated = current.map(y => {
+src/components/PlacementAdminView.tsx:    handleSaveGlobal({ id: 'placements', yearlyRecords: updated });
+src/components/PlacementAdminView.tsx:    const updated = current.filter(y => y.year !== year);
+src/components/PlacementAdminView.tsx:    handleSaveGlobal({ id: 'placements', yearlyRecords: updated });
+src/components/PlacementAdminView.tsx:      alert('Student placement updated');
+src/components/PlacementAdminView.tsx:                <p>Select a student to update their placement record.</p>
+src/components/PlacementAdminView.tsx:                        <input type="datetime-local" value={studentForm.interviewDate || ''} onChange={e=>setStudentForm({...studentForm, interviewDate: e.target.value})} className="w-full px-4 py-2 border rounded-xl" />
+src/components/Reports.tsx:  const isWithinDateRange = (dateStr: string | number | undefined) => {
+src/components/Reports.tsx:    if (!dateStr) return false;
+src/components/Reports.tsx:    const date = new Date(dateStr);
+src/components/Reports.tsx:    if (start && date < start) return false;
+src/components/Reports.tsx:    if (end && date > end) return false;
+src/components/Reports.tsx:    const filteredSlots = scheduleSlots.filter(s => isWithinDateRange(s.date));
+src/components/Reports.tsx:    const filteredSlots = relevantSlots.filter(s => isWithinDateRange(s.date));
+src/components/Reports.tsx:      csv += `"${slot.date}","${student?.name || slot.studentName}","${fac?.name || ''}","${slot.startTime}","${slot.endTime}","${slot.type}","${slot.status}","${slot.clockInTime ? new Date(slot.clockInTime).toLocaleTimeString() : ''}","${slot.clockOutTime ? new Date(slot.clockOutTime).toLocaleTimeString() : ''}"\n`;
+src/components/Reports.tsx:                type="date" 
+src/components/Reports.tsx:                type="date" 
+src/components/StudentIDCard.tsx:  const formatDate = (dateString?: string) => {
+src/components/StudentIDCard.tsx:    if (!dateString) return 'N/A';
+src/components/StudentIDCard.tsx:    return new Date(dateString).toLocaleDateString('en-US', {
+src/components/StudentSchedule.tsx:import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+src/components/StudentSchedule.tsx:      where('date', '==', today)
+src/components/StudentSchedule.tsx:      await updateDoc(doc(db, 'schedule_slots', slotId), {
+src/components/StudentSchedule.tsx:      await updateDoc(doc(db, 'schedule_slots', slotId), {
+src/components/ProductionArtChecklist.tsx:  mandate: [
+src/components/ProductionArtChecklist.tsx:    "Checked Legal requirement updated",
+src/components/ProductionArtChecklist.tsx:    "Checked for the updating of non-visible stations and Thumbnail Updated"
+src/components/ProductionArtChecklist.tsx:    mandate: Array(2).fill('pending'),
+src/components/ProductionArtChecklist.tsx:  const updateSectionArray = (section: keyof typeof formData, idx: number, value: string) => {
+src/components/ProductionArtChecklist.tsx:  const updateTech = (field: string, value: string) => {
+src/components/ProductionArtChecklist.tsx:  const updateBaseObject = (section: keyof typeof formData, field: string, value: any) => {
+src/components/ProductionArtChecklist.tsx:              onChange={val => updateSectionArray(sectionKey as keyof typeof formData, idx, val)} 
+src/components/ProductionArtChecklist.tsx:                onChange={e => updateTech(field, e.target.value)}
+src/components/ProductionArtChecklist.tsx:              <StatusDropdown value={formData.preflight[idx]} onChange={val => updateSectionArray('preflight', idx, val)} disabled={readOnly} />
+src/components/ProductionArtChecklist.tsx:      <SectionBlock title="Mandate" sectionKey="mandate" items={SECTIONS.mandate} />
+src/components/ProductionArtChecklist.tsx:            <StatusDropdown value={(formData as any).barcode.status} onChange={val => updateBaseObject('barcode', 'status', val)} disabled={readOnly} />
+src/components/ProductionArtChecklist.tsx:                  onClick={() => !readOnly && updateBaseObject('barcode', key, !(formData.barcode as any)[key])}
+src/components/ProductionArtChecklist.tsx:            <StatusDropdown value={(formData as any).eyeMark.status} onChange={val => updateBaseObject('eyeMark', 'status', val)} disabled={readOnly} />
+src/components/ProductionArtChecklist.tsx:                  onClick={() => !readOnly && updateBaseObject('eyeMark', key, !(formData.eyeMark as any)[key])}
+src/components/SecurePdfViewer.tsx:          // Validate PDF signature
+src/components/PreFlightChecklist.tsx:    date: new Date().toISOString().split('T')[0],
+src/components/PreFlightChecklist.tsx:      trackerUpdated: 'pending'
+src/components/PreFlightChecklist.tsx:  const updateNestedState = (section: string, field: string, value: any) => {
+src/components/PreFlightChecklist.tsx:  const updateDeepNestedState = (section: string, subSection: string, field: string, value: any) => {
+src/components/PreFlightChecklist.tsx:                type="date" 
+src/components/PreFlightChecklist.tsx:                value={formData.date}
+src/components/PreFlightChecklist.tsx:                onChange={e => setFormData({...formData, date: e.target.value})}
+src/components/PreFlightChecklist.tsx:                <input type="text" className="flex-1 px-4 py-2 outline-none bg-transparent" value={formData.tech.typeOfPackaging} onChange={e => updateNestedState('tech', 'typeOfPackaging', e.target.value)} />
+src/components/PreFlightChecklist.tsx:                <input type="text" className="flex-1 px-4 py-2 outline-none bg-transparent" value={formData.tech.packType} onChange={e => updateNestedState('tech', 'packType', e.target.value)} />
+src/components/PreFlightChecklist.tsx:                <input type="text" className="flex-1 px-4 py-2 outline-none bg-transparent" value={formData.tech.productCategory} onChange={e => updateNestedState('tech', 'productCategory', e.target.value)} />
+src/components/PreFlightChecklist.tsx:                <input type="text" className="flex-1 px-4 py-2 outline-none bg-transparent" value={formData.tech.printingProcess} onChange={e => updateNestedState('tech', 'printingProcess', e.target.value)} />
+src/components/PreFlightChecklist.tsx:                <input type="text" className="flex-1 px-4 py-2 outline-none bg-transparent" value={formData.tech.printType} onChange={e => updateNestedState('tech', 'printType', e.target.value)} />
+src/components/PreFlightChecklist.tsx:                <input type="text" className="flex-1 px-4 py-2 outline-none bg-transparent" value={formData.tech.substrateType} onChange={e => updateNestedState('tech', 'substrateType', e.target.value)} />
+src/components/PreFlightChecklist.tsx:                <StatusDropdown value={formData.sow.clarity} onChange={val => updateNestedState('sow', 'clarity', val)} />
+src/components/PreFlightChecklist.tsx:                <StatusDropdown value={formData.sow.specsProvided} onChange={val => updateNestedState('sow', 'specsProvided', val)} />
+src/components/PreFlightChecklist.tsx:                        onClick={() => updateDeepNestedState('sow', 'refs', key, !(formData.sow.refs as any)[key])}
+src/components/PreFlightChecklist.tsx:                    onChange={e => updateNestedState('sow', 'jobsBooked', e.target.value)}
+src/components/PreFlightChecklist.tsx:                    onChange={e => updateNestedState('sow', 'jobNumbersText', e.target.value)}
+src/components/PreFlightChecklist.tsx:                <StatusDropdown value={formData.sow.briefClear} onChange={val => updateNestedState('sow', 'briefClear', val)} />
+src/components/PreFlightChecklist.tsx:                    <input type="number" value={formData.sow.briefs.addition} onChange={e => updateDeepNestedState('sow', 'briefs', 'addition', e.target.value)} className="w-20 px-3 py-1 border border-gray-300 rounded-lg text-sm" placeholder="0" />
+src/components/PreFlightChecklist.tsx:                    <input type="number" value={formData.sow.briefs.deletion} onChange={e => updateDeepNestedState('sow', 'briefs', 'deletion', e.target.value)} className="w-20 px-3 py-1 border border-gray-300 rounded-lg text-sm" placeholder="0" />
+src/components/PreFlightChecklist.tsx:                    <input type="number" value={formData.sow.briefs.replacement} onChange={e => updateDeepNestedState('sow', 'briefs', 'replacement', e.target.value)} className="w-20 px-3 py-1 border border-gray-300 rounded-lg text-sm" placeholder="0" />
+src/components/PreFlightChecklist.tsx:                  onChange={e => updateNestedState('sow', 'scopeChanges', e.target.value)}
+src/components/PreFlightChecklist.tsx:                <StatusDropdown value={formData.query.meetingNecessary} onChange={val => updateNestedState('query', 'meetingNecessary', val)} />
+src/components/PreFlightChecklist.tsx:                          onChange={val => updateDeepNestedState('query', 'address', key, val)} 
+src/components/PreFlightChecklist.tsx:                  <span className="text-sm text-gray-700 pt-0.5">Update queries in the Query tracker.</span>
+src/components/PreFlightChecklist.tsx:                <StatusDropdown value={formData.query.trackerUpdated} onChange={val => updateNestedState('query', 'trackerUpdated', val)} />
+src/components/ApplicationEditModal.tsx:import { doc, updateDoc } from 'firebase/firestore';
+src/components/ApplicationEditModal.tsx:      await updateDoc(doc(db, 'users', studentId), {
+src/components/ApplicationEditModal.tsx:                {renderField('Date of Birth', 'dob', 'date')}
+src/components/ApplicationEditModal.tsx:                {renderField('Preferred Demo Date', 'preferredDate', 'date')}
+src/components/ChatBox.tsx:    const date = new Date(isoString);
+src/components/ChatBox.tsx:    const isToday = date.toDateString() === today.toDateString();
+src/components/ChatBox.tsx:      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+src/components/ChatBox.tsx:      return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+src/components/ChatBox.tsx:    const groups: { [date: string]: ChatMessage[] } = {};
+src/components/ChatBox.tsx:      const date = formatDate(msg.timestamp);
+src/components/ChatBox.tsx:      if (!groups[date]) groups[date] = [];
+src/components/ChatBox.tsx:      groups[date].push(msg);
+src/components/ChatBox.tsx:                  Object.entries(messageGroups).map(([date, msgs]) => (
+src/components/ChatBox.tsx:                    <div key={date} className="space-y-4">
+src/components/ChatBox.tsx:                          {date === formatDate(new Date().toISOString()) ? 'Today' : date}
+src/components/MindMapAI.tsx:        updatedAt: new Date().toISOString()
+src/components/MindMapAI.tsx:  const validateMindMap = async () => {
+src/components/MindMapAI.tsx:          updatedAt: new Date().toISOString()
+src/components/MindMapAI.tsx:      let errorMessage = err.message || "Failed to validate mind map. Please try again.";
+src/components/MindMapAI.tsx:                      onClick={validateMindMap}
+src/components/MindMapAI.tsx:                      {isValidating ? 'Validating...' : 'Validate against Answer Key'}
+src/components/MindMapAI.tsx:                  Use indentation (spaces) to create parent/child relationships. The visual mind map will update automatically based on this structure.
+src/components/TrainingRecordForm.tsx:              type="date"
+src/components/TrainingRecordForm.tsx:              type="date"
+src/components/FacultyAvailabilityModal.tsx:      where('date', '==', selectedDate)
+src/components/FacultyAvailabilityModal.tsx:        alert("End date cannot be before start date.");
+src/components/FacultyAvailabilityModal.tsx:        const dateString = currentDate.toISOString().split('T')[0];
+src/components/FacultyAvailabilityModal.tsx:          date: dateString,
+src/components/FacultyAvailabilityModal.tsx:                  type="date" 
+src/components/FacultyAvailabilityModal.tsx:                  type="date" 
+src/components/FacultyAvailabilityModal.tsx:                No slots scheduled for this date.
+src/components/PrintableChecklists.tsx:              <tr><td colSpan={5} className="print-section-title">Mandate</td></tr>
+src/components/PrintableChecklists.tsx:              <tr><td className="print-row-num">1</td><td>Checked Legal requirement updated</td><td className="print-check-col"></td><td className="print-check-col"></td><td className="print-check-col"></td></tr>
+src/components/PrintableChecklists.tsx:              <tr><td className="print-row-num">7</td><td>Checked for the updating of non-visible stations and Thumbnail Updated</td><td className="print-check-col"></td><td className="print-check-col"></td><td className="print-check-col"></td></tr>
+src/utils.ts:export function calculateSLADate(startDate: Date, holidays: { date: string }[]): string {
+src/utils.ts:    const dateString = currentDate.toISOString().split('T')[0];
+src/utils.ts:    const isHoliday = holidays.some(h => h.date === dateString);
+src/useNotifications.ts:            body: `A new ${slot.type} slot has been scheduled for ${slot.date} at ${slot.time}.`,
+src/useNotifications.ts:          new Notification('Schedule Slot Updated', {
+src/useNotifications.ts:            body: `The ${slot.type} slot on ${slot.date} at ${slot.time} has been updated.`,
+src/useNotifications.ts:            body: `The ${slot.type} slot on ${slot.date} at ${slot.time} has been cancelled.`,
+src/firebase.ts:  UPDATE = 'update',
+src/types.ts:  attendanceDates?: string[]; // Track individual dates approved
+src/types.ts:  date: string;
+src/types.ts:  date: string;
+src/types.ts:  date: string; // YYYY-MM-DD
+src/types.ts:  notes: { id: string; date: string; text: string; authorId: string; authorName: string }[];
+src/types.ts:  updatedAt: string;
+src/types.ts:  updatedAt?: string;
+src/types.ts:  updatedBy?: string;
+src/types.ts:  lastPasswordUpdate?: string;
+src/types.ts:  updatedAt?: string;
+src/types.ts:  date: string;
+src/types.ts:  updatedAt: string;
+src/types.ts:  updatedAt: string;
+src/types.ts:  updatedAt: string;
+src/types.ts:  updatedAt: string;
+src/types.ts:  updatedBy: string;
+src/AuthContext.tsx:  updatePassword,
+src/AuthContext.tsx:  updateDoc, 
+src/AuthContext.tsx:  updateUser: (updates: Partial<User>) => Promise<void>;
+src/AuthContext.tsx:        // Use onSnapshot for real-time updates to the user profile
+src/AuthContext.tsx:              const lastUpdate = newData.lastPasswordUpdate ? new Date(newData.lastPasswordUpdate).getTime() : 0;
+src/AuthContext.tsx:              if (Date.now() - lastUpdate > THIRTY_DAYS && !newData.mustChangePassword) {
+src/AuthContext.tsx:                updateDoc(userDocRef, { mustChangePassword: true }).catch(console.error);
+src/AuthContext.tsx:                updatedAt: new Date().toISOString()
+src/AuthContext.tsx:          await updateDoc(userDocRef, { role: 'admin' });
+src/AuthContext.tsx:  const updateUser = useCallback(async (updates: Partial<User>) => {
+src/AuthContext.tsx:      await updateDoc(userDocRef, updates);
+src/AuthContext.tsx:      await updatePassword(auth.currentUser, newPassword);
+src/AuthContext.tsx:      await updateDoc(userDocRef, { 
+src/AuthContext.tsx:        lastPasswordUpdate: new Date().toISOString(),
+src/AuthContext.tsx:        updatedAt: new Date().toISOString()
+src/AuthContext.tsx:    <AuthContext.Provider value={{ user, login, loginWithGoogle, signup, resetPassword, logout, updateUser, changePassword, isLoading, isAdmin, isQC, isElevated }}>

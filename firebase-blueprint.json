@@ -1,0 +1,378 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a student, faculty, or admin in the system.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "admin", "faculty"] },
+        "isApproved": { "type": "boolean" },
+        "isPhasedOut": { "type": "boolean" },
+        "mustChangePassword": { "type": "boolean" },
+        "registeredForDemo": { "type": "boolean" },
+        "applicationStatus": { "type": "string", "enum": ["pending", "submitted", "approved", "phased-out"] },
+        "applicationData": { "type": "object" },
+        "videoRecorded": { "type": "boolean" },
+        "videoIntroStatus": { "type": "string" },
+        "videoIntroData": { "type": "string" },
+        "quizCompleted": { "type": "boolean" },
+        "completedModules": { "type": "array", "items": { "type": "string" } },
+        "requestedCourse": { "type": "string" },
+        "requestedCourses": { "type": "array", "items": { "type": "string" } },
+        "assignedCourse": { "type": "string" },
+        "assignedCourses": { "type": "array", "items": { "type": "string" } },
+        "photo": { "type": "string" },
+        "idCardApproved": { "type": "boolean" },
+        "adminSignature": { "type": "string" },
+        "admissionDate": { "type": "string" },
+        "expiryDate": { "type": "string" },
+        "assignedFacultyId": { "type": "string" },
+        "dailyAttendance": { "type": "array", "items": { "type": "object" } },
+        "scores": { "type": "object" },
+        "referredBy": { "type": "string" },
+        "referrerContact": { "type": "string" }
+      },
+      "required": ["id", "name", "username", "email", "role", "isApproved"]
+    },
+    "CourseModule": {
+      "title": "CourseModule",
+      "description": "A training module with video and assignment.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "duration": { "type": "string" },
+        "category": { "type": "string" },
+        "assignmentPaperUrl": { "type": "string" }
+      },
+      "required": ["id", "title", "videoUrl", "category"]
+    },
+    "QuizQuestion": {
+      "title": "QuizQuestion",
+      "description": "A question for the module quizzes.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "question": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctAnswer": { "type": "integer" },
+        "type": { "type": "string" }
+      },
+      "required": ["id", "question", "options", "correctAnswer"]
+    },
+    "LeaveRequest": {
+      "title": "LeaveRequest",
+      "description": "A request for leave submitted by a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" },
+        "submittedAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "startDate", "endDate", "status"]
+    },
+    "Holiday": {
+      "title": "Holiday",
+      "description": "A scheduled holiday.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "title": { "type": "string" }
+      },
+      "required": ["id", "date", "title"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application settings.",
+      "type": "object",
+      "properties": {
+        "adminSignature": { "type": "string" }
+      }
+    },
+    "ScheduleSlot": {
+      "title": "ScheduleSlot",
+      "description": "A scheduled class or task slot for a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "type": { "type": "string", "enum": ["live_class", "self_task"] },
+        "status": { "type": "string", "enum": ["scheduled", "completed", "missed"] },
+        "clockInTime": { "type": "string" },
+        "clockOutTime": { "type": "string" }
+      },
+      "required": ["id", "facultyId", "studentId", "date", "startTime", "endTime", "type", "status"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "A student's invoice with EMI and payment details.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "totalFee": { "type": "number" },
+        "concessionApplied": { "type": "string", "enum": ["none", "single-parent", "transgender"] },
+        "finalAmount": { "type": "number" },
+        "emis": { "type": "array", "items": { "type": "object" } },
+        "waivers": { "type": "array", "items": { "type": "object" } },
+        "referral": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "totalFee", "concessionApplied", "finalAmount", "emis", "waivers", "createdAt", "updatedAt"]
+    },
+    "LiveSession": {
+      "title": "LiveSession",
+      "description": "A live or demo session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "roomId": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "facultyName": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "scheduledFor": { "type": "string" },
+        "status": { "type": "string", "enum": ["scheduled", "live", "completed"] },
+        "createdAt": { "type": "string" },
+        "type": { "type": "string", "enum": ["live", "demo"] },
+        "recordingUrl": { "type": "string" }
+      },
+      "required": ["id", "title", "roomId", "facultyId", "status", "createdAt"]
+    },
+    "StudentProject": {
+      "title": "StudentProject",
+      "description": "A project assigned to a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["client", "preflight", "production", "pqc", "qc", "approved"] },
+        "workStatus": { "type": "string", "enum": ["Not started", "In work", "Phase", "Hold", "Completed"] },
+        "estimatedTime": { "type": "number" },
+        "actualTime": { "type": "number" },
+        "points": { "type": "number" },
+        "efficiency": { "type": "number" },
+        "slaDate": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "title", "status", "createdAt", "updatedAt"]
+    },
+    "TrainingRecord": {
+      "title": "TrainingRecord",
+      "description": "A record of training conducted for a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "trainerName": { "type": "string" },
+        "duration": { "type": "string" },
+        "trainingDate": { "type": "string" },
+        "topics": { "type": "string" },
+        "feedback": { "type": "object" },
+        "postTrainingImplementation": { "type": "string" },
+        "effectivenessVerification": { "type": "object" },
+        "effectivenessDetails": { "type": "string" },
+        "evaluatedBy": { "type": "string" },
+        "evaluationDate": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "trainerName", "trainingDate", "topics", "feedback", "createdAt", "updatedAt"]
+    },
+    "ProjectTemplate": {
+      "title": "ProjectTemplate",
+      "description": "A reusable project template or master file.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "courseId": { "type": "string" },
+        "courseName": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["id", "title", "courseId", "fileUrl"]
+    },
+    "Batch": {
+      "title": "Batch",
+      "description": "A group of students organized for training.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "CoachingSession": {
+      "title": "CoachingSession",
+      "description": "A one-on-one coaching request or session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "scheduledFor": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title"]
+    },
+    "StudentQuery": {
+      "title": "StudentQuery",
+      "description": "A query raised by a student to be answered by faculty or admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "solved"] },
+        "solvedBy": { "type": "string" },
+        "solvedByName": { "type": "string" },
+        "solution": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "solvedAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "studentName", "title", "description", "status", "createdAt"]
+    },
+    "QueryNotification": {
+      "title": "QueryNotification",
+      "description": "A notification regarding new queries or solutions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userRole": { "type": "string", "enum": ["student", "faculty", "admin"] },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "queryId": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "type": { "type": "string", "enum": ["new_query", "query_answered"] }
+      },
+      "required": ["id", "userId", "userRole", "title", "message", "queryId", "read", "createdAt", "type"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Collection of all users."
+    },
+    "course_modules": {
+      "schema": "CourseModule",
+      "description": "Collection of training modules."
+    },
+    "quiz_questions": {
+      "schema": "QuizQuestion",
+      "description": "Collection of quiz questions."
+    },
+    "leave_requests": {
+      "schema": "LeaveRequest",
+      "description": "Collection of leave requests."
+    },
+    "holidays": {
+      "schema": "Holiday",
+      "description": "Collection of holidays."
+    },
+    "settings": {
+      "schema": "Settings",
+      "description": "Collection of global settings."
+    },
+    "schedule_slots": {
+      "schema": "ScheduleSlot",
+      "description": "Collection of scheduled classes and tasks."
+    },
+    "invoices": {
+      "schema": "Invoice",
+      "description": "Collection of student invoices and payment details."
+    },
+    "live_sessions": {
+      "schema": "LiveSession",
+      "description": "Collection of live and demo sessions."
+    },
+    "student_projects": {
+      "schema": "StudentProject",
+      "description": "Collection of student projects."
+    },
+    "training_records": {
+      "schema": "TrainingRecord",
+      "description": "Collection of training records."
+    },
+    "project_templates": {
+      "schema": "ProjectTemplate",
+      "description": "Library of project templates and master files."
+    },
+    "banners": {
+      "schema": "object",
+      "description": "Marketing banners for the landing page."
+    },
+    "holidays": {
+      "schema": "Holiday",
+      "description": "Scheduled holidays."
+    },
+    "software_videos": {
+      "schema": "object",
+      "description": "Software training videos."
+    },
+    "messages": {
+      "schema": "object",
+      "description": "Internal messages."
+    },
+    "courses": {
+      "schema": "object",
+      "description": "Available courses."
+    },
+    "master_projects": {
+      "schema": "object",
+      "description": "Master project files."
+    },
+    "batches": {
+      "schema": "Batch",
+      "description": "Collection of student batches."
+    },
+    "coaching_sessions": {
+      "schema": "CoachingSession",
+      "description": "Collection of coaching sessions."
+    },
+    "student_queries": {
+      "schema": "StudentQuery",
+      "description": "Collection of student queries raised and solved."
+    },
+    "query_notifications": {
+      "schema": "QueryNotification",
+      "description": "Collection of query creation and completion notifications."
+    }
+  }
+}

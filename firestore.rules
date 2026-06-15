@@ -1,0 +1,297 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions (Pillar 3 & 4)
+    // ===============================================================
+    
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && 
+        (request.auth.token.email in ["adminendlessspark@gmail.com", "endlessspark.in@gmail.com", "qcendlessspark@gmail.com", "accountsendlessspark@gmail.com"] ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+    }
+
+    function isSafeAdmin() {
+      return isSignedIn() && 
+        request.auth.token.email in ["adminendlessspark@gmail.com", "endlessspark.in@gmail.com", "qcendlessspark@gmail.com", "accountsendlessspark@gmail.com"];
+    }
+
+    function getUserRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : 'none';
+    }
+
+    function isFaculty() { 
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'faculty'; 
+    }
+    
+    function isTelecaller() { 
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'telecaller'; 
+    }
+    
+    function isAccounts() { 
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'accounts_executive'; 
+    }
+    
+    function isQC() { 
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'qc'; 
+    }
+
+    function isMarketing() { 
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'marketing'; 
+    }
+
+    function isStaff() { 
+      return isSafeAdmin() || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'faculty', 'qc', 'telecaller', 'accounts_executive', 'marketing']
+      );
+    }
+    
+    // Non-recursive staff check for lists to avoid O(n) or Forbidden get() inside list
+    function isStaffForList() {
+      return isSafeAdmin() || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'faculty', 'qc', 'telecaller', 'accounts_executive', 'marketing']
+      );
+    }
+
+    // ===============================================================
+    // Validation Blueprints (Pillar 2)
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'role']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.role in ['student', 'admin', 'faculty', 'telecaller', 'accounts_executive', 'qc'] &&
+             (!('email' in data) || data.email is string) &&
+             (!('username' in data) || data.username is string);
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['studentId', 'title', 'status']) &&
+             data.studentId is string &&
+             data.title is string &&
+             data.status is string;
+    }
+
+    function isValidTemplate(data) {
+      return data.keys().hasAll(['title', 'courseId', 'fileUrl', 'description', 'category']) &&
+             data.id is string &&
+             data.title is string && data.title.size() < 200 &&
+             data.courseId is string &&
+             data.fileUrl is string &&
+             data.description is string &&
+             data.category in ["Basic", "Intermediate", "Advanced", "Master"];
+    }
+
+    // ===============================================================
+    // Rules (Pillar 1, 5, 6, 7, 8)
+    // ===============================================================
+
+    // Publicly accessible settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin() || isQC() || isMarketing();
+    }
+
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /test/{documentId} {
+      allow read: if true;
+    }
+
+    match /leads/{leadId} {
+      allow read: if isSignedIn() && (isAdmin() || isTelecaller() || isMarketing());
+      allow create: if true; // Public lead capture
+      allow update, delete: if isSignedIn() && (isAdmin() || isTelecaller() || isMarketing());
+    }
+
+    // Authenticated matches
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isStaffForList() || (isSignedIn() && (resource.data.role == 'student' || resource.data.uid == request.auth.uid));
+      
+      allow create: if isSignedIn() && (isStaff() || isOwner(userId));
+      
+      allow update: if isSignedIn() && (
+        isStaff() || 
+        isOwner(userId)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /course_modules/{moduleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /quiz_questions/{questionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /leave_requests/{requestId} {
+      allow get: if isSignedIn() && (isOwner(existing().studentId) || isStaff());
+      allow list: if isSignedIn() && (isStaffForList() || (resource.data.studentId == request.auth.uid));
+      
+      allow create: if isSignedIn() && 
+                    isValidId(requestId) &&
+                    incoming().studentId == request.auth.uid;
+      
+      allow update: if isSignedIn() && (
+        isStaff() || 
+        (isOwner(existing().studentId) && incoming().diff(existing()).affectedKeys().hasOnly(['reason', 'startDate', 'endDate']))
+      );
+    }
+
+    match /student_projects/{projectId} {
+      allow get: if isSignedIn() && (isStaff() || isOwner(existing().studentId));
+      allow list: if isSignedIn() && (isStaffForList() || resource.data.studentId == request.auth.uid);
+      
+      allow create: if isSignedIn() && isValidId(projectId) && (isStaff() || (incoming().studentId == request.auth.uid));
+      
+      allow update: if isSignedIn() && (
+        isStaff() || 
+        (isOwner(existing().studentId) && 
+         !incoming().diff(existing()).affectedKeys().hasAny(['points', 'efficiency', 'qcProduction', 'qcRejections', 'studentId', 'id', 'projectCode', 'title', 'slaDate', 'details']))
+      );
+      allow delete: if isAdmin() || isFaculty() || isSafeAdmin();
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if isSignedIn() && (isStaff() || isOwner(existing().studentId));
+      allow list: if isSignedIn() && (isStaffForList() || resource.data.studentId == request.auth.uid);
+      allow create, update: if isStaff();
+      allow delete: if isStaff();
+    }
+
+    // Settings moved to top for clarity and priority
+    
+    match /schedule_slots/{slotId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+
+    match /live_sessions/{sessionId} {
+      allow read: if isSignedIn() || (resource != null && resource.data.type in ['interview', 'hr_interview']);
+      allow create: if isStaff();
+      allow update: if isStaff() || (resource.data.type in ['interview', 'hr_interview'] && 
+                                    incoming().diff(existing()).affectedKeys().hasOnly(['feedback', 'interviewStatus', 'status']));
+      allow delete: if isAdmin() || (isFaculty() && existing().facultyId == request.auth.uid);
+    }
+
+    match /training_records/{recordId} {
+      allow get: if isSignedIn() && (isStaff() || isOwner(existing().studentId));
+      allow list: if isSignedIn() && (isStaff() || resource.data.studentId == request.auth.uid);
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /project_templates/{templateId} {
+      allow read: if isSignedIn();
+      allow create: if isStaff() && isValidTemplate(incoming());
+      allow update: if isStaff() && isValidTemplate(incoming());
+      allow delete: if isAdmin() || isFaculty() || (isVerified() && request.auth.token.email == "adminendlessspark@gmail.com");
+    }
+
+    match /holidays/{holidayId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /software_videos/{videoId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isVerified() && incoming().senderId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /courses/{courseId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /master_projects/{projectId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isFaculty() || (isSignedIn() && request.auth.token.email == "adminendlessspark@gmail.com");
+    }
+
+    match /team_members/{memberId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /batches/{batchId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isFaculty();
+    }
+
+    match /coaching_sessions/{sessionId} {
+      allow read: if isSignedIn() && (isOwner(resource.data.userId) || isStaff());
+      allow create: if isSignedIn();
+    }
+
+    match /student_queries/{queryId} {
+      allow get: if isSignedIn() && (isStaff() || isOwner(existing().studentId));
+      allow list: if isSignedIn() && (isStaffForList() || resource.data.studentId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(queryId) && incoming().studentId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        isStaff() || 
+        (isOwner(existing().studentId) && existing().status == 'pending' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description']))
+      );
+      allow delete: if isStaff();
+    }
+
+    match /query_notifications/{notificationId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isStaff());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || (isStaff() && resource.data.userRole in ['faculty', 'admin']));
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['read'])
+      );
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    match /saved_resumes/{resumeId} {
+      allow get: if isSignedIn() && (isStaff() || resource == null || resource.data.userId == request.auth.uid);
+      allow list: if isSignedIn() && (isStaff() || resource == null || resource.data.userId == request.auth.uid);
+      allow create, update: if isSignedIn() && (isStaff() || incoming().userId == request.auth.uid);
+      allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+    }
+  }
+}

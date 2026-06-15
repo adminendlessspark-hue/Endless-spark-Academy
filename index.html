@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="google-site-verification" content="hoCreC-MakjVGr9LAdh5MaIeHfzua5pUsGOIYmnwIPI" />
+    <meta name="google-site-verification" content="google1912fca57f945aa1" />
+    <title>Endless Spark School of Printing and Packaging</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="error-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: red; padding: 20px; z-index: 9999; font-family: monospace; white-space: pre-wrap; overflow: auto;"></div>
+    <script>
+      window.addEventListener('error', function(e) {
+        var message = e.message || '';
+        if (message.includes('WebSocket') || message.includes('closed without opened') || message.includes('CLOSING state')) {
+          return;
+        }
+        var overlay = document.getElementById('error-overlay');
+        overlay.style.display = 'block';
+        overlay.innerText += e.message + '\n' + e.filename + ':' + e.lineno + '\n\n';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var reason = (e.reason && e.reason.message) || String(e.reason || '');
+        if (reason.includes('WebSocket') || reason.includes('closed without opened') || reason.includes('CLOSING state') || reason.includes('INTERNAL ASSERTION FAILED')) {
+          return;
+        }
+        var overlay = document.getElementById('error-overlay');
+        overlay.style.display = 'block';
+        overlay.innerText += 'Unhandled Rejection: ' + reason + '\n\n';
+      });
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

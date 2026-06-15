@@ -1,0 +1,203 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: uid
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - email: string (required)
+    //   - role: string (required, enum: student, admin, faculty)
+    //   - isApproved: boolean (required)
+    //   ... other fields
+    //
+    // Collection: course_modules
+    // Document ID: auto-generated or manual
+    //
+    // Collection: quiz_questions
+    // Document ID: auto-generated or manual
+    //
+    // Collection: leave_requests
+    // Document ID: auto-generated
+    //
+    // Collection: holidays
+    // Document ID: auto-generated
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((request.auth.token.email in ["adminendlessspark@gmail.com", "endlessspark.in@gmail.com"] && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isFaculty() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'faculty';
+    }
+
+    function isTelecaller() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'telecaller';
+    }
+
+    function isAccounts() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'accounts_executive';
+    }
+
+    function isQC() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'qc';
+    }
+
+    function isStaff() {
+      return isAdmin() || isFaculty() || isTelecaller() || isAccounts() || isQC();
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'role']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             (!('email' in data) || data.email == '' || (data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"))) &&
+             data.role in ['student', 'admin', 'faculty', 'telecaller', 'accounts_executive', 'qc'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isStaff());
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isAdmin() || (isOwner(userId) && request.resource.data.role == 'student' && request.resource.data.isApproved == false));
+      allow update: if isAuthenticated() && 
+                    (
+                      isAdmin() || 
+                      (isOwner(userId) && 
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'photo', 'mustChangePassword', 'nativeLanguage', 'scores', 'completedModules', 'dailyAttendance', 'applicationData', 'applicationStatus', 'registeredForDemo', 'registeredForEntranceTest', 'videoRecorded', 'entranceTestStatus', 'entranceTestData']) &&
+                       request.resource.data.role == resource.data.role &&
+                       request.resource.data.isApproved == resource.data.isApproved
+                      ) ||
+                      isStaff()
+                    );
+      allow delete: if isAdmin();
+    }
+
+    match /course_modules/{moduleId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /quiz_questions/{questionId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /leave_requests/{requestId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.studentId || isStaff());
+      allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isAuthenticated() && (resource.data.studentId == request.auth.uid || isStaff());
+      allow delete: if isAdmin();
+    }
+
+    match /holidays/{holidayId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /leads/{leadId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTelecaller());
+      allow create: if true;
+      allow update: if isAuthenticated() && (isAdmin() || isTelecaller());
+      allow delete: if isAuthenticated() && (isAdmin() || isTelecaller());
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /schedule_slots/{slotId} {
+      allow read: if isAuthenticated();
+      allow create: if isStaff();
+      allow update: if isAuthenticated();
+      allow delete: if isStaff();
+    }
+
+    match /live_sessions/{sessionId} {
+      allow read: if isAuthenticated() || (resource != null && resource.data.type in ['interview', 'hr_interview']);
+      allow create: if isAdmin() || (isFaculty() && request.resource.data.facultyId == request.auth.uid);
+      allow update: if isAdmin() || (isFaculty() && resource.data.facultyId == request.auth.uid && request.resource.data.facultyId == request.auth.uid) || (resource.data.type in ['interview', 'hr_interview'] && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['feedback', 'skillsGap', 'interviewStatus', 'status']));
+      allow delete: if isAdmin() || (isFaculty() && resource.data.facultyId == request.auth.uid);
+    }
+
+    match /invoices/{invoiceId} {
+      allow read: if isAuthenticated() && (isStaff() || (resource != null && resource.data.studentId == request.auth.uid) || (resource == null && request.query.limit <= 1000));
+      allow create: if isAdmin() || isAccounts();
+      allow update: if isAdmin() || isAccounts();
+      allow delete: if isAdmin();
+    }
+
+    match /software_videos/{videoId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /student_projects/{projectId} {
+      allow read: if isAuthenticated() && (isStaff() || (resource != null && resource.data.studentId == request.auth.uid) || (resource == null && request.query.limit <= 1000));
+      allow create: if isAdmin() || isFaculty();
+      allow update: if isAuthenticated() && (isStaff() || resource.data.studentId == request.auth.uid);
+      allow delete: if isAdmin() || isFaculty();
+    }
+
+    match /project_templates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+
+    match /courses/{courseId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /master_projects/{projectId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isFaculty();
+    }
+
+    match /training_records/{recordId} {
+      allow read: if isAuthenticated() && (isStaff() || (resource != null && resource.data.studentId == request.auth.uid));
+      allow create: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

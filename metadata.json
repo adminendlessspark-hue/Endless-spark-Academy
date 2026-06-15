@@ -1,0 +1,9 @@
+{
+  "name": "Endless Spark School of Printing and Packaging Portal",
+  "description": "A comprehensive software training platform for students to register for demo classes, complete application processes, record video introductions, take quizzes, and access course modules.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

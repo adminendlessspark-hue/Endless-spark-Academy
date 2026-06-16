@@ -226,35 +226,7 @@ export default function Login() {
             </div>
           )}
 
-          <div className="mt-6 pt-6 border-t border-dashed border-gray-100 space-y-2">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 text-center">Fast-Track Role Access:</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => quickBypassLogin('admin')}
-                className="py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold rounded-xl border border-indigo-100 transition-all flex flex-col items-center justify-center overflow-hidden"
-              >
-                <span>Admin</span>
-                <span className="text-[8px] text-indigo-400 font-normal truncate max-w-full">admin@...</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => quickBypassLogin('telecaller')}
-                className="py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 text-[11px] font-bold rounded-xl border border-pink-100 transition-all flex flex-col items-center justify-center overflow-hidden"
-              >
-                <span>Sales (CRM)</span>
-                <span className="text-[8px] text-pink-400 font-normal truncate max-w-full">telecaller@...</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => quickBypassLogin('marketing')}
-                className="py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold rounded-xl border border-emerald-100 transition-all flex flex-col items-center justify-center overflow-hidden"
-              >
-                <span>Marketing</span>
-                <span className="text-[8px] text-emerald-400 font-normal truncate max-w-full">marketing@...</span>
-              </button>
-            </div>
-          </div>
+
 
 
         </div>

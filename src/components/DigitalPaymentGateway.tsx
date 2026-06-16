@@ -5,6 +5,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { FinancialSettings } from '../types';
+import { motion } from 'framer-motion';
 
 interface DigitalPaymentGatewayProps {
   amount: number;
@@ -23,6 +24,13 @@ export default function DigitalPaymentGateway({ amount, description, studentName
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<FinancialSettings | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+
+  // Card details state
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvv, setCvv] = useState('');
+  const [isFlipped, setIsFlipped] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'financial'), (docSnap) => {
@@ -47,6 +55,50 @@ export default function DigitalPaymentGateway({ amount, description, studentName
     return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(name)}&am=${amount}&cu=INR&tn=${encodeURIComponent(description)}&tr=${tr}`;
   };
 
+  // Card input formatting & validation
+  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, '');
+    const formatted = value.match(/.{1,4}/g)?.join(' ') || '';
+    setCardNumber(formatted.substring(0, 19));
+  };
+
+  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 2) {
+      value = `${value.slice(0, 2)}/${value.slice(2, 4)}`;
+    }
+    setExpiry(value.substring(0, 5));
+  };
+
+  const handleCvvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, '');
+    setCvv(value.substring(0, 3));
+  };
+
+  const getCardType = () => {
+    if (cardNumber.startsWith('4')) return 'visa';
+    if (cardNumber.startsWith('5')) return 'mastercard';
+    if (cardNumber.startsWith('3')) return 'amex';
+    return 'generic';
+  };
+
+  const isCardValid = () => {
+    if (method !== 'card') return true;
+    const cleanNum = cardNumber.replace(/\D/g, '');
+    if (cleanNum.length !== 16) return false;
+    if (cardName.trim().length < 3) return false;
+    if (expiry.length !== 5) return false;
+    if (cvv.length !== 3) return false;
+
+    const parts = expiry.split('/');
+    if (parts.length !== 2) return false;
+    const month = parseInt(parts[0], 10);
+    const year = parseInt(parts[1], 10);
+    if (isNaN(month) || isNaN(year) || month < 1 || month > 12) return false;
+
+    return true;
+  };
+
   const handlePayment = () => {
     setLoading(true);
     // Simulate payment verification delay
@@ -54,7 +106,8 @@ export default function DigitalPaymentGateway({ amount, description, studentName
       setLoading(false);
       setStep('success');
       setTimeout(() => {
-        onSuccess(`PAY-${Math.random().toString(36).substring(2, 10).toUpperCase()}`);
+        const methodPrefix = method.toUpperCase();
+        onSuccess(`PAY-${methodPrefix}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`);
       }, 2000);
     }, 3000);
   };
@@ -76,7 +129,7 @@ export default function DigitalPaymentGateway({ amount, description, studentName
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-white">
       <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-pink-100 text-pink-600 rounded-xl">
@@ -94,8 +147,8 @@ export default function DigitalPaymentGateway({ amount, description, studentName
       </div>
 
       <div className="p-6 flex-1 overflow-y-auto">
-        <div className="mb-8">
-          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 block">Select Payment Method</label>
+        <div className="mb-6">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 block">Select Payment Method</label>
           <div className="grid grid-cols-1 gap-3">
             <button
               onClick={() => setMethod('upi')}
@@ -131,7 +184,7 @@ export default function DigitalPaymentGateway({ amount, description, studentName
                 </div>
                 <div className="text-left">
                   <p className="font-bold text-gray-900">Debit / Credit Card</p>
-                  <p className="text-xs text-gray-500">Visa, Mastercard, RuPay</p>
+                  <p className="text-xs text-gray-500">Visa, Mastercard, RuPay & more</p>
                 </div>
               </div>
               <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center", method === 'card' ? "border-pink-500 bg-pink-500" : "border-gray-200")}>
@@ -162,8 +215,143 @@ export default function DigitalPaymentGateway({ amount, description, studentName
           </div>
         </div>
 
+        {method === 'card' && (
+          <div className="mb-6 p-6 bg-pink-50/30 rounded-3xl border border-pink-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Interactive 3D Card Display */}
+            <div className="w-full max-w-[290px] h-[170px] mx-auto mb-6" style={{ perspective: 1000 }}>
+              <motion.div
+                animate={{ rotateY: isFlipped ? 180 : 0 }}
+                transition={{ duration: 0.6, ease: 'easeInOut' }}
+                style={{ transformStyle: 'preserve-3d' }}
+                className="w-full h-full relative"
+              >
+                {/* Front Side */}
+                <div 
+                  className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 text-white flex flex-col justify-between shadow-lg"
+                  style={{ backfaceVisibility: 'hidden' }}
+                >
+                  <div className="flex justify-between items-center">
+                    {/* Chip */}
+                    <div className="w-10 h-7 bg-gradient-to-r from-amber-300 via-yellow-400 to-yellow-600 rounded-md opacity-90 flex flex-col justify-around p-1 shadow-inner">
+                      <div className="h-[1px] bg-slate-950/20" />
+                      <div className="h-[1px] bg-slate-950/20" />
+                      <div className="h-[1px] bg-slate-950/20" />
+                    </div>
+                    {/* Brand */}
+                    <span className="text-xs font-black tracking-widest italic text-pink-300">
+                      {getCardType() === 'visa' && 'VISA'}
+                      {getCardType() === 'mastercard' && 'MASTERCARD'}
+                      {getCardType() === 'amex' && 'AMEX'}
+                      {getCardType() === 'generic' && 'PAYMENT'}
+                    </span>
+                  </div>
+
+                  <div className="text-base font-medium tracking-widest font-mono text-center my-2 text-indigo-100">
+                    {cardNumber || '•••• •••• •••• ••••'}
+                  </div>
+
+                  <div className="flex justify-between items-end text-[10px] font-mono text-gray-300 uppercase tracking-wider">
+                    <div className="truncate max-w-[150px]">
+                      <p className="text-[7px] text-gray-400">Cardholder</p>
+                      <p className="font-bold truncate text-white">{cardName || studentName.toUpperCase()}</p>
+                    </div>
+                    <div>
+                      <p className="text-[7px] text-gray-400">Expires</p>
+                      <p className="font-bold text-white">{expiry || 'MM/YY'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Back Side */}
+                <div 
+                  className="absolute inset-0 w-full h-full rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 text-white flex flex-col justify-between py-5 shadow-lg"
+                  style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                >
+                  <div className="w-full h-8 bg-black opacity-80" />
+                  
+                  <div className="px-5">
+                    <div className="flex items-center">
+                      <div className="w-4/5 h-6 bg-slate-100 rounded-md flex items-center justify-end px-2 text-right">
+                        <span className="text-slate-400 tracking-widest text-[9px] line-through select-none font-sans">XXXX XXXX</span>
+                      </div>
+                      <div className="w-1/5 h-6 bg-pink-100 rounded-r-md text-pink-900 font-bold font-mono text-xs flex items-center justify-center p-1">
+                        {cvv || '•••'}
+                      </div>
+                    </div>
+                    <p className="text-[7px] text-right text-gray-400 mt-1 uppercase tracking-widest">Security Code (CVV)</p>
+                  </div>
+
+                  <p className="text-[7px] text-center text-gray-400 px-5 leading-none">This card is property of issuer and is restricted to authorized digital processing gateway protocols only.</p>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Inputs Form */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Cardholder Name</label>
+                <input
+                  type="text"
+                  placeholder={studentName.toUpperCase()}
+                  value={cardName}
+                  onChange={(e) => setCardName(e.target.value.toUpperCase().replace(/[^A-Za-z\s]/g, ''))}
+                  className="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 text-sm"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Card Number</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="4111 1111 1111 1111"
+                    value={cardNumber}
+                    onChange={handleCardNumberChange}
+                    className="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 text-sm font-mono tracking-wider"
+                    maxLength={19}
+                    required
+                  />
+                  <div className="absolute right-3 top-2.5 text-gray-400">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Expiry Date</label>
+                  <input
+                    type="text"
+                    placeholder="MM/YY"
+                    value={expiry}
+                    onChange={handleExpiryChange}
+                    className="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 text-sm font-mono"
+                    maxLength={5}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">CVV</label>
+                  <input
+                    type="password"
+                    placeholder="•••"
+                    value={cvv}
+                    onChange={handleCvvChange}
+                    onFocus={() => setIsFlipped(true)}
+                    onBlur={() => setIsFlipped(false)}
+                    className="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 text-sm font-mono"
+                    maxLength={3}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {method === 'upi' && (
-          <div className="mb-8 p-6 bg-pink-50/30 rounded-3xl border border-pink-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="mb-6 p-6 bg-pink-50/30 rounded-3xl border border-pink-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col items-center text-center">
               <div className="mb-4">
                 <p className="text-xs font-bold text-pink-600 uppercase tracking-widest mb-1">Scan QR to Pay</p>
@@ -201,7 +389,7 @@ export default function DigitalPaymentGateway({ amount, description, studentName
         )}
 
         {method === 'netbanking' && (
-          <div className="mb-8 p-6 bg-pink-50/30 rounded-3xl border border-pink-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="mb-6 p-6 bg-pink-50/30 rounded-3xl border border-pink-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col gap-4">
               <div className="text-center">
                 <p className="text-xs font-bold text-pink-600 uppercase tracking-widest mb-1">Bank Transfer Details</p>
@@ -242,10 +430,10 @@ export default function DigitalPaymentGateway({ amount, description, studentName
       <div className="p-6 bg-white border-t border-gray-100 flex flex-col gap-3">
         <button
           onClick={handlePayment}
-          disabled={loading}
+          disabled={loading || !isCardValid()}
           className={cn(
             "w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg",
-            loading ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-pink-600 text-white hover:bg-pink-700 shadow-pink-200"
+            (loading || !isCardValid()) ? "bg-gray-100 text-gray-400 cursor-not-allowed shadow-none" : "bg-pink-600 text-white hover:bg-pink-700 shadow-pink-200"
           )}
         >
           {loading ? (

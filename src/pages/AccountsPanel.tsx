@@ -3,7 +3,7 @@ import { useAuth } from '../AuthContext';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { Invoice, User, FinancialSettings } from '../types';
-import { IndianRupee, Settings, FileText, Users, CheckCircle, XCircle, Edit2, Plus, Trash2, Download, BarChart, Landmark, Smartphone, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { IndianRupee, Settings, FileText, Users, CheckCircle, XCircle, Edit2, Plus, Trash2, Download, BarChart, Landmark, Smartphone, ShieldCheck, ChevronDown, ChevronUp, CreditCard } from 'lucide-react';
 import { cn, formatCourseName } from '../utils';
 
 export default function AccountsPanel() {
@@ -1133,6 +1133,86 @@ export default function AccountsPanel() {
                         Dynamic QR Generation Enabled
                       </p>
                       A unique payment QR code will be automatically generated for each student's specific invoice amount using this UPI ID.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 pt-8 mt-8">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-pink-600" />
+                    Razorpay Online Payment API Connection
+                  </h3>
+                  <p className="text-xs text-gray-500 max-w-3xl leading-relaxed">
+                    Connect your Razorpay payment gateway credentials. Customers will be able to make instant payments using Debit/Credit cards, Net banking, and direct UPI transfers, syncing instantly with your ledger.
+                  </p>
+                  
+                  <div className="p-6 bg-pink-50/20 rounded-3xl border border-pink-100 space-y-4">
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        id="razorpay_enabled"
+                        checked={settings.razorpayDetails?.enabled || false}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          razorpayDetails: {
+                            ...(settings.razorpayDetails || { enabled: false, keyId: '', keySecret: '' }),
+                            enabled: e.target.checked
+                          }
+                        })}
+                        className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                      />
+                      <label htmlFor="razorpay_enabled" className="text-sm font-bold text-gray-800 cursor-pointer uppercase tracking-wider">
+                        Enable Razorpay Checkout Gateway
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Razorpay API Key ID</label>
+                        <input
+                          type="text"
+                          value={settings.razorpayDetails?.keyId || ''}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            razorpayDetails: {
+                              ...(settings.razorpayDetails || { enabled: false, keyId: '', keySecret: '' }),
+                              keyId: e.target.value.trim()
+                            }
+                          })}
+                          disabled={!settings.razorpayDetails?.enabled}
+                          className="w-full px-4 py-2 bg-white disabled:bg-gray-150 disabled:text-gray-400 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 text-sm font-mono"
+                          placeholder="rzp_live_xxxxxxxxxxxx or rzp_test_xxxxxxxxxx"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Razorpay API Key Secret</label>
+                        <input
+                          type="password"
+                          value={settings.razorpayDetails?.keySecret || ''}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            razorpayDetails: {
+                              ...(settings.razorpayDetails || { enabled: false, keyId: '', keySecret: '' }),
+                              keySecret: e.target.value.trim()
+                            }
+                          })}
+                          disabled={!settings.razorpayDetails?.enabled}
+                          className="w-full px-4 py-2 bg-white disabled:bg-gray-150 disabled:text-gray-400 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 text-sm font-mono"
+                          placeholder="••••••••••••••••••••••••"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-white/80 rounded-2xl border border-pink-100/50 text-xs text-slate-600 space-y-2 leading-relaxed">
+                      <p className="font-bold text-slate-700">How to get Razorpay API Credentials:</p>
+                      <ol className="list-decimal pl-4 space-y-1">
+                        <li>Log in to your continuous <a href="https://dashboard.razorpay.com" target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:underline font-semibold">Razorpay Dashboard</a>.</li>
+                        <li>Navigate to <strong>Account & Settings</strong> &gt; <strong>API Keys</strong> page from left menu bar.</li>
+                        <li>Click on <strong>"Generate Key"</strong> to produce your dynamic live or test sandbox credentials.</li>
+                        <li>Paste the Key ID and Key Secret into the fields above, turn on "Enable", and click "Save Financial Settings".</li>
+                      </ol>
                     </div>
                   </div>
                 </div>

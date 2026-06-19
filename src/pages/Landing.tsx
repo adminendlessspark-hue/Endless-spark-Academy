@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { LogIn, UserPlus, Shield, FileText, Award, BookOpen, Video, GraduationCap, MessageCircle, PhoneCall, XCircle, Mail, ChevronLeft, ChevronRight, MapPin, Zap } from 'lucide-react';
+import { LogIn, UserPlus, Shield, FileText, Award, BookOpen, Video, GraduationCap, MessageCircle, PhoneCall, XCircle, Mail, ChevronLeft, ChevronRight, MapPin, Zap, Sparkles } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 
 export default function Landing() {
@@ -343,69 +343,142 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-100 py-16">
-        <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap justify-between gap-12 mb-12">
-            <div className="flex flex-col gap-6 w-full md:w-auto">
+      <footer className="bg-gradient-to-b from-slate-900 via-slate-950 to-black text-slate-400 relative overflow-hidden pt-20 pb-10 border-t border-slate-850">
+        {/* Ambient Decorative Glow Blocks */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-pink-500/10 rounded-full blur-[100px] pointer-events-none -translate-y-1/2"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none translate-y-1/2"></div>
+        
+        {/* Subtle Decorative Grid Line Overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-30"></div>
+
+        <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 pb-16 border-b border-slate-800/80">
+            
+            {/* Column 1: Brand Intro */}
+            <div className="lg:col-span-4 space-y-6">
               <div className="flex items-center gap-4">
                 {logoUrl && (
-                  <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-100">
-                    <img src={logoUrl} alt="Endless Spark Logo" className="h-14 md:h-16 object-contain" />
+                  <div className="bg-white p-2.5 rounded-2xl shadow-xl shadow-pink-500/5 border border-slate-200/50 hover:scale-105 transition-all duration-300">
+                    <img src={logoUrl} alt="Endless Spark Logo" className="h-16 md:h-18 object-contain" />
                   </div>
                 )}
               </div>
-            </div>
-            
-            <div className="w-full md:w-auto max-w-sm">
-              <h4 className="font-bold text-slate-900 mb-6 text-lg">Contact Us</h4>
-              <div className="space-y-4 text-slate-600">
-                <p className="flex items-start gap-3">
-                  <MapPin className="w-5 h-5 text-pink-500 shrink-0 mt-0.5" />
-                  <span>189, Rathinam Complex 2nd floor, Pollachi Main road (opposite Balaji Hospital) Sundarapuram Coimbatore 641024</span>
-                </p>
-                <p className="flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-pink-500 shrink-0" />
-                  <a href="mailto:adminendlessspark@gmail.com" className="hover:text-pink-600 transition-colors">adminendlessspark@gmail.com</a>
-                </p>
-                <p className="flex items-center gap-3">
-                  <PhoneCall className="w-5 h-5 text-gray-400 shrink-0" />
-                  <a href="tel:+919042821999" className="hover:text-pink-600 transition-colors font-bold">+91 90428 21999</a>
-                </p>
-                <p className="flex items-center gap-3">
-                  <MessageCircle className="w-5 h-5 text-green-500 shrink-0" />
-                  <a href="https://wa.me/919042821999" target="_blank" rel="noopener noreferrer" className="hover:text-green-600 font-bold transition-colors">+91 90428 21999</a>
-                </p>
+              <p className="text-slate-400 text-sm leading-relaxed max-w-sm">
+                Igniting careers in printing and packaging technology with structured professional training, hands-on masterclasses, and verified certification programs.
+              </p>
+              <div className="flex items-center gap-3">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Admissions Open — 2026 Batch</span>
               </div>
             </div>
 
-            {branches && branches.length > 0 && (
-              <div className="w-full md:w-auto max-w-sm">
-                <h4 className="font-bold text-slate-900 mb-6 text-lg">Study Centers</h4>
-                <ul className="space-y-3 text-slate-700 font-medium">
-                  {branches.map((branch, index) => (
-                    <li key={index} className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-pink-500 mt-2 shrink-0" />
-                      <span>{branch}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {/* Column 2: Why Us */}
+            <div className="lg:col-span-2 space-y-6">
+              <h4 className="text-sm font-bold uppercase tracking-wider text-white">Why Us</h4>
+              <ul className="space-y-3.5 text-sm">
+                <li className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+                  <Sparkles className="w-4 h-4 text-pink-500" />
+                  <span>Adv. AI Learning Tools</span>
+                </li>
+                <li className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+                  <GraduationCap className="w-4 h-4 text-pink-500" />
+                  <span>Placement Support</span>
+                </li>
+                <li className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+                  <BookOpen className="w-4 h-4 text-pink-500" />
+                  <span>Tailor-made Syllabus</span>
+                </li>
+                <li className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+                  <Zap className="w-4 h-4 text-pink-500" />
+                  <span>Real Projects</span>
+                </li>
+              </ul>
+            </div>
 
-            <div className="w-full md:w-auto max-w-sm">
-              <h4 className="font-bold text-slate-900 mb-6 text-lg">Legal</h4>
-              <div className="flex flex-col gap-4 text-slate-600 font-medium">
-                <Link to="/privacy" className="hover:text-pink-600 transition-colors flex items-center gap-3">
-                  <Shield className="w-5 h-5 text-slate-400" /> Privacy Policy
-                </Link>
-                <Link to="/terms" className="hover:text-pink-600 transition-colors flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-slate-400" /> Terms of Service
-                </Link>
+            {/* Column 3: Contact details */}
+            <div className="lg:col-span-3 space-y-6">
+              <h4 className="text-sm font-bold uppercase tracking-wider text-white">Contact Info</h4>
+              <div className="space-y-4 text-sm text-slate-300">
+                <div className="flex items-start gap-3 group">
+                  <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center shrink-0 border border-pink-500/20 group-hover:bg-pink-500/20 transition-all duration-300">
+                    <MapPin className="w-4 h-4 text-pink-400" />
+                  </div>
+                  <span className="leading-relaxed text-slate-400 group-hover:text-slate-200 transition-colors">
+                    189, Rathinam Complex 2nd floor, Pollachi Main road (opposite Balaji Hospital) Sundarapuram Coimbatore 641024
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-3 group">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0 border border-indigo-500/20 group-hover:bg-indigo-500/20 transition-all duration-300">
+                    <Mail className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  <a href="mailto:adminendlessspark@gmail.com" className="text-slate-400 hover:text-slate-200 transition-colors truncate">
+                    adminendlessspark@gmail.com
+                  </a>
+                </div>
+
+                <div className="flex items-center gap-3 group">
+                  <div className="w-8 h-8 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0 border border-sky-500/20 group-hover:bg-sky-500/20 transition-all duration-300">
+                    <PhoneCall className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <a href="tel:+919042821999" className="text-slate-400 hover:text-slate-200 transition-colors font-bold">
+                    +91 90428 21999
+                  </a>
+                </div>
+
+                <div className="flex items-center gap-3 group">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 border border-emerald-500/20 group-hover:bg-emerald-500/20 transition-all duration-300">
+                    <MessageCircle className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <a href="https://wa.me/919042821999" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-slate-200 transition-colors font-bold">
+                    +91 90428 21999 <span className="text-[10px] text-emerald-500 font-semibold uppercase ml-1">WhatsApp</span>
+                  </a>
+                </div>
               </div>
             </div>
+
+            {/* Column 4: Study Centers & Legal */}
+            <div className="lg:col-span-3 space-y-8">
+              {branches && branches.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wider text-white">Our Study Centers</h4>
+                  <div className="flex flex-wrap gap-2.5">
+                    {branches.map((branch, index) => (
+                      <span key={index} className="px-3.5 py-1.5 bg-slate-850 hover:bg-slate-800 border border-slate-705 rounded-xl text-xs font-semibold text-slate-300 transition-all duration-300 flex items-center gap-1.5 shadow-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+                        {branch}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold uppercase tracking-wider text-white font-mono">Company Policy</h4>
+                <div className="flex flex-col gap-3">
+                  <Link to="/privacy" className="text-slate-400 hover:text-white hover:translate-x-1 transition-all text-sm flex items-center gap-2 duration-300">
+                    <Shield className="w-4 h-4 text-slate-500" /> Privacy Policy
+                  </Link>
+                  <Link to="/terms" className="text-slate-400 hover:text-white hover:translate-x-1 transition-all text-sm flex items-center gap-2 duration-300">
+                    <FileText className="w-4 h-4 text-slate-500" /> Terms of Service
+                  </Link>
+                </div>
+              </div>
+            </div>
+
           </div>
-          <div className="pt-8 border-t border-slate-100 text-center text-sm text-slate-500">
-            &copy; {new Date().getFullYear()} Endless Spark. All rights reserved.
+
+          {/* Copyright Section */}
+          <div className="pt-10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500 font-medium">
+            <p>&copy; {new Date().getFullYear()} Endless Spark. All rights reserved.</p>
+            <div className="flex items-center gap-6">
+              <span className="hover:text-slate-400 transition-colors cursor-pointer">Security Audited</span>
+              <span className="hover:text-slate-400 transition-colors cursor-pointer">Education Platform</span>
+              <span className="hover:text-slate-400 transition-colors cursor-pointer">V2.4.0</span>
+            </div>
           </div>
         </div>
       </footer>

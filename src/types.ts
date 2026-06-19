@@ -596,6 +596,11 @@ export interface FinancialSettings {
     qrCodeUrl?: string;
     merchantName?: string;
   };
+  razorpayDetails?: {
+    enabled: boolean;
+    keyId: string;
+    keySecret?: string;
+  };
   updatedAt: string;
   updatedBy: string;
 }

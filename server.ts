@@ -239,25 +239,112 @@ async function startServer() {
     }
   });
 
-  // API route to look up email by username or studentId
+  // API route to create Razorpay Order
+  app.post("/api/razorpay/create-order", async (req: any, res: any) => {
+    const { amount, description } = req.body;
+    if (!amount) return res.status(400).json({ error: "Amount required" });
+
+    try {
+      const db = getDb();
+      // Fetch Razorpay credentials from financial settings in Firestore
+      const settingsDoc = await db.collection("settings").doc("financial").get();
+      
+      let keyId = process.env.RAZORPAY_KEY_ID;
+      let keySecret = process.env.RAZORPAY_KEY_SECRET;
+      let enabled = false;
+
+      if (settingsDoc.exists) {
+        const data = settingsDoc.data();
+        if (data?.razorpayDetails) {
+          enabled = !!data.razorpayDetails.enabled;
+          if (data.razorpayDetails.keyId) {
+            keyId = data.razorpayDetails.keyId;
+          }
+          if (data.razorpayDetails.keySecret) {
+            keySecret = data.razorpayDetails.keySecret;
+          }
+        }
+      }
+
+      // If Razorpay is not configured or disabled, return fallback sandbox simulation mode
+      if (!enabled || !keyId || !keySecret) {
+        console.log("Razorpay integration: Not configured or disabled. Returning sandbox simulation token...");
+        return res.json({
+          mode: "sandbox_simulated",
+          keyId: keyId || "rzp_test_fallback",
+          amount: Math.round(amount * 100),
+          currency: "INR",
+          orderId: "order_mock_" + Math.random().toString(36).substring(2, 10).toUpperCase()
+        });
+      }
+
+      console.log(`Razorpay connection: Creating order for ${amount} INR using key: ${keyId}`);
+      
+      // Perform standard checkout order creation request to razorpay
+      const authHeader = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+      const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${authHeader}`
+        },
+        body: JSON.stringify({
+          amount: Math.round(amount * 100), // Razorpay accepts in paise
+          currency: "INR",
+          receipt: `rcpt_${Date.now()}`
+        })
+      });
+
+      if (!rzpResponse.ok) {
+        const errorText = await rzpResponse.text();
+        console.error("Razorpay API creation failure:", errorText);
+        throw new Error(`Razorpay responded with status ${rzpResponse.status}: ${errorText}`);
+      }
+
+      const rzpOrder: any = await rzpResponse.json();
+      console.log("Razorpay Order created successfully:", rzpOrder.id);
+
+      return res.json({
+        mode: "production_keys",
+        keyId,
+        orderId: rzpOrder.id,
+        amount: rzpOrder.amount,
+        currency: rzpOrder.currency
+      });
+
+    } catch (err: any) {
+      console.error("Critical Razorpay integration failure:", err);
+      return res.json({
+        mode: "sandbox_simulated_fallback",
+        keyId: "rzp_test_fallback",
+        amount: Math.round(amount * 100),
+        currency: "INR",
+        orderId: "order_mock_fb_" + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        error: err.message
+      });
+    }
+  });
+
+  // API route to look up email by username, studentId, or phone number
   app.post("/api/get-email-by-username", async (req: any, res: any) => {
     const { username } = req.body;
     if (!username) return res.status(400).json({ error: "Username required" });
 
     try {
       const db = getDb();
-      console.log(`Backend: Looking up user by identifier: ${username}`);
+      const searchStr = username.trim();
+      console.log(`Backend: Looking up user by identifier: ${searchStr}`);
       
       // Try username first
       let userSnapshot = await db.collection("users")
-        .where("username", "==", username)
+        .where("username", "==", searchStr)
         .limit(1)
         .get();
 
       // If not found, try lowercase username
       if (userSnapshot.empty) {
         userSnapshot = await db.collection("users")
-          .where("username", "==", username.toLowerCase())
+          .where("username", "==", searchStr.toLowerCase())
           .limit(1)
           .get();
       }
@@ -265,7 +352,7 @@ async function startServer() {
       // If still not found, try studentId (Registration Number)
       if (userSnapshot.empty) {
         userSnapshot = await db.collection("users")
-          .where("studentId", "==", username)
+          .where("studentId", "==", searchStr)
           .limit(1)
           .get();
       }
@@ -273,14 +360,55 @@ async function startServer() {
       // Try uppercase studentId (often registration numbers are uppercase)
       if (userSnapshot.empty) {
         userSnapshot = await db.collection("users")
-          .where("studentId", "==", username.toUpperCase())
+          .where("studentId", "==", searchStr.toUpperCase())
           .limit(1)
           .get();
       }
 
+      // Try Phone Number matching (original, with +91, with +91 space, or clean digits)
       if (userSnapshot.empty) {
-        console.warn(`Backend: User lookup failed for: ${username}`);
-        return res.status(404).json({ error: "Username or Registration Number not found. Please check your spelling or use your registered email address." });
+        const cleanPhone = searchStr.replace(/\D/g, ''); // leaves only digits (e.g. 9876543210)
+        
+        // Search exact match
+        userSnapshot = await db.collection("users")
+          .where("phone", "==", searchStr)
+          .limit(1)
+          .get();
+          
+        if (userSnapshot.empty) {
+          userSnapshot = await db.collection("users")
+            .where("whatsapp", "==", searchStr)
+            .limit(1)
+            .get();
+        }
+
+        // Search with variants if digits-only is 10 digits
+        if (userSnapshot.empty && cleanPhone.length === 10) {
+          const variants = [
+            `+91${cleanPhone}`,
+            `+91 ${cleanPhone}`,
+            cleanPhone
+          ];
+          
+          for (const variant of variants) {
+            userSnapshot = await db.collection("users")
+              .where("phone", "==", variant)
+              .limit(1)
+              .get();
+            if (!userSnapshot.empty) break;
+            
+            userSnapshot = await db.collection("users")
+              .where("whatsapp", "==", variant)
+              .limit(1)
+              .get();
+            if (!userSnapshot.empty) break;
+          }
+        }
+      }
+
+      if (userSnapshot.empty) {
+        console.warn(`Backend: User lookup failed for: ${searchStr}`);
+        return res.status(404).json({ error: "Username, Registration Number, or Phone Number not found. Please check your input or contact the administrator." });
       }
 
       const userData = userSnapshot.docs[0].data();

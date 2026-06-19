@@ -46,7 +46,7 @@ export default function Login() {
         resetEmail = data.email;
       }
       await resetPassword(resetEmail);
-      setSuccess(`A password reset link has been sent to ${resetEmail}. Please check your inbox.`);
+      setSuccess(`A password reset link has been sent to ${resetEmail}.`);
     } catch (err: any) {
       setError(err.message || 'Failed to send reset email');
     } finally {
@@ -121,9 +121,22 @@ export default function Login() {
           )}
 
           {success && (
-            <div className="p-3 bg-green-50 border border-green-100 rounded-xl flex items-start gap-2 text-green-600 text-sm">
-              <ShieldCheck className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <span className="leading-relaxed">{success}</span>
+            <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl text-emerald-800 text-sm space-y-3 shadow-sm animate-in fade-in duration-300">
+              <div className="flex items-start gap-2.5">
+                <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <span className="font-semibold leading-relaxed">{success}</span>
+              </div>
+              {success.includes("password reset link") && (
+                <div className="bg-white/80 rounded-xl p-3 text-xs text-slate-600 border border-emerald-100 space-y-1.5 leading-relaxed">
+                  <p className="font-bold text-slate-700">Can't find the email? Please check:</p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li><strong>Spam / Junk Folder</strong> (Frequently filtered here by spam blocker services)</li>
+                    <li><strong>Promotions / Updates tabs</strong> (For Gmail, Outlook, or Yahoo Mail users)</li>
+                    <li>Verify that the email entered matches your registered account email.</li>
+                  </ul>
+                  <p className="text-[10px] text-slate-400 mt-2 italic">Note: Deliveries can sometimes experience a 1-3 minute network transit latency.</p>
+                </div>
+              )}
             </div>
           )}
 

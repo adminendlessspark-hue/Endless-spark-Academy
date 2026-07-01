@@ -11,7 +11,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, loginWithGoogle, resetPassword, quickBypassLogin, user } = useAuth();
+  const { login, loginWithGoogle, resetPassword, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || '/';

@@ -14,7 +14,7 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signup, loginWithGoogle, quickBypassLogin } = useAuth();
+  const { signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const { logoUrl, loading: settingsLoading } = useSettings();
   const isLoggingIn = React.useRef(false);
@@ -218,18 +218,6 @@ export default function Signup() {
               </p>
             </div>
           )}
-
-          <div className="mt-6 pt-6 border-t border-dashed border-gray-100">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 text-center">Fast-Track Role Access:</p>
-            <button
-              type="button"
-              onClick={() => quickBypassLogin('admin')}
-              className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-100 transition-all flex flex-col items-center justify-center gap-0.5"
-            >
-              <span>Admin Panel</span>
-              <span className="text-[9px] text-indigo-400 font-normal">adminendlessspark@gmail.com</span>
-            </button>
-          </div>
         </div>
 
         <div className="mt-8 text-center space-y-4">

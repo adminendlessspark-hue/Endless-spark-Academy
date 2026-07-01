@@ -125,6 +125,38 @@ const getDb = () => {
   return getFirestore();
 };
 
+// Helper to get Google Drive Auth object using credentials safely
+const getGoogleAuth = () => {
+  const scopes = ["https://www.googleapis.com/auth/drive"];
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+      return new google.auth.GoogleAuth({
+        credentials,
+        scopes,
+      });
+    } catch (e) {
+      console.error("Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON:", e);
+    }
+  }
+  return new google.auth.GoogleAuth({
+    scopes,
+  });
+};
+
+// Helper to extract service account email if available
+const getServiceAccountEmail = () => {
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+      return credentials.client_email || null;
+    } catch (e) {
+      console.error("Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON:", e);
+    }
+  }
+  return null;
+};
+
 const upload = multer({ 
   dest: "/tmp/uploads",
   limits: {
@@ -189,16 +221,18 @@ async function startServer() {
 
   // Google Drive Sharing API
   app.post("/api/share-drive-file", async (req: any, res: any) => {
-    const { driveUrl, studentEmail, role = "writer" } = req.body;
+    const driveUrl = req.body.driveUrl || req.body.fileUrl;
+    const studentEmail = req.body.studentEmail || req.body.email;
+    const role = req.body.role || "writer";
     
     if (!driveUrl || !studentEmail) {
       return res.status(400).json({ error: "driveUrl and studentEmail are required" });
     }
 
+    const clientEmail = getServiceAccountEmail();
+
     try {
       // Extract fileId from various Google Drive URL formats
-      // Format: https://drive.google.com/file/d/FILE_ID/view
-      // Format: https://drive.google.com/open?id=FILE_ID
       const fileIdMatch = driveUrl.match(/[-\w]{25,}/);
       if (!fileIdMatch) {
         return res.status(400).json({ error: "Invalid Google Drive URL or File ID" });
@@ -215,10 +249,7 @@ async function startServer() {
         });
       }
 
-      const auth = new google.auth.GoogleAuth({
-        scopes: ["https://www.googleapis.com/auth/drive"],
-      });
-      
+      const auth = getGoogleAuth();
       const drive = google.drive({ version: "v3", auth });
 
       console.log(`Auto-pilot: Sharing file ${fileId} with ${studentEmail} as ${role}`);
@@ -255,7 +286,91 @@ async function startServer() {
       res.json({ success: true, message: `File shared with ${studentEmail} and admin successfully.` });
     } catch (error: any) {
       console.error("Critical Drive sharing error:", error);
-      res.status(500).json({ error: error.message });
+      
+      const isPermissionError = error.message && (
+        error.message.includes("File not found") || 
+        error.message.includes("permission") || 
+        error.message.includes("access")
+      );
+
+      if (isPermissionError && clientEmail) {
+        return res.status(403).json({
+          error: `Google Drive Access Denied. To allow automatic sharing and download, please make sure the Google Drive folder/file is shared with the system service account as Editor: ${clientEmail}`,
+          clientEmail,
+          isPermissionIssue: true
+        });
+      }
+
+      res.status(500).json({ error: error.message, clientEmail });
+    }
+  });
+
+  // API to get service account email
+  app.get("/api/service-account-info", (req: any, res: any) => {
+    const email = getServiceAccountEmail();
+    res.json({ email });
+  });
+
+  // API to check service account access to a specific Google Drive url
+  app.get("/api/check-drive-access", async (req: any, res: any) => {
+    const fileUrl = req.query.url as string;
+    if (!fileUrl) {
+      return res.status(400).json({ error: "No URL provided" });
+    }
+
+    const clientEmail = getServiceAccountEmail();
+    if (!clientEmail) {
+      return res.json({ 
+        hasAccess: false, 
+        error: "No service account credentials found. Please set GOOGLE_SERVICE_ACCOUNT_JSON in environment secrets.", 
+        clientEmail: null 
+      });
+    }
+
+    try {
+      let fileId: string | null = null;
+      let isFolder = false;
+
+      if (fileUrl.includes("drive.google.com")) {
+        if (fileUrl.includes("/folders/")) {
+          const folderIdMatch = fileUrl.match(/\/folders\/([-\w]+)/);
+          if (folderIdMatch) {
+            fileId = folderIdMatch[1];
+            isFolder = true;
+          }
+        } else {
+          const fileIdMatch = fileUrl.match(/[-\w]{25,}/);
+          if (fileIdMatch) {
+            fileId = fileIdMatch[0];
+          }
+        }
+      }
+
+      if (!fileId) {
+        return res.json({ hasAccess: false, error: "Not a valid Google Drive URL", clientEmail });
+      }
+
+      const auth = getGoogleAuth();
+      const drive = google.drive({ version: "v3", auth });
+
+      // Retrieve basic metadata to check access
+      const metadata = await drive.files.get({
+        fileId,
+        fields: "name, mimeType"
+      });
+
+      res.json({
+        hasAccess: true,
+        name: metadata.data.name,
+        isFolder: isFolder || metadata.data.mimeType === "application/vnd.google-apps.folder",
+        clientEmail
+      });
+    } catch (error: any) {
+      res.json({
+        hasAccess: false,
+        error: error.message,
+        clientEmail
+      });
     }
   });
 
@@ -729,9 +844,7 @@ async function startServer() {
     let requestedTitle = req.query.title as string;
 
     try {
-      const auth = new google.auth.GoogleAuth({
-        scopes: ["https://www.googleapis.com/auth/drive"],
-      });
+      const auth = getGoogleAuth();
       const drive = google.drive({ version: "v3", auth });
 
       // If projectId is provided, look up the file URL and title from Firestore

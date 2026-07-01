@@ -111,6 +111,19 @@ export default function ProjectTemplateLibrary() {
 
   const handleDownload = async (url: string, title: string) => {
     try {
+      // Auto-share Google Drive link with student as writer silently so they don't get request access prompts
+      if (url.includes('drive.google.com') && user?.role === 'student' && user?.email) {
+        try {
+          await fetch('/api/share-drive-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ driveUrl: url, studentEmail: user.email, role: 'writer' })
+          });
+        } catch (e) {
+          console.error("Auto-share template error:", e);
+        }
+      }
+
       // Use the server-side proxy to bypass CORS and about:blank#blocked
       const proxiedUrl = `/api/download?url=${encodeURIComponent(url)}`;
       console.log('Downloading via proxy:', proxiedUrl);

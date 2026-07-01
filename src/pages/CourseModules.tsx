@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { CourseModule, TopicScore, CourseType, TrainingRecord } from '../types';
+import { CourseModule, TopicScore, CourseType, TrainingRecord, TrainingPlanRow } from '../types';
 import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2 } from 'lucide-react';
 import { cn, getDirectDownloadUrl, formatCourseName, getOrdinalSuffix } from '../utils';
 import { useAuth } from '../AuthContext';
@@ -123,6 +123,8 @@ export default function CourseModules() {
   const worksheetInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([]);
+  const [activeSubTab, setActiveSubTab] = useState<'syllabus' | 'training-plan'>('syllabus');
+  const [trainingPlans, setTrainingPlans] = useState<TrainingPlanRow[]>([]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -132,6 +134,13 @@ export default function CourseModules() {
     }, (err) => handleFirestoreError(err, OperationType.GET, 'training_records'));
     return () => unsub();
   }, [user?.id]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'training_plans'), (snapshot) => {
+      setTrainingPlans(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TrainingPlanRow)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'training_plans'));
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -346,7 +355,168 @@ export default function CourseModules() {
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Sub-navigation Tabs */}
+      <div className="flex border-b border-gray-200">
+        <button
+          onClick={() => setActiveSubTab('syllabus')}
+          className={cn(
+            "px-6 py-3 text-sm font-bold border-b-2 transition-all cursor-pointer",
+            activeSubTab === 'syllabus'
+              ? "border-pink-600 text-pink-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          )}
+        >
+          Syllabus Modules
+        </button>
+        <button
+          onClick={() => setActiveSubTab('training-plan')}
+          className={cn(
+            "px-6 py-3 text-sm font-bold border-b-2 transition-all cursor-pointer",
+            activeSubTab === 'training-plan'
+              ? "border-pink-600 text-pink-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          )}
+        >
+          Detailed Training Plan
+        </button>
+      </div>
+
+      {activeSubTab === 'training-plan' && (
+        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-100 space-y-6">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              {formatCourseName(category as any)} - Detailed Training Plan
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Course-wise schedule and syllabus breakdown.
+            </p>
+          </div>
+
+          <div className="border border-slate-150 rounded-2xl overflow-hidden bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-150 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-4 w-12 text-center">S.No</th>
+                    <th className="px-4 py-4 min-w-[180px]">Course Subject</th>
+                    <th className="px-4 py-4 w-28">Training Level</th>
+                    <th className="px-4 py-4 min-w-[280px]">Topics Covered</th>
+                    <th className="px-4 py-4 w-32">Trainer (SME)</th>
+                    <th className="px-4 py-4 w-24">Duration</th>
+                    <th className="px-4 py-4 w-32">Target Date</th>
+                    <th className="px-4 py-4 w-32">Material Type</th>
+                    <th className="px-4 py-4 w-28">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {trainingPlans
+                    .filter(tp => tp.courseId === category)
+                    .sort((a, b) => {
+                      if (a.sNo !== b.sNo) return a.sNo - b.sNo;
+                      return a.level.localeCompare(b.level);
+                    })
+                    .map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-5 py-4 text-center font-mono text-xs font-semibold text-slate-500">
+                          {row.sNo}
+                        </td>
+                        <td className="px-5 py-4 text-sm font-semibold text-slate-800">
+                          {row.courseSubject}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={cn(
+                            "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium",
+                            row.level === 'Level 1' 
+                              ? "bg-blue-50 text-blue-700 border border-blue-100" 
+                              : row.level === 'Level 2'
+                              ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                              : "bg-purple-50 text-purple-700 border border-purple-100"
+                          )}>
+                            {row.level}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-sm text-slate-600">
+                          <ul className="list-disc pl-4 space-y-1">
+                            {row.topics.map((t, i) => (
+                              <li key={i}>{t}</li>
+                            ))}
+                          </ul>
+                        </td>
+                        <td className="px-5 py-4 text-sm font-medium text-slate-700">
+                          {row.trainerSme || <span className="text-slate-400 italic">Unassigned</span>}
+                        </td>
+                        <td className="px-5 py-4 text-sm font-mono text-slate-600">
+                          {row.durationHrs || <span className="text-slate-400 italic">-</span>}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-slate-700 font-mono">
+                          {row.targetDate ? (
+                            new Date(row.targetDate).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })
+                          ) : (
+                            <span className="text-slate-400 italic">Not set</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex flex-wrap gap-1.5 max-w-[180px]">
+                            {(row.materialType || 'Power Point')
+                              .split(',')
+                              .map(s => s.trim())
+                              .filter(Boolean)
+                              .map((type) => (
+                                <span
+                                  key={type}
+                                  className={cn(
+                                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border whitespace-nowrap",
+                                    type === 'Power Point'
+                                      ? "bg-orange-50 text-orange-700 border-orange-100"
+                                      : type === 'Video'
+                                      ? "bg-teal-50 text-teal-700 border-teal-100"
+                                      : type === 'Exercise file'
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                      : "bg-slate-50 text-slate-700 border-slate-100"
+                                  )}
+                                >
+                                  {type}
+                                </span>
+                              ))}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={cn(
+                            "inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border leading-normal",
+                            row.status === 'Completed'
+                              ? "bg-green-50 text-green-700 border-green-100"
+                              : row.status === 'WIP'
+                              ? "bg-amber-50 text-amber-700 border-amber-100"
+                              : "bg-slate-50 text-slate-600 border-slate-100"
+                          )}>
+                            {row.status || 'To Do'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  {trainingPlans.filter(tp => tp.courseId === category).length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="px-5 py-12 text-center text-slate-500">
+                        <BookOpen className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+                        <p className="font-semibold text-slate-700">No training plans finalized yet</p>
+                        <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">
+                          The administration has not published the training plan for this course yet. Please check back later.
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-8", activeSubTab !== 'syllabus' && "hidden")}>
         {/* Video Player Section */}
         <div className="lg:col-span-2 space-y-6">
           <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-lg relative group">

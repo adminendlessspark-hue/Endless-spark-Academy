@@ -676,4 +676,20 @@ export interface SavedResume {
   slotNumber?: number; // 1 to 5
 }
 
+export interface TrainingPlanRow {
+  id: string;
+  courseId: string;
+  sNo: number;
+  courseSubject: string;
+  level: string; // e.g. "Level 1", "Level 2"
+  topics: string[]; // List of bullet points
+  trainerSme: string; // e.g. "ANBU", "Praveen"
+  durationHrs: string; // e.g. "1.5 hrs"
+  status: string; // e.g. "Training material finalized..."
+  materialType?: string; // "Power Point" | "Video" | "Excel File"
+  targetDate?: string; // Target date for completion
+  createdAt: string;
+  updatedAt: string;
+}
+
 

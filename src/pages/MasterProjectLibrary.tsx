@@ -33,22 +33,55 @@ export default function MasterProjectLibrary() {
       setProjects([]);
     });
 
-    setCourses(STATIC_COURSES);
+    if (user?.role === 'student') {
+      const userCourses = user.assignedCourses || (user.assignedCourse ? [user.assignedCourse] : []);
+      const filteredCourses = STATIC_COURSES.filter(c => (userCourses as string[]).includes(c.id));
+      setCourses(filteredCourses);
+      if (filteredCourses.length === 1) {
+        setSelectedCourse(filteredCourses[0].id);
+      } else {
+        setSelectedCourse('all');
+      }
+    } else {
+      setCourses(STATIC_COURSES);
+      setSelectedCourse('all');
+    }
 
     return () => unsubMaster();
-  }, []);
+  }, [user]);
 
-  const handleDownload = async (url: string, title: string) => {
-    if (!url) return alert('No file link available');
+  const handleDownload = async (projectId: string, url: string, title: string) => {
+    // If we have a projectId, we can rely entirely on it for secure download.
+    // If not, we can fallback to the url if available.
     
-    // For Google Drive links, just open in new tab
-    if (url.includes('drive.google.com')) {
-      window.open(url, '_blank');
-      return;
+    // Auto-share Google Drive link with student as writer silently so they don't get request access prompts
+    if (url && url.includes('drive.google.com') && user?.role === 'student' && user?.email) {
+      try {
+        await fetch('/api/share-drive-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ driveUrl: url, studentEmail: user.email, role: 'writer' })
+        });
+      } catch (e) {
+        console.error("Auto-share master project error:", e);
+      }
     }
 
     try {
-      const proxiedUrl = `/api/download?url=${encodeURIComponent(url.match(/^https?:\/\//i) ? url : `https://${url}`)}`;
+      let downloadName = title || 'master-project';
+      if (!downloadName.toLowerCase().endsWith('.zip') && !downloadName.toLowerCase().endsWith('.pdf') && !downloadName.toLowerCase().endsWith('.ai') && !downloadName.toLowerCase().endsWith('.psd')) {
+        downloadName = `${downloadName}.zip`;
+      }
+
+      // Secure URL construction using projectId to avoid exposing raw drive link
+      let proxiedUrl = `/api/download?projectId=${encodeURIComponent(projectId)}&title=${encodeURIComponent(downloadName)}`;
+      if (!projectId && url) {
+        const cleanUrl = url.match(/^https?:\/\//i) ? url : `https://${url}`;
+        proxiedUrl = `/api/download?url=${encodeURIComponent(cleanUrl)}&title=${encodeURIComponent(downloadName)}`;
+      }
+      
+      console.log('Downloading master project via secure proxy:', proxiedUrl);
+      
       const response = await fetch(proxiedUrl);
       if (!response.ok) throw new Error('Proxy download failed');
       
@@ -57,14 +90,18 @@ export default function MasterProjectLibrary() {
       
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = title || 'master-project';
+      link.download = downloadName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error('Download failed:', error);
-      window.open(url, '_blank');
+      if (canManage && url) {
+        window.open(url, '_blank');
+      } else {
+        alert('Download failed. Please contact your instructor or administrator.');
+      }
     }
   };
 
@@ -112,16 +149,18 @@ export default function MasterProjectLibrary() {
               />
             </div>
             
-            <select
-              value={selectedCourse}
-              onChange={(e) => setSelectedCourse(e.target.value)}
-              className="px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-sm"
-            >
-              <option value="all">All Courses</option>
-              {courses.map(course => (
-                <option key={course.id} value={course.id}>{course.title || course.name}</option>
-              ))}
-            </select>
+            {courses.length > 1 && (
+              <select
+                value={selectedCourse}
+                onChange={(e) => setSelectedCourse(e.target.value)}
+                className="px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-sm"
+              >
+                <option value="all">All Courses</option>
+                {courses.map(course => (
+                  <option key={course.id} value={course.id}>{course.title || course.name}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
@@ -130,9 +169,9 @@ export default function MasterProjectLibrary() {
           <div className="text-sm text-blue-700">
             <p className="font-bold mb-1">How it works:</p>
             <ul className="list-disc list-inside space-y-1 opacity-90">
-              <li>Click <strong>Download</strong> to save the file to your device.</li>
-              <li>If it's a Google Drive link, you can <strong>duplicate</strong> the project into your own drive by going to <strong>File &gt; Make a copy</strong>.</li>
-              <li>Source files are read-only to ensure they remain available for everyone.</li>
+              <li>Click <strong>Download</strong> to automatically download project assets and documents directly as a ZIP file.</li>
+              <li>All project materials are bundled automatically so you can immediately begin working on your local machine.</li>
+              <li>Source files are secured as read-only templates to ensure they remain pristine for all students.</li>
             </ul>
           </div>
         </div>
@@ -166,7 +205,7 @@ export default function MasterProjectLibrary() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleDownload(item.googleDriveLink || item.fileUrl, item.title)}
+                    onClick={() => handleDownload(item.id, item.googleDriveLink || item.fileUrl, item.title)}
                     className="flex items-center gap-2 px-4 py-2 bg-pink-50 text-pink-600 rounded-xl text-xs font-bold hover:bg-pink-600 hover:text-white transition-all transform active:scale-95"
                   >
                     <Download className="w-3.5 h-3.5" />

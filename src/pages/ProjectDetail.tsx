@@ -393,6 +393,37 @@ export default function ProjectDetail() {
     return () => unsub();
   }, [projectId]);
 
+  // Auto-pilot: Automatically share any associated Google Drive files to avoid permission / edit approval prompts
+  useEffect(() => {
+    if (!project || user?.role !== 'student' || !user?.email) return;
+
+    // 1. Share assigned templates / files with the logged in student
+    const assignedLinks = [project.googleDriveLink, project.adobeCloudLink];
+    assignedLinks.forEach(link => {
+      if (link && link.includes('drive.google.com')) {
+        console.log("Auto-pilot: Automatically sharing assigned Google Drive file with student:", link);
+        fetch('/api/share-drive-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ driveUrl: link, studentEmail: user.email, role: 'writer' })
+        }).catch(err => console.error("Error auto-sharing assigned link:", err));
+      }
+    });
+
+    // 2. Share the student's submitted project files with adminendlessspark@gmail.com so the QC team doesn't need approval
+    const submittedLinks = [project.projectFileUrl];
+    submittedLinks.forEach(link => {
+      if (link && link.includes('drive.google.com')) {
+        console.log("Auto-pilot: Automatically sharing student submitted file with admin:", link);
+        fetch('/api/share-drive-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ driveUrl: link, studentEmail: 'adminendlessspark@gmail.com', role: 'writer' })
+        }).catch(err => console.error("Error auto-sharing submitted link with admin:", err));
+      }
+    });
+  }, [project?.id, project?.googleDriveLink, project?.adobeCloudLink, project?.projectFileUrl, user?.id, user?.email, user?.role]);
+
   const [queries, setQueries] = useState<StudentQuery[]>([]);
 
   useEffect(() => {
@@ -486,6 +517,13 @@ export default function ProjectDetail() {
       workStatus: newWorkStatus,
       updatedAt: new Date().toISOString()
     };
+
+    // Remove old google path when starting rework
+    if (newWorkStatus === 'In Progress' && (project.qcRejections && project.qcRejections.length > 0)) {
+      updates.projectFileUrl = '';
+      updates.googleDriveLink = '';
+      setLocalFinalFileLink('');
+    }
 
     // Timer logic based on status
     if (newWorkStatus === 'In Progress') {
@@ -900,86 +938,146 @@ export default function ProjectDetail() {
                     const isCompleted = stages.indexOf(project.status) > idx;
                     
                     return (
-                      <div key={stage} className="flex items-center gap-4">
-                        <div className="flex flex-col items-center">
-                          <div className={cn(
-                            "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border transition-colors",
-                            isActive ? "bg-pink-600 border-pink-600 text-white" :
-                            isCompleted ? "bg-green-100 border-green-200 text-green-600" :
-                            "bg-white border-gray-300 text-gray-400"
-                          )}>
-                            {isCompleted ? <CheckCircle className="w-3 h-3" /> : idx}
-                          </div>
-                          {idx < stages.length - 1 && (
+                      <div key={stage} className="border-b border-gray-150/30 last:border-0 py-3 first:pt-0 last:pb-0">
+                        <div className="flex items-center gap-4">
+                          <div className="flex flex-col items-center">
                             <div className={cn(
-                              "w-0.5 h-4 my-0.5 transition-colors",
-                              isCompleted ? "bg-green-200" : "bg-gray-200"
-                            )} />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className={cn(
-                                "text-xs font-bold uppercase tracking-wider transition-colors truncate",
-                                isActive ? "text-pink-700" : 
-                                isCompleted ? "text-green-700" : 
-                                "text-gray-400"
-                              )}>
-                                {stage === 'pqc' ? 'Production QC' : 
-                                 stage === 'qc' ? 'QC' : stage}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => navigate('/queries', {
-                                  state: {
-                                    projectNumber: project.clientBrief?.projectNumber || project.projectCode || project.id,
-                                    selectAndOpenRaise: true,
-                                    initialTitle: `Query regarding stage: ${stage === 'pqc' ? 'Production QC' : stage === 'qc' ? 'QC' : stage.toUpperCase()}`,
-                                    initialCategory: stage === 'preflight' ? 'Pre-flight checklist help' : stage === 'pqc' ? 'Technical/QC violation' : 'Layout approval',
-                                    initialRound: 'Round 1'
-                                  }
-                                })}
-                                className="p-1 rounded text-slate-400 hover:text-pink-600 hover:bg-pink-50 transition-all shrink-0 animate-pulse duration-1000"
-                                title={`Raise support query for ${stage === 'pqc' ? 'Production QC' : stage === 'qc' ? 'QC' : stage} stage`}
-                              >
-                                <HelpCircle className="w-3.5 h-3.5" />
-                              </button>
+                              "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border transition-colors",
+                              isActive ? "bg-pink-600 border-pink-600 text-white" :
+                              isCompleted ? "bg-green-100 border-green-200 text-green-600" :
+                              "bg-white border-gray-300 text-gray-400"
+                            )}>
+                              {isCompleted ? <CheckCircle className="w-3 h-3" /> : idx}
                             </div>
-                            {isActive && (
-                              <div className="relative">
-                                {(stage === 'qc' || stage === 'approved') && user?.role === 'student' ? (
-                                  <span className={cn(
-                                    "px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider border",
-                                    project.status === 'approved' ? "bg-green-50 border-green-200 text-green-700" : "bg-orange-50 border-orange-200 text-orange-700"
-                                  )}>
-                                    {project.status === 'approved' ? 'Approved' : (project.workStatus || 'Submitted')}
-                                  </span>
-                                ) : (
-                                  <>
-                                    <select 
-                                      value={project.workStatus || 'Not Started'}
-                                      onChange={(e) => handleWorkStatusChange(e.target.value)}
-                                      className={cn(
-                                        "appearance-none pl-3 pr-8 py-1 rounded text-[10px] font-black border transition-all cursor-pointer outline-none shadow-sm",
-                                        project.workStatus === 'Completed' ? "bg-green-50 border-green-200 text-green-700" :
-                                        project.workStatus === 'Paused' ? "bg-orange-50 border-orange-200 text-orange-700" :
-                                        project.workStatus === 'In Progress' ? "bg-blue-50 border-blue-200 text-blue-700" :
-                                        "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
-                                      )}
-                                    >
-                                      <option value="Not Started">Not Started</option>
-                                      <option value="In Progress">In Progress</option>
-                                      <option value="Paused">Paused</option>
-                                      <option value="Completed">Completed</option>
-                                    </select>
-                                    <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
-                                  </>
-                                )}
-                              </div>
+                            {idx < stages.length - 1 && (
+                              <div className={cn(
+                                "w-0.5 h-4 my-0.5 transition-colors",
+                                isCompleted ? "bg-green-200" : "bg-gray-200"
+                              )} />
                             )}
                           </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className={cn(
+                                  "text-xs font-bold uppercase tracking-wider transition-colors truncate",
+                                  isActive ? "text-pink-700" : 
+                                  isCompleted ? "text-green-700" : 
+                                  "text-gray-400"
+                                )}>
+                                  {stage === 'pqc' ? 'Production QC' : 
+                                   stage === 'qc' ? 'QC' : stage}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => navigate('/queries', {
+                                    state: {
+                                      projectNumber: project.clientBrief?.projectNumber || project.projectCode || project.id,
+                                      selectAndOpenRaise: true,
+                                      initialTitle: `Query regarding stage: ${stage === 'pqc' ? 'Production QC' : stage === 'qc' ? 'QC' : stage.toUpperCase()}`,
+                                      initialCategory: stage === 'preflight' ? 'Pre-flight checklist help' : stage === 'pqc' ? 'Technical/QC violation' : 'Layout approval',
+                                      initialRound: 'Round 1'
+                                    }
+                                  })}
+                                  className="p-1 rounded text-slate-400 hover:text-pink-600 hover:bg-pink-50 transition-all shrink-0 animate-pulse duration-1000"
+                                  title={`Raise support query for ${stage === 'pqc' ? 'Production QC' : stage === 'qc' ? 'QC' : stage} stage`}
+                                >
+                                  <HelpCircle className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              {isActive && (
+                                <div className="relative">
+                                  {(stage === 'qc' || stage === 'approved') && user?.role === 'student' ? (
+                                    <span className={cn(
+                                      "px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider border",
+                                      project.status === 'approved' ? "bg-green-50 border-green-200 text-green-700" : "bg-orange-50 border-orange-200 text-orange-700"
+                                    )}>
+                                      {project.status === 'approved' ? 'Approved' : (project.workStatus || 'Submitted')}
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <select 
+                                        value={project.workStatus || 'Not Started'}
+                                        onChange={(e) => handleWorkStatusChange(e.target.value)}
+                                        className={cn(
+                                          "appearance-none pl-3 pr-8 py-1 rounded text-[10px] font-black border transition-all cursor-pointer outline-none shadow-sm",
+                                          project.workStatus === 'Completed' ? "bg-green-50 border-green-200 text-green-700" :
+                                          project.workStatus === 'Paused' ? "bg-orange-50 border-orange-200 text-orange-700" :
+                                          project.workStatus === 'In Progress' ? "bg-blue-50 border-blue-200 text-blue-700" :
+                                          "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                                        )}
+                                      >
+                                        <option value="Not Started">Not Started</option>
+                                        <option value="In Progress">In Progress</option>
+                                        <option value="Paused">Paused</option>
+                                        <option value="Completed">Completed</option>
+                                      </select>
+                                      <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
+
+                        {/* Inline Google Drive Submission form right near the 'pqc' stage in Vertical Stage Tracker */}
+                        {isActive && stage === 'pqc' && user?.role === 'student' && (
+                          <div className="mt-3 ml-9 p-4 bg-green-50/50 rounded-2xl border border-green-100 text-left animate-in fade-in slide-in-from-top-2 duration-300">
+                            <label className="text-[10px] font-extrabold text-green-800 uppercase tracking-wider block mb-1">
+                              Google Drive Submission Link
+                            </label>
+                            <div className="flex gap-2">
+                              <div className="relative flex-1">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                  <Globe className="w-3.5 h-3.5 text-green-600" />
+                                </div>
+                                <input 
+                                  type="text"
+                                  value={localFinalFileLink}
+                                  onChange={(e) => {
+                                    setLocalFinalFileLink(e.target.value);
+                                    // Auto-save path to database immediately as they type so we don't keep it separately
+                                    updateDoc(doc(db, 'student_projects', project.id), {
+                                      projectFileUrl: e.target.value,
+                                      updatedAt: new Date().toISOString()
+                                    });
+                                  }}
+                                  placeholder="Paste Google Drive link here..."
+                                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-green-200 bg-white focus:ring-2 focus:ring-green-500 outline-none font-medium text-gray-800"
+                                />
+                              </div>
+                              <button
+                                onClick={handleUpdateFinalFileLink}
+                                disabled={isUploading || !localFinalFileLink.trim()}
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm shrink-0 uppercase tracking-widest cursor-pointer disabled:opacity-50"
+                              >
+                                Submit Link
+                              </button>
+                            </div>
+                            <p className="text-[9px] text-gray-400 mt-1 leading-normal italic">
+                              Enable download permission before submitting so that the QC team can retrieve your work.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Completed/Reviewed Link Status */}
+                        {((stage === 'qc' || stage === 'approved') && isActive && project.projectFileUrl) && (
+                          <div className="mt-3 ml-9 p-3 bg-white border border-gray-100 rounded-xl flex items-center justify-between shadow-sm text-left">
+                            <div className="min-w-0 flex-1 pr-2">
+                              <p className="text-[8px] uppercase font-bold text-gray-400">Submitted Google Drive Path</p>
+                              <p className="text-xs font-mono font-bold text-gray-750 truncate">{project.projectFileUrl}</p>
+                            </div>
+                            <a 
+                              href={project.projectFileUrl.match(/^https?:\/\//i) ? project.projectFileUrl : `https://${project.projectFileUrl}`}
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1868,72 +1966,6 @@ export default function ProjectDetail() {
           </div>
 
           <div className="space-y-6">
-            {/* Final Submission */}
-            {project.status !== 'approved' && project.status !== 'qc' && (
-              <div className="bg-white border border-gray-200 p-6 rounded-2xl space-y-4 shadow-sm">
-                <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                  <Upload className="w-5 h-5 text-green-500" /> Project Submission (QC)
-                </h3>
-                
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Provide your completed project file or Google Drive path for Quality Control review. After you submit, the QC engineer will download your production PDF from your Google Drive path.
-                </p>
-
-                {/* Google Drive Path (High Priority / Primary) */}
-                <div className="space-y-3 bg-green-50/50 p-4 rounded-xl border border-green-100">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-extrabold text-green-800 uppercase tracking-wider block">Google Drive Submission Link (Preferred)</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Globe className="w-4 h-4 text-green-600" />
-                      </div>
-                      <input 
-                        type="text"
-                        value={localFinalFileLink}
-                        onChange={(e) => setLocalFinalFileLink(e.target.value)}
-                        placeholder="Paste Google Drive folder or file link"
-                        className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-green-200 bg-white focus:ring-2 focus:ring-green-500 outline-none transition-all font-medium text-gray-800"
-                      />
-                    </div>
-                  </div>
-
-                  {/* INTimation / WARNING Box for download permission */}
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 space-y-2 text-amber-900 shadow-sm">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800 leading-tight">
-                          CRITICAL: Enable Download Permission!
-                        </p>
-                        <p className="text-[10.5px] font-medium leading-relaxed mt-0.5 text-amber-700">
-                          To avoid massive review delays, please ensure the Google Drive file has download access turned on before clicking Submit.
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-white/80 rounded-lg p-2.5 text-[10px] space-y-1 border border-amber-100 text-amber-950 font-medium leading-tight">
-                      <p className="font-bold text-amber-900">How to configure Drive permission:</p>
-                      <ol className="list-decimal pl-4.5 space-y-1 text-gray-700">
-                        <li>Open the file page in <span className="font-bold text-blue-600">Google Drive</span>.</li>
-                        <li>Click the <span className="font-bold">Share</span> button (top-right).</li>
-                        <li>Under <span className="font-bold">General Access</span>, change "Restricted" to <span className="font-bold text-green-700">"Anyone with the link"</span>.</li>
-                        <li>Ensure the role is configured to <span className="font-bold">"Viewer"</span> or <span className="font-bold">"Editor"</span>.</li>
-                        <li>Copy the link and paste it in the field above!</li>
-                      </ol>
-                    </div>
-                  </div>
-
-                  <button 
-                    onClick={handleUpdateFinalFileLink}
-                    disabled={isUploading || !localFinalFileLink.trim()}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-2xl text-xs font-bold transition-all shadow-lg shadow-green-100 disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer font-sans"
-                  >
-                    <CheckCircle className="w-4 h-4 text-white" />
-                    Submit Google Link to QC
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Time Tracking */}
             {project.status !== 'approved' && project.status !== 'qc' && (

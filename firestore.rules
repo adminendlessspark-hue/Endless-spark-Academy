@@ -293,5 +293,34 @@ service cloud.firestore {
       allow create, update: if isSignedIn() && (isStaff() || incoming().userId == request.auth.uid);
       allow delete: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
+
+    match /consultation_bookings/{bookingId} {
+      allow create: if true;
+      allow read: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /faculty_roadmaps/{roadmapId} {
+      allow read: if isSignedIn();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /training_plans/{planId} {
+      allow read: if true;
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /toolkit_products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /toolkit_purchases/{purchaseId} {
+      allow create: if true;
+      allow read: if isStaff() || (isSignedIn() && (resource.data.customerEmail == request.auth.token.email));
+    }
   }
 }

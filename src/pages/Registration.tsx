@@ -25,7 +25,7 @@ type RegistrationFormData = {
 
 export default function Registration() {
   const { user, updateUser } = useAuth();
-  const { logoUrl } = useSettings();
+  const { logoUrl, founderVideoUrl, overviewVideoUrl, founderVideoEnabled, overviewVideoEnabled } = useSettings();
   const navigate = useNavigate();
   const [isSubmitted, setIsSubmitted] = useState(false);
 
@@ -136,52 +136,63 @@ export default function Registration() {
     );
   }
 
+  const hasVideos = founderVideoEnabled || overviewVideoEnabled;
+
   return (
-    <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12">
-      {/* Left Column: Videos */}
-      <div className="lg:col-span-7 space-y-8">
-        <div>
-          <div className="flex items-center gap-4 mb-4">
-            {logoUrl && (
-              <div className="bg-white p-3 rounded-2xl shadow-md border border-gray-100 flex-shrink-0">
-                <img src={logoUrl} alt="Endless Spark Logo" className="h-20 object-contain" />
-              </div>
+    <div className={hasVideos ? "max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12" : "max-w-2xl mx-auto"}>
+      {hasVideos && (
+        /* Left Column: Videos */
+        <div className="lg:col-span-7 space-y-8">
+          <div>
+            <div className="flex items-center gap-4 mb-4">
+              {logoUrl && (
+                <div className="bg-white p-3 rounded-2xl shadow-md border border-gray-100 flex-shrink-0">
+                  <img src={logoUrl} alt="Endless Spark Logo" className="h-20 object-contain" />
+                </div>
+              )}
+              <h1 className="text-3xl font-bold text-gray-900">Welcome to Your Tech Journey</h1>
+            </div>
+
+            {founderVideoEnabled && (
+              <>
+                <p className="text-lg text-gray-600 mb-6">
+                  Watch this quick message from our founder about what you'll achieve in our program.
+                </p>
+                {/* Founder Video Section */}
+                <div className="relative rounded-2xl overflow-hidden bg-gray-900 aspect-video shadow-lg border border-gray-200 mb-8">
+                  <iframe 
+                    src={founderVideoUrl || "https://www.youtube.com/embed/dQw4w9WgXcQ"} 
+                    className="w-full h-full" 
+                    title="Message from the Founder"
+                    allowFullScreen
+                  />
+                </div>
+              </>
             )}
-            <h1 className="text-3xl font-bold text-gray-900">Welcome to Your Tech Journey</h1>
-          </div>
-          <p className="text-lg text-gray-600 mb-6">
-            Watch this quick message from our founder about what you'll achieve in our program.
-          </p>
-          
-          {/* Founder Video Section */}
-          <div className="relative rounded-2xl overflow-hidden bg-gray-900 aspect-video shadow-lg border border-gray-200 mb-8">
-            <iframe 
-              src="https://www.youtube.com/embed/dQw4w9WgXcQ" 
-              className="w-full h-full" 
-              title="Message from the Founder"
-              allowFullScreen
-            />
-          </div>
 
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Training Overview</h2>
-          <p className="text-lg text-gray-600 mb-6">
-            Get a comprehensive overview of our curriculum and training methodology.
-          </p>
-
-          {/* Training Overview Video Section */}
-          <div className="relative rounded-2xl overflow-hidden bg-gray-900 aspect-video shadow-lg border border-gray-200">
-            <iframe 
-              src="https://www.youtube.com/embed/dQw4w9WgXcQ" 
-              className="w-full h-full" 
-              title="Training Overview"
-              allowFullScreen
-            />
+            {overviewVideoEnabled && (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Training Overview</h2>
+                <p className="text-lg text-gray-600 mb-6">
+                  Get a comprehensive overview of our curriculum and training methodology.
+                </p>
+                {/* Training Overview Video Section */}
+                <div className="relative rounded-2xl overflow-hidden bg-gray-900 aspect-video shadow-lg border border-gray-200">
+                  <iframe 
+                    src={overviewVideoUrl || "https://www.youtube.com/embed/dQw4w9WgXcQ"} 
+                    className="w-full h-full" 
+                    title="Training Overview"
+                    allowFullScreen
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Right Column: Registration Form */}
-      <div className="lg:col-span-5">
+      <div className={hasVideos ? "lg:col-span-5" : "w-full"}>
         <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-100 sticky top-8">
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900">Book Your Free Demo</h2>

@@ -32,6 +32,7 @@ const navItems = [
   { name: 'Marketing Panel', path: '/marketing', icon: Sparkles, marketingOnly: true },
   { name: 'Accounts Panel', path: '/accounts', icon: DollarSign, accountsOnly: true },
   { name: 'Admin Panel', path: '/admin', icon: ShieldCheck, adminOnly: true },
+  { name: 'Toolkit', path: '/adobe-toolkit', icon: Sparkles },
   { name: 'Quality Control', path: '/public-qc', icon: ShieldCheck, adminOnly: true },
   { name: 'Security Guidelines', path: '/security-guidelines', icon: ShieldCheck },
 ];
@@ -58,7 +59,7 @@ export default function Layout({ children }: LayoutProps) {
       if (item.accountsOnly && (user?.role === 'accounts_executive' || isAdmin)) return true;
       
       // Common items for staff
-      return ['/dashboard', '/modules', '/software-library', '/project-library', '/online-tests', '/resume-builder', '/queries', '/help-desk'].includes(item.path);
+      return ['/dashboard', '/modules', '/software-library', '/project-library', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
     }
 
     if (user?.role === 'student') {
@@ -69,17 +70,17 @@ export default function Layout({ children }: LayoutProps) {
       
       // 2nd stage: show dashboard, application and software library
       if (!user.applicationStatus || user.applicationStatus === 'pending' || user.applicationStatus === 'none') {
-        return item.path === '/dashboard' || item.path === '/apply' || item.path === '/software-library' || item.path === '/queries' || item.path === '/help-desk';
+        return item.path === '/dashboard' || item.path === '/apply' || item.path === '/software-library' || item.path === '/queries' || item.path === '/help-desk' || item.path === '/adobe-toolkit';
       }
       
       // 3rd stage: show dashboard and software library
       if (user.applicationStatus === 'submitted' && !user.isApproved) {
-        return item.path === '/dashboard' || item.path === '/software-library' || item.path === '/queries' || item.path === '/help-desk';
+        return item.path === '/dashboard' || item.path === '/software-library' || item.path === '/queries' || item.path === '/help-desk' || item.path === '/adobe-toolkit';
       }
       
       // 4th stage (Approved): show Dashboard, Video intro, Course Module, Software Library, Templates, Master, My Projects, Online Test
       if (user.isApproved) {
-        return ['/dashboard', '/video-intro', '/modules', '/software-library', '/project-library', '/projects', '/online-tests', '/resume-builder', '/queries', '/help-desk'].includes(item.path);
+        return ['/dashboard', '/video-intro', '/modules', '/software-library', '/project-library', '/projects', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
       }
     }
     
@@ -158,25 +159,39 @@ export default function Layout({ children }: LayoutProps) {
         </nav>
 
         <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-xs font-bold text-pink-600 shrink-0">
-              {user?.name?.charAt(0) || 'U'}
+          {user ? (
+            <div className="flex items-center gap-3 px-3 py-2">
+              <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-xs font-bold text-pink-600 shrink-0">
+                {user?.name?.charAt(0) || 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{user?.name || 'User'}</p>
+                <p className="text-[10px] text-gray-400 font-mono truncate">@{user?.username}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {user?.role === 'admin' ? 'Admin Account' : user?.role === 'faculty' ? 'Faculty Account' : user?.role === 'telecaller' ? 'Telecaller Account' : user?.role === 'qc' ? 'QC Reviewer' : 'Student Account'}
+                </p>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="btn-icon-red shrink-0"
+                title="Logout"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{user?.name || 'User'}</p>
-              <p className="text-[10px] text-gray-400 font-mono truncate">@{user?.username}</p>
-              <p className="text-xs text-gray-500 truncate">
-                {user?.role === 'admin' ? 'Admin Account' : user?.role === 'faculty' ? 'Faculty Account' : user?.role === 'telecaller' ? 'Telecaller Account' : user?.role === 'qc' ? 'QC Reviewer' : 'Student Account'}
-              </p>
+          ) : (
+            <div className="space-y-2 px-2 py-1">
+              <p className="text-xs text-gray-500 font-medium">Layout Automation Portal:</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Link to="/login" className="py-2 px-3 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-[11px] font-bold text-center transition-colors">
+                  Login
+                </Link>
+                <Link to="/signup" className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold text-center transition-colors">
+                  Sign Up
+                </Link>
+              </div>
             </div>
-            <button 
-              onClick={handleLogout}
-              className="btn-icon-red shrink-0"
-              title="Logout"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          )}
         </div>
       </aside>
 

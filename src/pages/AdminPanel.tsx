@@ -4,10 +4,12 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Users, BookOpen, GraduationCap, CheckCircle, XCircle, Upload, Plus, Trash2, Video, Clock, ShieldCheck, Calendar, UserCheck, X, Download, FileText, Map, FileSpreadsheet, HelpCircle, Eye, Check, ExternalLink, User as UserIcon, PhoneCall, MapPin, Edit2, Edit, IndianRupee, Image, MoreVertical, Key, Ban, RefreshCw, Briefcase, Calculator, Bot, Loader2, FolderKanban, Copy, UserPlus, AlertCircle, FileCheck, ChevronDown, ChevronUp, Sparkles, Printer, Wind, Cloud, Layers, Wallet, CheckSquare, Globe, MessageCircle, Info, ChevronLeft, ChevronRight, Award } from 'lucide-react';
-import { User, CourseModule, QuizQuestion, CourseType, TopicScore, Holiday, ApplicationData, TeamMember } from '../types';
+import { User, CourseModule, QuizQuestion, CourseType, TopicScore, Holiday, ApplicationData, TeamMember, TrainingPlanRow } from '../types';
+import { DEFAULT_TRAINING_PLANS } from '../defaultTrainingPlans';
 import { cn, compressImage, calculateSLADate, formatCourseName, getScoreKey, getOrdinalSuffix } from '../utils';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { FileUploader } from '../components/FileUploader';
+import FacultyRoadmapPlanner from '../components/FacultyRoadmapPlanner';
 import { 
   collection, 
   onSnapshot, 
@@ -159,7 +161,7 @@ export default function AdminPanel() {
     );
   };
   
-  const [activeTab, setActiveTab] = useState<'students' | 'videos' | 'marks' | 'settings' | 'staff' | 'holidays' | 'demo' | 'applications' | 'submissions' | 'reports' | 'live-classes' | 'invoices' | 'referrals' | 'software-videos' | 'projects' | 'pre-flight' | 'training-records' | 'entrance-test' | 'placements' | 'batch-center' | 'team' | 'system' | 'queries' | 'qc' | 'webinar'>(() => {
+  const [activeTab, setActiveTab] = useState<'students' | 'videos' | 'marks' | 'settings' | 'staff' | 'holidays' | 'demo' | 'applications' | 'submissions' | 'reports' | 'live-classes' | 'invoices' | 'referrals' | 'software-videos' | 'projects' | 'pre-flight' | 'training-records' | 'entrance-test' | 'placements' | 'batch-center' | 'team' | 'system' | 'queries' | 'qc' | 'webinar' | 'roadmap' | 'training-plans'>(() => {
     if (user?.role === 'qc') return 'qc';
     return 'marks';
   });
@@ -277,6 +279,22 @@ export default function AdminPanel() {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [financialSettings, setFinancialSettings] = useState<any>(null);
   const [allRegisteredModules, setAllRegisteredModules] = useState<CourseModule[]>([]);
+  const [consultationBookings, setConsultationBookings] = useState<any[]>([]);
+  const [consultSubTab, setConsultSubTab] = useState<'demo-classes' | 'consultations'>('demo-classes');
+  const [trainingPlans, setTrainingPlans] = useState<TrainingPlanRow[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('production-art-engineer');
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlanRow, setEditingPlanRow] = useState<TrainingPlanRow | null>(null);
+  const [planSNo, setPlanSNo] = useState<number>(1);
+  const [planSubject, setPlanSubject] = useState('');
+  const [planLevel, setPlanLevel] = useState('Level 1');
+  const [planTopicsText, setPlanTopicsText] = useState('');
+  const [planTrainer, setPlanTrainer] = useState('');
+  const [planDuration, setPlanDuration] = useState('');
+  const [planStatus, setPlanStatus] = useState('To Do');
+  const [planMaterialType, setPlanMaterialType] = useState('Power Point');
+  const [planTargetDate, setPlanTargetDate] = useState('');
+  const [isSavingPlan, setIsSavingPlan] = useState(false);
 
   const courseModules = useMemo(() => {
     if (financialSettings?.coursesConfig && financialSettings.coursesConfig.length > 0) {
@@ -315,6 +333,10 @@ export default function AdminPanel() {
   const [logoUrl, setLogoUrl] = useState<string>('/logo.png');
   const [cloudServerBaseUrl, setCloudServerBaseUrl] = useState<string>('files.yourserver.com');
   const [jitsiServerAdmin, setJitsiServerAdmin] = useState<string>('jitsi.belnet.be');
+  const [adobeCloudUrlAdmin, setAdobeCloudUrlAdmin] = useState<string>('https://creativecloud.adobe.com/apps/all/desktop');
+  const [pantoneBooksUrlAdmin, setPantoneBooksUrlAdmin] = useState<string>('https://www.pantone.com/connect');
+  const [teamViewerUrlAdmin, setTeamViewerUrlAdmin] = useState<string>('https://www.teamviewer.com/download');
+  const [adobeScriptToolkitUrlAdmin, setAdobeScriptToolkitUrlAdmin] = useState<string>('https://github.com/Adobe-CEP/CEP-Resources');
   const [landingPageTitleImageUrl, setLandingPageTitleImageUrl] = useState<string>('');
   const [landingPageStats, setLandingPageStats] = useState({
     modules: '12+',
@@ -333,6 +355,8 @@ export default function AdminPanel() {
   const [founderVideoUrlTamil, setFounderVideoUrlTamil] = useState<string>('');
   const [overviewVideoUrl, setOverviewVideoUrl] = useState<string>('');
   const [overviewVideoUrlTamil, setOverviewVideoUrlTamil] = useState<string>('');
+  const [founderVideoEnabled, setFounderVideoEnabled] = useState<boolean>(true);
+  const [overviewVideoEnabled, setOverviewVideoEnabled] = useState<boolean>(true);
   const [entranceTestAudioUrl, setEntranceTestAudioUrl] = useState<string>('');
   const [wellnessEnabled, setWellnessEnabled] = useState<boolean>(false);
   const [wellnessVideoUrl, setWellnessVideoUrl] = useState<string>('');
@@ -700,6 +724,8 @@ export default function AdminPanel() {
         setFounderVideoUrlTamil(data.founderVideoUrlTamil || '');
         setOverviewVideoUrl(data.overviewVideoUrl || '');
         setOverviewVideoUrlTamil(data.overviewVideoUrlTamil || '');
+        setFounderVideoEnabled(data.founderVideoEnabled ?? true);
+        setOverviewVideoEnabled(data.overviewVideoEnabled ?? true);
         setEntranceTestAudioUrl(data.entranceTestAudioUrl || '');
         setWellnessEnabled(data.wellnessEnabled ?? false);
         setWellnessVideoUrl(data.wellnessVideoUrl || 'https://www.youtube.com/embed/-GHd77C4brk?si=lnvBe-_P2fXxAeaW');
@@ -713,6 +739,10 @@ export default function AdminPanel() {
         }
         setCloudServerBaseUrl(data.cloudServerBaseUrl || 'files.yourserver.com');
         setJitsiServerAdmin(data.jitsiServer || 'jitsi.belnet.be');
+        setAdobeCloudUrlAdmin(data.adobeCloudUrl || 'https://creativecloud.adobe.com/apps/all/desktop');
+        setPantoneBooksUrlAdmin(data.pantoneBooksUrl || 'https://www.pantone.com/connect');
+        setTeamViewerUrlAdmin(data.teamViewerUrl || 'https://www.teamviewer.com/download');
+        setAdobeScriptToolkitUrlAdmin(data.adobeScriptToolkitUrl || 'https://github.com/Adobe-CEP/CEP-Resources');
         setAiKnowledgeBase(data.aiKnowledgeBase || '');
         setBranches(data.branches || []);
         // Still read from admin for backward compatibility
@@ -778,6 +808,16 @@ export default function AdminPanel() {
       setSoftwareVideos(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'software_videos'));
 
+    // Listen to consultation bookings
+    const unsubConsultationBookings = onSnapshot(collection(db, 'consultation_bookings'), (snapshot) => {
+      setConsultationBookings(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'consultation_bookings'));
+
+    // Listen to training plans
+    const unsubTrainingPlans = onSnapshot(collection(db, 'training_plans'), (snapshot) => {
+      setTrainingPlans(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TrainingPlanRow)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'training_plans'));
+
     return () => {
       unsubUsers();
       unsubHolidays();
@@ -790,8 +830,35 @@ export default function AdminPanel() {
       unsubInvoices();
       unsubFinancialSettings();
       unsubSoftwareVideos();
+      unsubConsultationBookings();
+      unsubTrainingPlans();
     };
   }, []);
+
+  const handleToggleFeeReduction = async (bookingId: string, currentStatus: boolean, studentEmail: string) => {
+    if (checkPreview()) return;
+    try {
+      // 1. Update the booking status
+      await updateDoc(doc(db, 'consultation_bookings', bookingId), {
+        feeReduced: !currentStatus
+      });
+
+      // 2. Also try to find a user with this email to update their demoData or fees details
+      const userQuery = query(collection(db, 'users'), where('email', '==', studentEmail));
+      const querySnap = await getDocs(userQuery);
+      if (!querySnap.empty) {
+        for (const userDoc of querySnap.docs) {
+          await updateDoc(doc(db, 'users', userDoc.id), {
+            'demoData.adjustableFeeReduced': !currentStatus
+          });
+        }
+      }
+      alert(`Successfully ${!currentStatus ? 'applied' : 'reverted'} the ₹500 fee reduction for ${studentEmail}. This amount is now marked as reduced from their course tuition fees!`);
+    } catch (err) {
+      console.error("Error updating fee reduction status: ", err);
+      alert("Error updating fee reduction status.");
+    }
+  };
 
   const handleCreateFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -876,6 +943,93 @@ export default function AdminPanel() {
       await deleteDoc(doc(db, 'training_records', id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `training_records/${id}`);
+    }
+  };
+
+  const handleSaveTrainingPlanRow = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (checkPreview()) return;
+    setIsSavingPlan(true);
+    try {
+      const topics = planTopicsText
+        .split('\n')
+        .map(t => t.trim())
+        .filter(t => t.length > 0);
+
+      const rowData = {
+        courseId: selectedCourseId,
+        sNo: Number(planSNo),
+        courseSubject: planSubject,
+        level: planLevel,
+        topics,
+        trainerSme: planTrainer,
+        durationHrs: planDuration,
+        status: planStatus,
+        materialType: planMaterialType,
+        targetDate: planTargetDate,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (editingPlanRow) {
+        await updateDoc(doc(db, 'training_plans', editingPlanRow.id), rowData);
+      } else {
+        await addDoc(collection(db, 'training_plans'), {
+          ...rowData,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      setShowPlanModal(false);
+      setEditingPlanRow(null);
+      // Reset form
+      setPlanSubject('');
+      setPlanLevel('Level 1');
+      setPlanTopicsText('');
+      setPlanTrainer('');
+      setPlanDuration('');
+      setPlanStatus('To Do');
+      setPlanMaterialType('Power Point');
+      setPlanTargetDate('');
+    } catch (err) {
+      handleFirestoreError(err, editingPlanRow ? OperationType.UPDATE : OperationType.CREATE, 'training_plans');
+    } finally {
+      setIsSavingPlan(false);
+    }
+  };
+
+  const handleDeleteTrainingPlanRow = async (id: string) => {
+    if (checkPreview()) return;
+    if (!window.confirm('Are you sure you want to delete this training plan row?')) return;
+    try {
+      await deleteDoc(doc(db, 'training_plans', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `training_plans/${id}`);
+    }
+  };
+
+  const handleLoadDefaultTrainingPlans = async () => {
+    if (checkPreview()) return;
+    if (!window.confirm('This will load the default training plan templates for the selected course. Continue?')) return;
+    try {
+      const batch = writeBatch(db);
+      DEFAULT_TRAINING_PLANS.forEach((plan) => {
+        const docRef = doc(collection(db, 'training_plans'));
+        batch.set(docRef, {
+          courseId: selectedCourseId,
+          sNo: plan.sNo,
+          courseSubject: plan.courseSubject,
+          level: plan.level,
+          topics: plan.topics,
+          trainerSme: plan.trainerSme,
+          durationHrs: plan.durationHrs,
+          status: plan.status,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      });
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'training_plans');
     }
   };
 
@@ -2471,6 +2625,8 @@ export default function AdminPanel() {
         founderVideoUrlTamil,
         overviewVideoUrl,
         overviewVideoUrlTamil,
+        founderVideoEnabled,
+        overviewVideoEnabled,
         entranceTestAudioUrl,
         wellnessEnabled,
         wellnessVideoUrl,
@@ -2873,9 +3029,11 @@ export default function AdminPanel() {
             { id: 'qc', label: 'QC Desk', icon: FileCheck },
             { id: 'pre-flight', label: 'Checklist', icon: FileCheck },
             { id: 'training-records', label: 'Records', icon: FileText },
+            { id: 'training-plans', label: 'Training Plans', icon: BookOpen },
             { id: 'entrance-test', label: 'Entrance Test', icon: FileCheck },
             { id: 'webinar', label: 'Webinar Leads', icon: Video },
             { id: 'batch-center', label: 'Batch Center', icon: Layers },
+            { id: 'roadmap', label: 'Faculty Roadmap', icon: Layers },
             { id: 'team', label: 'Manage Team', icon: Users },
             { id: 'placements', label: 'Placements', icon: Briefcase },
             { id: 'holidays', label: 'Holidays', icon: Calendar },
@@ -2912,6 +3070,405 @@ export default function AdminPanel() {
 
       {/* Content */}
       <div className={cn("bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden", printingMasterProject ? "print:hidden" : "")}>
+        {activeTab === 'training-plans' && (
+          <div className="p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900">Training Plan Templates</h3>
+                <p className="text-gray-500 mt-1">Configure course-wise syllabus subjects, levels, topics, duration, and SMEs.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {trainingPlans.filter(tp => tp.courseId === selectedCourseId).length === 0 && (
+                  <button
+                    onClick={handleLoadDefaultTrainingPlans}
+                    className="flex items-center gap-2 border border-pink-200 text-pink-700 bg-pink-50/50 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-pink-100/60 hover:text-pink-800 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4" /> Load Default Template
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setEditingPlanRow(null);
+                    setPlanSNo(trainingPlans.filter(tp => tp.courseId === selectedCourseId).length + 1);
+                    setPlanSubject('');
+                    setPlanLevel('Level 1');
+                    setPlanTopicsText('');
+                    setPlanTrainer('');
+                    setPlanDuration('');
+                    setPlanStatus('To Do');
+                    setPlanMaterialType('Power Point');
+                    setPlanTargetDate('');
+                    setShowPlanModal(true);
+                  }}
+                  className="flex items-center gap-2 bg-pink-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Add Subject Row
+                </button>
+              </div>
+            </div>
+
+            {/* Course Selector Tabs */}
+            <div className="flex flex-wrap gap-2 mb-6 p-1 bg-slate-100 rounded-2xl w-fit">
+              {courseModules.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedCourseId(c.id)}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                    selectedCourseId === c.id
+                      ? "bg-white text-pink-700 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  )}
+                >
+                  {c.title}
+                </button>
+              ))}
+            </div>
+
+            {/* Training Plan Table */}
+            <div className="border border-slate-150 rounded-2xl overflow-hidden shadow-xs bg-white">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-150 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="px-4 py-4 w-12 text-center">S.No</th>
+                      <th className="px-4 py-4 min-w-[180px]">Course Subject</th>
+                      <th className="px-4 py-4 w-28">Training Level</th>
+                      <th className="px-4 py-4 min-w-[280px]">Topics Covered</th>
+                      <th className="px-4 py-4 w-32">Trainer (SME)</th>
+                      <th className="px-4 py-4 w-24">Duration</th>
+                      <th className="px-4 py-4 w-32">Target Date</th>
+                      <th className="px-4 py-4 w-32">Material Type</th>
+                      <th className="px-4 py-4 w-28">Status</th>
+                      <th className="px-4 py-4 w-24 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {trainingPlans
+                      .filter(tp => tp.courseId === selectedCourseId)
+                      .sort((a, b) => {
+                        if (a.sNo !== b.sNo) return a.sNo - b.sNo;
+                        return a.level.localeCompare(b.level);
+                      })
+                      .map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-5 py-4 text-center font-mono text-xs font-semibold text-slate-500">
+                            {row.sNo}
+                          </td>
+                          <td className="px-5 py-4 text-sm font-semibold text-slate-800">
+                            {row.courseSubject}
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className={cn(
+                              "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium",
+                              row.level === 'Level 1' 
+                                ? "bg-blue-50 text-blue-700 border border-blue-100" 
+                                : row.level === 'Level 2'
+                                ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                                : "bg-purple-50 text-purple-700 border border-purple-100"
+                            )}>
+                              {row.level}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-sm text-slate-600">
+                            <ul className="list-disc pl-4 space-y-1">
+                              {row.topics.map((t, i) => (
+                                <li key={i}>{t}</li>
+                              ))}
+                            </ul>
+                          </td>
+                          <td className="px-5 py-4 text-sm font-medium text-slate-700">
+                            {row.trainerSme || <span className="text-slate-400 italic">Unassigned</span>}
+                          </td>
+                          <td className="px-5 py-4 text-sm font-mono text-slate-600">
+                            {row.durationHrs || <span className="text-slate-400 italic">-</span>}
+                          </td>
+                          <td className="px-5 py-4 text-sm text-slate-700 font-mono">
+                            {row.targetDate ? (
+                              new Date(row.targetDate).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              })
+                            ) : (
+                              <span className="text-slate-400 italic">Not set</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex flex-wrap gap-1.5 max-w-[180px]">
+                              {(row.materialType || 'Power Point')
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(Boolean)
+                                .map((type) => (
+                                  <span
+                                    key={type}
+                                    className={cn(
+                                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border whitespace-nowrap",
+                                      type === 'Power Point'
+                                        ? "bg-orange-50 text-orange-700 border-orange-100"
+                                        : type === 'Video'
+                                        ? "bg-teal-50 text-teal-700 border-teal-100"
+                                        : type === 'Exercise file'
+                                        ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                        : "bg-slate-50 text-slate-700 border-slate-100"
+                                    )}
+                                  >
+                                    {type}
+                                  </span>
+                                ))}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className={cn(
+                              "inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border leading-normal",
+                              row.status === 'Completed'
+                                ? "bg-green-50 text-green-700 border-green-100"
+                                : row.status === 'WIP'
+                                ? "bg-amber-50 text-amber-700 border-amber-100"
+                                : "bg-slate-50 text-slate-600 border-slate-100"
+                            )}>
+                              {row.status || 'To Do'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingPlanRow(row);
+                                  setPlanSNo(row.sNo);
+                                  setPlanSubject(row.courseSubject);
+                                  setPlanLevel(row.level);
+                                  setPlanTopicsText(row.topics.join('\n'));
+                                  setPlanTrainer(row.trainerSme);
+                                  setPlanDuration(row.durationHrs);
+                                  setPlanStatus(row.status || 'To Do');
+                                  setPlanMaterialType(row.materialType || 'Power Point');
+                                  setPlanTargetDate(row.targetDate || '');
+                                  setShowPlanModal(true);
+                                }}
+                                className="p-1.5 text-slate-500 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-all"
+                                title="Edit Row"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTrainingPlanRow(row.id)}
+                                className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                title="Delete Row"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {trainingPlans.filter(tp => tp.courseId === selectedCourseId).length === 0 && (
+                      <tr>
+                        <td colSpan={10} className="px-5 py-12 text-center text-slate-500">
+                          <BookOpen className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+                          <p className="font-semibold text-slate-700">No training plans added yet</p>
+                          <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">
+                            Load the default template or click "Add Subject Row" to begin creating the course-wise training plan.
+                          </p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Modal for adding/editing training plan rows */}
+            {showPlanModal && (
+              <div className="fixed inset-0 z-50 overflow-y-auto">
+                <div className="flex min-h-screen items-center justify-center p-4 text-center bg-black/50 backdrop-blur-xs">
+                  <div className="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all w-full max-w-lg p-6">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+                      <h3 className="text-lg font-bold text-gray-900">
+                        {editingPlanRow ? 'Edit Training Plan Subject' : 'Add Training Plan Subject'}
+                      </h3>
+                      <button
+                        onClick={() => {
+                          setShowPlanModal(false);
+                          setEditingPlanRow(null);
+                        }}
+                        className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-slate-50"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveTrainingPlanRow} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">S.No</label>
+                          <input
+                            type="number"
+                            required
+                            min={1}
+                            value={planSNo}
+                            onChange={(e) => setPlanSNo(Number(e.target.value))}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-pink-500 outline-hidden"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Training Level</label>
+                          <select
+                            value={planLevel}
+                            onChange={(e) => setPlanLevel(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-pink-500 outline-hidden"
+                          >
+                            <option value="Level 1">Level 1</option>
+                            <option value="Level 2">Level 2</option>
+                            <option value="Level 3">Level 3</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Course Subject</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Understanding of Briefs & Annotation"
+                          value={planSubject}
+                          onChange={(e) => setPlanSubject(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-pink-500 outline-hidden"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                          Topics Covered (one per line)
+                        </label>
+                        <textarea
+                          required
+                          rows={4}
+                          placeholder="e.g.&#10;Understanding Job briefs & annotated PDF&#10;Working with workorder info"
+                          value={planTopicsText}
+                          onChange={(e) => setPlanTopicsText(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-pink-500 outline-hidden font-sans resize-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Trainer (SME / Faculty)</label>
+                          <select
+                            required
+                            value={planTrainer}
+                            onChange={(e) => setPlanTrainer(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-pink-500 outline-hidden"
+                          >
+                            <option value="">Select Faculty</option>
+                            {faculty.map((f) => (
+                              <option key={f.id} value={f.name}>
+                                {f.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Duration (hrs)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 1.5 hrs"
+                            value={planDuration}
+                            onChange={(e) => setPlanDuration(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-pink-500 outline-hidden"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Target Date</label>
+                          <input
+                            type="date"
+                            value={planTargetDate}
+                            onChange={(e) => setPlanTargetDate(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-pink-500 outline-hidden"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Material Type</label>
+                          <div className="flex flex-wrap gap-2.5 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl min-h-[42px] items-center">
+                            {(() => {
+                              const currentMaterialTypes = planMaterialType
+                                ? planMaterialType.split(',').map(s => s.trim()).filter(Boolean)
+                                : [];
+                              const handleMaterialTypeChange = (type: string, checked: boolean) => {
+                                let updatedTypes = [...currentMaterialTypes];
+                                if (checked) {
+                                  if (!updatedTypes.includes(type)) {
+                                    updatedTypes.push(type);
+                                  }
+                                } else {
+                                  updatedTypes = updatedTypes.filter(t => t !== type);
+                                }
+                                setPlanMaterialType(updatedTypes.join(', '));
+                              };
+                              return ['Power Point', 'Video', 'Exercise file'].map((type) => {
+                                const isChecked = currentMaterialTypes.includes(type);
+                                return (
+                                  <label key={type} className="flex items-center gap-1.5 text-xs text-slate-700 font-medium cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => handleMaterialTypeChange(type, e.target.checked)}
+                                      className="w-3.5 h-3.5 text-pink-600 border-slate-300 rounded-sm focus:ring-pink-500 cursor-pointer"
+                                    />
+                                    <span>{type}</span>
+                                  </label>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Status</label>
+                        <select
+                          value={planStatus}
+                          onChange={(e) => setPlanStatus(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-pink-500 outline-hidden"
+                        >
+                          <option value="To Do">To Do</option>
+                          <option value="WIP">WIP</option>
+                          <option value="Completed">Completed</option>
+                        </select>
+                      </div>
+
+                      <div className="flex gap-3 justify-end border-t border-slate-100 pt-4 mt-5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowPlanModal(false);
+                            setEditingPlanRow(null);
+                          }}
+                          className="px-4 py-2 bg-slate-100 text-gray-600 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isSavingPlan}
+                          className="px-5 py-2 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors flex items-center gap-2"
+                        >
+                          {isSavingPlan && <Loader2 className="w-4 h-4 animate-spin" />}
+                          {editingPlanRow ? 'Save Changes' : 'Create Row'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'entrance-test' && (
           <div className="p-6">
             <div className="flex items-center justify-between mb-8">
@@ -3499,6 +4056,12 @@ export default function AdminPanel() {
           </div>
         )}
 
+        {activeTab === 'roadmap' && (
+          <div className="p-6">
+            <FacultyRoadmapPlanner isAdmin={true} />
+          </div>
+        )}
+
         {activeTab === 'students' && (
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
@@ -3969,7 +4532,170 @@ export default function AdminPanel() {
 
         {activeTab === 'demo' && (
           <div className="p-6">
-            <div className="mb-12">
+            {/* Sub-tab Switcher */}
+            <div className="flex border-b border-gray-200 mb-8">
+              <button
+                onClick={() => setConsultSubTab('demo-classes')}
+                className={cn(
+                  "py-3 px-6 font-bold text-sm border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+                  consultSubTab === 'demo-classes' 
+                    ? "border-pink-600 text-pink-600" 
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                )}
+              >
+                <Video className="w-4 h-4" /> Demo Classes & CRM
+              </button>
+              <button
+                onClick={() => setConsultSubTab('consultations')}
+                className={cn(
+                  "py-3 px-6 font-bold text-sm border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+                  consultSubTab === 'consultations' 
+                    ? "border-pink-600 text-pink-600" 
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                )}
+              >
+                <Calendar className="w-4 h-4" /> 1-on-1 Consultation Slots & Fees (₹500 Credits)
+              </button>
+            </div>
+
+            {consultSubTab === 'consultations' ? (
+              <div className="space-y-6">
+                {/* Stats Row */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+                      <Calendar className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-400 block font-semibold uppercase tracking-wider">Total Bookings</span>
+                      <span className="text-2xl font-black text-gray-950">{consultationBookings.length}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                    <div className="w-12 h-12 bg-pink-50 text-pink-600 rounded-xl flex items-center justify-center">
+                      <IndianRupee className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-400 block font-semibold uppercase tracking-wider">Total Revenue</span>
+                      <span className="text-2xl font-black text-gray-950">₹{(consultationBookings.length * 500).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                      <CheckCircle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-400 block font-semibold uppercase tracking-wider">Reductions Applied</span>
+                      <span className="text-2xl font-black text-emerald-600">
+                        {consultationBookings.filter(b => b.feeReduced).length}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                    <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
+                      <Clock className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-400 block font-semibold uppercase tracking-wider">Pending Reductions</span>
+                      <span className="text-2xl font-black text-amber-600">
+                        {consultationBookings.filter(b => !b.feeReduced).length}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Table list */}
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-lg font-bold text-gray-900">Career Consultations</h4>
+                      <p className="text-xs text-gray-500 mt-1">Students who scheduled a demo and paid the ₹500 slot fee.</p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Student Info</th>
+                          <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Focus Program</th>
+                          <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Booked Date & Time</th>
+                          <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Payment Details</th>
+                          <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Tuition Reduction Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {consultationBookings.map((booking) => (
+                          <tr key={booking.id} className="border-b border-gray-50 hover:bg-slate-50/50 transition-colors">
+                            <td className="py-4 px-6">
+                              <div className="font-bold text-gray-900">{booking.name}</div>
+                              <div className="text-xs text-gray-500 font-mono mt-0.5">{booking.email}</div>
+                              <div className="text-xs text-gray-400 font-mono mt-0.5">{booking.phone}</div>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold">
+                                {booking.topic || "Demo & General consultation"}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <div className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-pink-500" />
+                                {booking.date}
+                              </div>
+                              <div className="text-xs text-gray-500 flex items-center gap-1.5 mt-1 font-semibold">
+                                <Clock className="w-3.5 h-3.5 text-gray-400" />
+                                {booking.time}
+                              </div>
+                            </td>
+                            <td className="py-4 px-6">
+                              <div className="text-xs font-extrabold text-slate-800">₹{booking.amountPaid || 500} RS</div>
+                              <div className="text-[10px] font-mono text-slate-400 mt-1">Ref: {booking.paymentId}</div>
+                            </td>
+                            <td className="py-4 px-6">
+                              <div className="flex items-center gap-3">
+                                {booking.feeReduced ? (
+                                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-extrabold flex items-center gap-1 shadow-sm border border-emerald-100">
+                                    <CheckCircle className="w-3.5 h-3.5" /> Adjusted (Reduced ₹500)
+                                  </span>
+                                ) : (
+                                  <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-extrabold flex items-center gap-1 border border-amber-100">
+                                    <Clock className="w-3.5 h-3.5 animate-pulse" /> Pending Adjustment
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFeeReduction(booking.id, !!booking.feeReduced, booking.email)}
+                                  className={cn(
+                                    "px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer",
+                                    booking.feeReduced 
+                                      ? "bg-slate-100 text-slate-600 hover:bg-slate-200" 
+                                      : "bg-pink-600 text-white hover:bg-pink-700 shadow-md shadow-pink-100"
+                                  )}
+                                >
+                                  {booking.feeReduced ? "Revert Adjustment" : "Apply ₹500 Reduction"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {consultationBookings.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-16 text-center text-gray-400 italic">
+                              No consultations booked yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="mb-12">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">Demo Classes</h3>
@@ -4205,6 +4931,8 @@ export default function AdminPanel() {
                 </div>
               )}
             </div>
+            </>
+            )}
           </div>
         )}
 
@@ -6895,6 +7623,77 @@ export default function AdminPanel() {
               </div>
 
               <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100">
+                <h4 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-pink-600" />
+                  Required Student Software & Toolkit Links
+                </h4>
+                <p className="text-xs text-gray-500 mb-6">
+                  Configure the installation, download, and helper tool links provided to registered students. These links are prominently displayed on the Student Software Library and Dashboard during onboarding.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Adobe Creative Cloud URL</label>
+                    <input 
+                      type="text" 
+                      value={adobeCloudUrlAdmin} 
+                      onChange={(e) => setAdobeCloudUrlAdmin(e.target.value)}
+                      placeholder="e.g. https://creativecloud.adobe.com/apps/all/desktop"
+                      className="w-full bg-white px-4 py-2.5 text-sm border border-gray-250 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Pantone Color Books URL</label>
+                    <input 
+                      type="text" 
+                      value={pantoneBooksUrlAdmin} 
+                      onChange={(e) => setPantoneBooksUrlAdmin(e.target.value)}
+                      placeholder="e.g. https://www.pantone.com/connect"
+                      className="w-full bg-white px-4 py-2.5 text-sm border border-gray-250 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">TeamViewer URL</label>
+                    <input 
+                      type="text" 
+                      value={teamViewerUrlAdmin} 
+                      onChange={(e) => setTeamViewerUrlAdmin(e.target.value)}
+                      placeholder="e.g. https://www.teamviewer.com/download"
+                      className="w-full bg-white px-4 py-2.5 text-sm border border-gray-250 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Adobe Scripts & Student Toolkit URL</label>
+                    <input 
+                      type="text" 
+                      value={adobeScriptToolkitUrlAdmin} 
+                      onChange={(e) => setAdobeScriptToolkitUrlAdmin(e.target.value)}
+                      placeholder="e.g. https://github.com/Adobe-CEP/CEP-Resources"
+                      className="w-full bg-white px-4 py-2.5 text-sm border border-gray-250 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 font-mono"
+                    />
+                  </div>
+                  
+                  <button 
+                    onClick={async () => {
+                      try {
+                        await setDoc(doc(db, 'settings', 'admin'), { 
+                          adobeCloudUrl: adobeCloudUrlAdmin.trim(),
+                          pantoneBooksUrl: pantoneBooksUrlAdmin.trim(),
+                          teamViewerUrl: teamViewerUrlAdmin.trim(),
+                          adobeScriptToolkitUrl: adobeScriptToolkitUrlAdmin.trim()
+                        }, { merge: true });
+                        alert('Required software installation URLs saved successfully!');
+                      } catch (err) {
+                        handleFirestoreError(err, OperationType.UPDATE, 'settings/admin');
+                      }
+                    }}
+                    className="w-full py-3 mt-4 bg-pink-600 text-white rounded-xl text-xs font-bold hover:bg-pink-700 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    Save Software Installation Links
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100">
                 <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <Image className="w-4 h-4 text-pink-600" />
                   Landing Page Title Image
@@ -7101,6 +7900,46 @@ export default function AdminPanel() {
                 <p className="text-xs text-gray-500 mb-6">
                   Configure the YouTube embed URLs for the videos shown on the student dashboard.
                 </p>
+
+                <div className="flex flex-col gap-4 mb-6 bg-white p-4 border border-gray-100 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h5 className="font-bold text-gray-900 text-xs uppercase tracking-wider">Enable Founder's Message Video</h5>
+                      <p className="text-[11px] text-gray-500">Show/hide Founder's Message on pages.</p>
+                    </div>
+                    <button
+                      onClick={() => setFounderVideoEnabled(!founderVideoEnabled)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        founderVideoEnabled ? 'bg-green-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          founderVideoEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  
+                  <div className="border-t border-gray-50 pt-3 flex items-center justify-between">
+                    <div>
+                      <h5 className="font-bold text-gray-900 text-xs uppercase tracking-wider">Enable Training Overview Video</h5>
+                      <p className="text-[11px] text-gray-500">Show/hide Training Overview on pages.</p>
+                    </div>
+                    <button
+                      onClick={() => setOverviewVideoEnabled(!overviewVideoEnabled)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        overviewVideoEnabled ? 'bg-green-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          overviewVideoEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
                 
                 <div className="space-y-4">
                   <div>

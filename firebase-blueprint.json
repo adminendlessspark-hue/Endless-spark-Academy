@@ -283,6 +283,88 @@
         "type": { "type": "string", "enum": ["new_query", "query_answered"] }
       },
       "required": ["id", "userId", "userRole", "title", "message", "queryId", "read", "createdAt", "type"]
+    },
+    "ConsultationBooking": {
+      "title": "ConsultationBooking",
+      "description": "A 1-on-1 consultant-to-student career demo and consultation slot booking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "topic": { "type": "string" },
+        "amountPaid": { "type": "number" },
+        "paymentId": { "type": "string" },
+        "status": { "type": "string" },
+        "feeReduced": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "phone", "date", "time", "amountPaid", "status", "createdAt"]
+    },
+    "FacultyRoadmap": {
+      "title": "FacultyRoadmap",
+      "description": "A scheduled weekly curriculum roadmap and planner for courses and batches.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseId": { "type": "string" },
+        "weekNumber": { "type": "integer" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "durationHours": { "type": "number" },
+        "assignedFacultyId": { "type": "string" },
+        "assignedFacultyName": { "type": "string" },
+        "topics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "isCompleted": { "type": "boolean" }
+            }
+          }
+        },
+        "status": { "type": "string", "enum": ["planning", "active", "completed"] },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "courseId", "weekNumber", "title", "assignedFacultyId", "status"]
+    },
+    "TrainingPlan": {
+      "title": "TrainingPlan",
+      "description": "A template training plan detailing subjects, levels, and topics course-wise.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseId": { "type": "string" },
+        "sNo": { "type": "integer" },
+        "courseSubject": { "type": "string" },
+        "level": { "type": "string" },
+        "topics": { "type": "array", "items": { "type": "string" } },
+        "trainerSme": { "type": "string" },
+        "durationHrs": { "type": "string" },
+        "status": { "type": "string" },
+        "materialType": { "type": "string" },
+        "targetDate": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "courseId", "sNo", "courseSubject", "level", "topics"]
     }
   },
   "firestore": {
@@ -373,6 +455,26 @@
     "query_notifications": {
       "schema": "QueryNotification",
       "description": "Collection of query creation and completion notifications."
+    },
+    "consultation_bookings": {
+      "schema": "ConsultationBooking",
+      "description": "Collection of 1-on-1 consultant-to-student booked slots."
+    },
+    "faculty_roadmaps": {
+      "schema": "FacultyRoadmap",
+      "description": "Curriculum roadmaps and weekly schedules managed by admin/faculty."
+    },
+    "training_plans": {
+      "schema": "TrainingPlan",
+      "description": "Collection of course-wise training plan templates."
+    },
+    "toolkit_products": {
+      "schema": "object",
+      "description": "Collection of premium software automation tools and scripts."
+    },
+    "toolkit_purchases": {
+      "schema": "object",
+      "description": "Collection of script license purchase transactions."
     }
   }
 }

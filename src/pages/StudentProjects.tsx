@@ -32,6 +32,37 @@ export default function StudentProjects() {
     return () => unsubProjects();
   }, [user?.id]);
 
+  // Auto-pilot: Automatically share any associated Google Drive files to avoid permission / edit approval prompts
+  useEffect(() => {
+    if (projects.length === 0 || user?.role !== 'student' || !user?.email) return;
+
+    projects.forEach(project => {
+      // 1. Share assigned templates / files with the logged in student
+      const assignedLinks = [project.googleDriveLink, project.adobeCloudLink];
+      assignedLinks.forEach(link => {
+        if (link && link.includes('drive.google.com')) {
+          fetch('/api/share-drive-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ driveUrl: link, studentEmail: user.email, role: 'writer' })
+          }).catch(err => console.error("Error auto-sharing assigned link in list:", err));
+        }
+      });
+
+      // 2. Share student submitted files with adminendlessspark@gmail.com
+      const submittedLinks = [project.projectFileUrl];
+      submittedLinks.forEach(link => {
+        if (link && link.includes('drive.google.com')) {
+          fetch('/api/share-drive-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ driveUrl: link, studentEmail: 'adminendlessspark@gmail.com', role: 'writer' })
+          }).catch(err => console.error("Error auto-sharing submitted link with admin in list:", err));
+        }
+      });
+    });
+  }, [projects, user?.id, user?.email, user?.role]);
+
   const handleWorkStatusChange = async (project: StudentProject, newWorkStatus: string) => {
     // QC Protection
     if (project.status === 'qc' || project.status === 'approved') {
@@ -45,6 +76,13 @@ export default function StudentProjects() {
       workStatus: newWorkStatus,
       updatedAt: new Date().toISOString()
     };
+
+    // Remove old google path when starting rework
+    if (newWorkStatus === 'In Progress' && (project.qcRejections && project.qcRejections.length > 0)) {
+      updates.projectFileUrl = '';
+      updates.googleDriveLink = '';
+      setLocalFinalFileLinks(prev => ({ ...prev, [project.id]: '' }));
+    }
 
     // Timer logic based on status
     if (newWorkStatus === 'In Progress') {
@@ -118,6 +156,25 @@ export default function StudentProjects() {
       }
 
       if (project.status === 'pqc') {
+        const currentLink = localFinalFileLinks[project.id]?.trim() || project.projectFileUrl?.trim() || '';
+        if (!currentLink) {
+          const promptLink = prompt(
+            "Quality Rule Violation: You must submit a Google Drive share link before completing the Production QC (PQC) stage.\n\nPlease paste your Google Drive link below to automatically submit to QC:"
+          );
+          if (promptLink === null) {
+            alert('Submission Cancelled: Google Drive link is required to complete this stage.');
+            return;
+          }
+          if (!promptLink.trim()) {
+            alert('Error: The Google Drive Submission Link cannot be empty.');
+            return;
+          }
+          setLocalFinalFileLinks(prev => ({ ...prev, [project.id]: promptLink.trim() }));
+          updates.projectFileUrl = promptLink.trim();
+        } else {
+          updates.projectFileUrl = currentLink;
+        }
+
         const pqc = (project as any).digitalProduction;
         if (!pqc) {
           alert('Quality Rule Violation: You must complete and SAVE the Production Art Engineer PQC Checklist before submitting for QC Review.');
@@ -133,7 +190,7 @@ export default function StudentProjects() {
       const nextIndex = currentStageIndex + 1;
       if (nextIndex < stages.length) {
         updates.status = stages[nextIndex];
-        updates.workStatus = 'Not Started';
+        updates.workStatus = stages[nextIndex] === 'qc' ? 'Submitted' : 'Not Started';
         updates.lastStageActualTime = totalTimeAfter;
       }
     }
@@ -467,6 +524,65 @@ export default function StudentProjects() {
                               );
                             })}
                           </div>
+
+                          {/* Google Drive Link input - integrated directly under the Roadmap */}
+                          {project.status === 'pqc' && (
+                            <div className="mt-6 pt-4 border-t border-gray-100 text-left">
+                              <label className="text-[10px] font-extrabold text-green-800 uppercase tracking-wider block mb-1">
+                                Google Drive Submission Link
+                              </label>
+                              <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Globe className="w-3.5 h-3.5 text-green-600" />
+                                  </div>
+                                  <input 
+                                    type="text"
+                                    value={localFinalFileLinks[project.id] ?? project.projectFileUrl ?? ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setLocalFinalFileLinks(prev => ({ ...prev, [project.id]: val }));
+                                      // Logically save on input change
+                                      updateDoc(doc(db, 'student_projects', project.id), {
+                                        projectFileUrl: val,
+                                        updatedAt: new Date().toISOString()
+                                      });
+                                    }}
+                                    placeholder="Paste Google Drive folder or file link"
+                                    className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-green-200 bg-white focus:ring-2 focus:ring-green-500 outline-none font-medium text-gray-800"
+                                  />
+                                </div>
+                                <button
+                                  onClick={() => handleGoogleDriveSubmit(project)}
+                                  disabled={!(localFinalFileLinks[project.id]?.trim() || project.projectFileUrl?.trim())}
+                                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm shrink-0 uppercase tracking-widest cursor-pointer disabled:opacity-50"
+                                >
+                                  Submit Link
+                                </button>
+                              </div>
+                              <p className="text-[9px] text-gray-400 mt-1 leading-normal italic">
+                                Please ensure download permission is enabled so that the Quality Control team can access your final design artifacts.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Completed/Reviewed Link Status */}
+                          {(project.status === 'qc' || project.status === 'approved') && project.projectFileUrl && (
+                            <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between text-left">
+                              <div>
+                                <h5 className="font-bold text-xs text-gray-950">Submitted Google Drive Path</h5>
+                                <p className="text-[10px] text-gray-400">Currently in QC review or Approved status.</p>
+                              </div>
+                              <a 
+                                href={project.projectFileUrl.match(/^https?:\/\//i) ? project.projectFileUrl : `https://${project.projectFileUrl}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-xs font-bold transition-all"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                              </a>
+                            </div>
+                          )}
                         </div>
 
                         {/* Correction PDF Alert */}
@@ -535,100 +651,7 @@ export default function StudentProjects() {
                               )}
                             </div>
                           </div>
-                          
-                          {/* Submission Center */}
-                          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                            <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                              <CheckCircle2 className="w-4 h-4 text-green-600" />
-                              QC Submission Center
-                            </h4>
-                            
-                            {project.status === 'production' || project.status === 'pqc' ? (
-                              <div className="space-y-4">
-                                <p className="text-xs text-gray-500 leading-relaxed">
-                                  Provide your completed project file or Google Drive path for Quality Control review. After you submit, the QC engineer will download your production PDF from your Google Drive path.
-                                </p>
 
-                                {/* Google Drive Path Submission */}
-                                <div className="space-y-3 bg-green-50/50 p-4 rounded-xl border border-green-100">
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-extrabold text-green-800 uppercase tracking-wider block">Google Drive Submission Link (Preferred)</label>
-                                    <div className="relative">
-                                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Globe className="w-4 h-4 text-green-600" />
-                                      </div>
-                                      <input 
-                                        type="text"
-                                        value={localFinalFileLinks[project.id] ?? project.projectFileUrl ?? ''}
-                                        onChange={(e) => setLocalFinalFileLinks(prev => ({ ...prev, [project.id]: e.target.value }))}
-                                        placeholder="Paste Google Drive folder or file link"
-                                        className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-green-200 bg-white focus:ring-2 focus:ring-green-500 outline-none transition-all font-medium text-gray-800"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  {/* INFO Box for permission */}
-                                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 space-y-2 text-amber-900 shadow-sm">
-                                    <div className="flex items-start gap-2 text-left">
-                                      <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                                      <div>
-                                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800 leading-tight">
-                                          CRITICAL: Enable Download Permission!
-                                        </p>
-                                        <p className="text-[10.5px] font-medium leading-relaxed mt-0.5 text-amber-700">
-                                          To avoid massive review delays, please ensure the Google Drive file has download access turned on before clicking Submit.
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    <div className="bg-white/80 rounded-lg p-2.5 text-[10px] space-y-1 border border-amber-100 text-amber-950 font-medium leading-tight text-left">
-                                      <p className="font-bold text-amber-900">How to configure Drive permission:</p>
-                                      <ol className="list-decimal pl-4.5 space-y-1 text-gray-700">
-                                        <li>Open the file page in <span className="font-bold text-blue-600">Google Drive</span>.</li>
-                                        <li>Click the <span className="font-bold">Share</span> button (top-right).</li>
-                                        <li>Under <span className="font-bold">General Access</span>, change "Restricted" to <span className="font-bold text-green-700">"Anyone with the link"</span>.</li>
-                                        <li>Ensure the role is configured to <span className="font-bold">"Viewer"</span> or <span className="font-bold">"Editor"</span>.</li>
-                                        <li>Copy the link and paste it in the field above!</li>
-                                      </ol>
-                                    </div>
-                                  </div>
-
-                                  <button 
-                                    onClick={() => handleGoogleDriveSubmit(project)}
-                                    disabled={!(localFinalFileLinks[project.id]?.trim() || project.projectFileUrl?.trim())}
-                                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-2xl text-xs font-bold transition-all shadow-lg shadow-green-100 disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer font-sans"
-                                  >
-                                    <CheckCircle2 className="w-4 h-4 text-white" />
-                                    Submit Google Link to QC
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="p-6 text-center space-y-3 bg-gray-50 rounded-2xl border border-gray-200">
-                                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm">
-                                  {project.status === 'approved' ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <Globe className="w-6 h-6 text-blue-500 animate-pulse" />}
-                                </div>
-                                <div>
-                                  <h5 className="font-bold text-gray-900">
-                                    {project.status === 'qc' ? "Currently Under QC Review" : "Project Approved & Completed"}
-                                  </h5>
-                                  <p className="text-xs text-gray-500">
-                                    {project.status === 'qc' ? "You will receive feedback or approval once the QC team reviews your submission." : "This project has been finalized and signed off by the QC team."}
-                                  </p>
-                                </div>
-                                {project.projectFileUrl && (
-                                  <a 
-                                    href={project.projectFileUrl.match(/^https?:\/\//i) ? project.projectFileUrl : `https://${project.projectFileUrl}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 text-xs font-bold text-blue-600 hover:underline"
-                                  >
-                                    <Download className="w-3 h-3" /> View Submitted Path
-                                  </a>
-                                )}
-                              </div>
-                            )}
-                          </div>
 
                           {/* Project Queries & Doubts */}
                           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4 flex flex-col justify-between">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, doc, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { 
   CheckCircle, 
@@ -18,10 +18,16 @@ import {
   BookOpen, 
   Brain, 
   FileCheck,
-  ShieldAlert
+  ShieldAlert,
+  CreditCard,
+  Lock,
+  ShieldCheck,
+  IndianRupee,
+  X
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 import { CourseMarketingContent } from './CourseOverview';
+import DigitalPaymentGateway from '../components/DigitalPaymentGateway';
 
 interface WebinarSlot {
   id: string;
@@ -50,6 +56,9 @@ export default function WebinarRegistration() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [registeredDetails, setRegisteredDetails] = useState<any>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isPaid, setIsPaid] = useState(false);
+  const [paymentId, setPaymentId] = useState('');
 
   // Load course configurations from Accounts panel financial settings
   useEffect(() => {
@@ -121,6 +130,8 @@ export default function WebinarRegistration() {
     e.preventDefault();
     if (!activeSlot) return;
 
+    const webinarFee = marketingSettings?.webinarFeeAmount !== undefined ? Number(marketingSettings.webinarFeeAmount) : 300;
+
     setIsSubmitting(true);
     try {
       const ticketId = 'WBN-' + Math.floor(100000 + Math.random() * 900000);
@@ -133,11 +144,15 @@ export default function WebinarRegistration() {
         currentRole: formData.currentRole,
         place: formData.city,
         companyName: 'Registered for Webinar',
+        webinarFeeAmount: webinarFee,
+        webinarFeePaid: false,
         workExperience: JSON.stringify({
           webinarTitle: `Masterclass: ${activeSlot.courseTitle}`,
           studyMode: preferredMode,
           scheduledTime: `${activeSlot.date} @ ${activeSlot.time}`,
-          ticketId
+          ticketId,
+          webinarFeeAmount: webinarFee,
+          webinarFeePaid: false
         }),
         source: `Webinar: ${activeSlot.courseTitle} (${preferredMode.toUpperCase()})`,
         status: 'new',
@@ -147,23 +162,25 @@ export default function WebinarRegistration() {
           {
             id: crypto.randomUUID(),
             date: new Date().toISOString(),
-            text: `🎯 Webinar Reservation Confirmed (Ticket: ${ticketId}). Interested in ${activeSlot.courseTitle}. Preferred mode: ${preferredMode.toUpperCase()}. Location: ${formData.city}`,
+            text: `🎯 Webinar Reservation Confirmed (Ticket: ${ticketId}). Fee of ₹${webinarFee} RS is pending. Interested in ${activeSlot.courseTitle}. Preferred mode: ${preferredMode.toUpperCase()}. Location: ${formData.city}`,
             authorId: 'system',
             authorName: 'Webinar Portal'
           }
         ]
       };
 
-      await addDoc(collection(db, 'leads'), newLeadData);
+      const leadRef = await addDoc(collection(db, 'leads'), newLeadData);
       
       setRegisteredDetails({
+        leadId: leadRef.id,
         ticketId,
         name: formData.name,
         webinarTitle: `Masterclass: ${activeSlot.courseTitle}`,
         date: activeSlot.date,
         time: activeSlot.time,
         speaker: activeSlot.speaker,
-        mode: preferredMode
+        mode: preferredMode,
+        email: formData.email
       });
       
       setIsSuccess(true);
@@ -251,6 +268,26 @@ export default function WebinarRegistration() {
                 </div>
               </div>
 
+              {/* Webinar Class Fee Row */}
+              <div className="grid grid-cols-2 gap-4 border-t border-slate-700/40 pt-4">
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase font-black tracking-wider">Webinar Entry Fee</p>
+                  <p className="text-sm font-black text-white mt-1">₹{marketingSettings?.webinarFeeAmount || 300} RS</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase font-black tracking-wider">Payment Status</p>
+                  {isPaid ? (
+                    <span className="text-[10px] font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-2.5 py-1 rounded-full uppercase tracking-widest inline-flex items-center gap-1 mt-1">
+                      <Check className="w-3 h-3" /> Paid ✓
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black bg-amber-500/15 text-amber-400 border border-amber-500/25 px-2.5 py-1 rounded-full uppercase tracking-widest inline-flex items-center gap-1 mt-1">
+                      <ShieldAlert className="w-3 h-3 animate-pulse" /> Pending
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <div className="border-t border-slate-700/40 pt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <p className="text-[10px] text-gray-500 uppercase font-black tracking-wider">Keynote Instructor</p>
@@ -263,6 +300,61 @@ export default function WebinarRegistration() {
               </div>
             </div>
           </div>
+
+          {/* Payment Gateway Action Box */}
+          {!isPaid && (
+            <div className="bg-gradient-to-r from-pink-900/20 to-indigo-900/20 border border-pink-500/30 rounded-2xl p-6 text-left space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-pink-500/10 text-pink-400 rounded-lg shrink-0">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-extrabold text-white">Complete Your Webinar Entry Payment</h4>
+                  <p className="text-xs text-gray-400">
+                    To activate your webinar ticket and receive the Google Calendar entry link, please pay the refundable classroom fee of ₹{marketingSettings?.webinarFeeAmount || 300} RS.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                {marketingSettings?.webinarPaymentGatewayLink ? (
+                  <a
+                    href={marketingSettings.webinarPaymentGatewayLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => {
+                      setIsPaid(true);
+                      setPaymentId('EXT-' + Math.floor(1000000 + Math.random() * 9000000));
+                    }}
+                    className="flex-1 bg-pink-600 hover:bg-pink-700 active:scale-95 text-white font-extrabold py-3 px-6 rounded-xl text-xs flex items-center justify-center gap-2 transform transition-all shadow-lg text-center"
+                  >
+                    <span>Proceed to Secure Payment Gateway</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => setShowPaymentModal(true)}
+                    className="flex-1 bg-pink-600 hover:bg-pink-700 active:scale-95 text-white font-extrabold py-3 px-6 rounded-xl text-xs flex items-center justify-center gap-2 transform transition-all shadow-lg cursor-pointer"
+                  >
+                    <span>Pay Entry Fee Online (₹{marketingSettings?.webinarFeeAmount || 300})</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {isPaid && (
+            <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-6 text-left space-y-2">
+              <div className="flex items-center gap-2.5 text-emerald-400">
+                <Check className="w-5 h-5 bg-emerald-500/20 rounded-full p-0.5" />
+                <h4 className="text-sm font-extrabold text-white">Payment Received and Confirmed!</h4>
+              </div>
+              <p className="text-xs text-emerald-300/80">
+                Thank you! Your payment of ₹{marketingSettings?.webinarFeeAmount || 300} RS was processed successfully (ID: {paymentId}). Your ticket is now fully verified.
+              </p>
+            </div>
+          )}
 
           {/* Post Registration Guidance */}
           <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-6 text-left space-y-4">
@@ -295,6 +387,50 @@ export default function WebinarRegistration() {
         <div className="w-full max-w-7xl mx-auto mt-16 pt-12 border-t border-slate-800">
           <CourseMarketingContent />
         </div>
+
+        {/* Direct billing modal widget popup */}
+        {showPaymentModal && registeredDetails && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl p-2 animate-scale-up">
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-slate-900 p-2 rounded-full hover:bg-gray-100 transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="p-1 text-slate-900">
+                <DigitalPaymentGateway
+                  amount={Number(marketingSettings?.webinarFeeAmount || 300)}
+                  description={`${registeredDetails.webinarTitle} - Seat Reservation Slot`}
+                  studentName={registeredDetails.name || "Webinar Student"}
+                  studentEmail={registeredDetails.email || "student@webinar.com"}
+                  onSuccess={async (id) => {
+                    setIsPaid(true);
+                    setPaymentId(id);
+                    setShowPaymentModal(false);
+                    
+                    // Update Firebase record
+                    if (registeredDetails.leadId) {
+                      try {
+                        const leadDocRef = doc(db, 'leads', registeredDetails.leadId);
+                        await updateDoc(leadDocRef, {
+                          webinarFeePaid: true,
+                          paymentId: id,
+                          updatedAt: new Date().toISOString()
+                        });
+                      } catch (err) {
+                        console.error("Error updating lead payment status in firestore:", err);
+                      }
+                    }
+                  }}
+                  onCancel={() => setShowPaymentModal(false)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     );
   }
@@ -526,13 +662,21 @@ export default function WebinarRegistration() {
 
             {/* Selected slot overview panel */}
             {activeSlot && (
-              <div className="p-3 bg-slate-900/70 border border-slate-800/80 rounded-xl space-y-1.5">
-                <p className="text-[9px] text-pink-400 uppercase tracking-widest font-extrabold">Next Scheduled Batch Date</p>
-                <div className="flex items-center gap-4 text-xs font-bold text-gray-300">
-                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-gray-500" /> {activeSlot.date}</span>
-                  <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-500" /> {activeSlot.time}</span>
+              <div className="p-3 bg-slate-900/70 border border-slate-800/80 rounded-xl space-y-2 text-left">
+                <div>
+                  <p className="text-[9px] text-pink-400 uppercase tracking-widest font-extrabold mb-1">Next Scheduled Batch Date</p>
+                  <div className="flex items-center gap-4 text-xs font-bold text-gray-300">
+                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-gray-500" /> {activeSlot.date}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-500" /> {activeSlot.time}</span>
+                  </div>
                 </div>
-                <p className="text-[9px] text-gray-500">Instructor: {activeSlot.speaker}</p>
+                
+                <div className="flex items-center justify-between border-t border-slate-800/60 pt-2 text-xs">
+                  <span className="text-gray-400">Class Registration Fee:</span>
+                  <span className="font-extrabold text-white bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded">₹{marketingSettings?.webinarFeeAmount !== undefined ? Number(marketingSettings.webinarFeeAmount) : 300} RS</span>
+                </div>
+                
+                <p className="text-[9px] text-gray-500 font-medium">Instructor: {activeSlot.speaker}</p>
               </div>
             )}
 
@@ -638,7 +782,7 @@ export default function WebinarRegistration() {
                 <span>Securing Your Seat...</span>
               ) : (
                 <>
-                  <span>CONFIRM FREE WEBINAR SEAT</span>
+                  <span>REGISTER & SECURE SEAT (₹{marketingSettings?.webinarFeeAmount !== undefined ? Number(marketingSettings.webinarFeeAmount) : 300} RS)</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

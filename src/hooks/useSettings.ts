@@ -38,11 +38,17 @@ export function useSettings() {
   const [founderVideoUrlTamil, setFounderVideoUrlTamil] = useState<string>('');
   const [overviewVideoUrl, setOverviewVideoUrl] = useState<string>('https://www.youtube.com/embed/dQw4w9WgXcQ');
   const [overviewVideoUrlTamil, setOverviewVideoUrlTamil] = useState<string>('');
+  const [founderVideoEnabled, setFounderVideoEnabled] = useState<boolean>(true);
+  const [overviewVideoEnabled, setOverviewVideoEnabled] = useState<boolean>(true);
   const [financialSettings, setFinancialSettings] = useState<any>(null);
   const [marketingSettings, setMarketingSettings] = useState<any>(null);
   const [placementSettings, setPlacementSettings] = useState<any>(null);
   const [whatsappSettings, setWhatsappSettings] = useState<any>(null);
   const [jitsiServer, setJitsiServer] = useState<string>(() => localStorage.getItem('cached_jitsiServer') || 'jitsi.belnet.be');
+  const [adobeCloudUrl, setAdobeCloudUrl] = useState<string>('https://creativecloud.adobe.com/apps/all/desktop');
+  const [pantoneBooksUrl, setPantoneBooksUrl] = useState<string>('https://www.pantone.com/connect');
+  const [teamViewerUrl, setTeamViewerUrl] = useState<string>('https://www.teamviewer.com/download');
+  const [adobeScriptToolkitUrl, setAdobeScriptToolkitUrl] = useState<string>('https://github.com/Adobe-CEP/CEP-Resources');
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -123,6 +129,16 @@ export function useSettings() {
         } else {
           setOverviewVideoUrlTamil('');
         }
+        if (data.founderVideoEnabled !== undefined) {
+          setFounderVideoEnabled(data.founderVideoEnabled);
+        } else {
+          setFounderVideoEnabled(true);
+        }
+        if (data.overviewVideoEnabled !== undefined) {
+          setOverviewVideoEnabled(data.overviewVideoEnabled);
+        } else {
+          setOverviewVideoEnabled(true);
+        }
         if (data.banners) {
           setBanners(prev => {
             const existingIds = new Set(prev.map(b => b.id));
@@ -137,6 +153,10 @@ export function useSettings() {
           setJitsiServer('jitsi.belnet.be');
           localStorage.removeItem('cached_jitsiServer');
         }
+        if (data.adobeCloudUrl) setAdobeCloudUrl(data.adobeCloudUrl);
+        if (data.pantoneBooksUrl) setPantoneBooksUrl(data.pantoneBooksUrl);
+        if (data.teamViewerUrl) setTeamViewerUrl(data.teamViewerUrl);
+        if (data.adobeScriptToolkitUrl) setAdobeScriptToolkitUrl(data.adobeScriptToolkitUrl);
       }
       checkLoaded();
     }, (err) => {
@@ -240,11 +260,17 @@ export function useSettings() {
     founderVideoUrlTamil,
     overviewVideoUrl,
     overviewVideoUrlTamil,
+    founderVideoEnabled,
+    overviewVideoEnabled,
     financialSettings, 
     marketingSettings,
     placementSettings,
     whatsappSettings,
     jitsiServer,
+    adobeCloudUrl,
+    pantoneBooksUrl,
+    teamViewerUrl,
+    adobeScriptToolkitUrl,
     loading 
   };
 }

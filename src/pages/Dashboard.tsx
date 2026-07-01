@@ -187,6 +187,8 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
   const [founderVideoUrlTamil, setFounderVideoUrlTamil] = useState('');
   const [overviewVideoUrl, setOverviewVideoUrl] = useState('https://www.youtube.com/embed/dQw4w9WgXcQ');
   const [overviewVideoUrlTamil, setOverviewVideoUrlTamil] = useState('');
+  const [founderVideoEnabled, setFounderVideoEnabled] = useState<boolean>(true);
+  const [overviewVideoEnabled, setOverviewVideoEnabled] = useState<boolean>(true);
 
   const [productionArtEngineerTopics, setProductionArtTopics] = useState<{ title: string, videoUrl?: string }[]>([]);
   const [printReadyEngineerTopics, setPrintReadyTopics] = useState<{ title: string, videoUrl?: string }[]>([]);
@@ -267,6 +269,8 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
         if (data.founderVideoUrlTamil) setFounderVideoUrlTamil(data.founderVideoUrlTamil);
         if (data.overviewVideoUrl) setOverviewVideoUrl(data.overviewVideoUrl);
         if (data.overviewVideoUrlTamil) setOverviewVideoUrlTamil(data.overviewVideoUrlTamil);
+        setFounderVideoEnabled(data.founderVideoEnabled ?? true);
+        setOverviewVideoEnabled(data.overviewVideoEnabled ?? true);
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'settings/admin'));
 
@@ -889,58 +893,161 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
 
   return (
     <div className="max-w-6xl space-y-8">
-      {/* Homepage Videos - Always visible */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* ... existing videos content remains same ... */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Video className="w-5 h-5 text-pink-600" />
-            Founder Message
-          </h3>
-          <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner">
-            <SecureVideoPlayer 
-              url={founderVideoUrl} 
-              videoUrls={{
-                "english": founderVideoUrl,
-                "tamil": founderVideoUrlTamil,
-                "English": founderVideoUrl,
-                "Tamil": founderVideoUrlTamil
-              }}
-              nativeLanguage={user?.nativeLanguage}
-              title="Founder Message" 
-              userName={user?.name}
-              userId={user?.studentId || user?.id}
-            />
+      {/* Required Workstation Software Setup Onboarding */}
+      {user?.role === 'student' && (
+        <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-pink-50 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-105 duration-300" />
+          <div className="relative">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-pink-100 rounded-2xl flex items-center justify-center text-pink-600">
+                  <CheckSquare className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Required Workstation Software Setup</h3>
+                  <p className="text-sm text-gray-500">Please download and install these essential utilities to prepare your system for the course exercises.</p>
+                </div>
+              </div>
+              
+              <Link 
+                to="/software-library" 
+                className="bg-pink-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-pink-700 transition-all shadow-md self-start md:self-auto shrink-0"
+              >
+                Go to Software Library
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Check 1 */}
+              <div className="bg-slate-50 border border-gray-150 rounded-2xl p-4 flex items-start gap-3 hover:border-pink-200 transition-colors">
+                <div className="mt-1 shrink-0">
+                  <input 
+                    type="checkbox" 
+                    id="setup-adobe-cc" 
+                    defaultChecked={localStorage.getItem('setup_adobe_cc') === 'true'}
+                    onChange={(e) => localStorage.setItem('setup_adobe_cc', String(e.target.checked))}
+                    className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 cursor-pointer" 
+                  />
+                </div>
+                <label htmlFor="setup-adobe-cc" className="cursor-pointer select-none">
+                  <span className="text-sm font-bold text-gray-900 block">Adobe Creative Cloud</span>
+                  <span className="text-[11px] text-gray-500 block mt-0.5">Photoshop, Illustrator & Acrobat</span>
+                </label>
+              </div>
+
+              {/* Check 2 */}
+              <div className="bg-slate-50 border border-gray-150 rounded-2xl p-4 flex items-start gap-3 hover:border-pink-200 transition-colors">
+                <div className="mt-1 shrink-0">
+                  <input 
+                    type="checkbox" 
+                    id="setup-pantone" 
+                    defaultChecked={localStorage.getItem('setup_pantone') === 'true'}
+                    onChange={(e) => localStorage.setItem('setup_pantone', String(e.target.checked))}
+                    className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 cursor-pointer" 
+                  />
+                </div>
+                <label htmlFor="setup-pantone" className="cursor-pointer select-none">
+                  <span className="text-sm font-bold text-gray-900 block">Pantone Color Books</span>
+                  <span className="text-[11px] text-gray-500 block mt-0.5">PMS Swatch library files</span>
+                </label>
+              </div>
+
+              {/* Check 3 */}
+              <div className="bg-slate-50 border border-gray-150 rounded-2xl p-4 flex items-start gap-3 hover:border-pink-200 transition-colors">
+                <div className="mt-1 shrink-0">
+                  <input 
+                    type="checkbox" 
+                    id="setup-teamviewer" 
+                    defaultChecked={localStorage.getItem('setup_teamviewer') === 'true'}
+                    onChange={(e) => localStorage.setItem('setup_teamviewer', String(e.target.checked))}
+                    className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 cursor-pointer" 
+                  />
+                </div>
+                <label htmlFor="setup-teamviewer" className="cursor-pointer select-none">
+                  <span className="text-sm font-bold text-gray-900 block">TeamViewer Client</span>
+                  <span className="text-[11px] text-gray-500 block mt-0.5">Remote faculty S.M.E assistance</span>
+                </label>
+              </div>
+
+              {/* Check 4 */}
+              <div className="bg-slate-50 border border-gray-150 rounded-2xl p-4 flex items-start gap-3 hover:border-pink-200 transition-colors">
+                <div className="mt-1 shrink-0">
+                  <input 
+                    type="checkbox" 
+                    id="setup-scripts" 
+                    defaultChecked={localStorage.getItem('setup_scripts') === 'true'}
+                    onChange={(e) => localStorage.setItem('setup_scripts', String(e.target.checked))}
+                    className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 cursor-pointer" 
+                  />
+                </div>
+                <label htmlFor="setup-scripts" className="cursor-pointer select-none">
+                  <span className="text-sm font-bold text-gray-900 block">Adobe Script Toolkit</span>
+                  <span className="text-[11px] text-gray-500 block mt-0.5">Layout automation files</span>
+                </label>
+              </div>
+            </div>
           </div>
-          <p className="text-sm text-gray-500 mt-4 leading-relaxed">
-            A message from our founder about the vision and mission of Endless Spark School of Printing and Packaging.
-          </p>
         </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Video className="w-5 h-5 text-pink-600" />
-            Training Overview
-          </h3>
-          <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner">
-            <SecureVideoPlayer 
-              url={overviewVideoUrl} 
-              videoUrls={{
-                "english": overviewVideoUrl,
-                "tamil": overviewVideoUrlTamil,
-                "English": overviewVideoUrl,
-                "Tamil": overviewVideoUrlTamil
-              }}
-              nativeLanguage={user?.nativeLanguage}
-              title="Training Overview" 
-              userName={user?.name}
-              userId={user?.studentId || user?.id}
-            />
-          </div>
-          <p className="text-sm text-gray-500 mt-4 leading-relaxed">
-            Get a comprehensive overview of the training modules, methodology, and career opportunities.
-          </p>
+      )}
+
+      {/* Homepage Videos - Conditionally visible */}
+      {(founderVideoEnabled || overviewVideoEnabled) && (
+        <div className={`grid grid-cols-1 ${founderVideoEnabled && overviewVideoEnabled ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'} gap-6`}>
+          {founderVideoEnabled && (
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Video className="w-5 h-5 text-pink-600" />
+                Founder Message
+              </h3>
+              <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner">
+                <SecureVideoPlayer 
+                  url={founderVideoUrl} 
+                  videoUrls={{
+                    "english": founderVideoUrl,
+                    "tamil": founderVideoUrlTamil,
+                    "English": founderVideoUrl,
+                    "Tamil": founderVideoUrlTamil
+                  }}
+                  nativeLanguage={user?.nativeLanguage}
+                  title="Founder Message" 
+                  userName={user?.name}
+                  userId={user?.studentId || user?.id}
+                />
+              </div>
+              <p className="text-sm text-gray-500 mt-4 leading-relaxed">
+                A message from our founder about the vision and mission of Endless Spark School of Printing and Packaging.
+              </p>
+            </div>
+          )}
+          {overviewVideoEnabled && (
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Video className="w-5 h-5 text-pink-600" />
+                Training Overview
+              </h3>
+              <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner">
+                <SecureVideoPlayer 
+                  url={overviewVideoUrl} 
+                  videoUrls={{
+                    "english": overviewVideoUrl,
+                    "tamil": overviewVideoUrlTamil,
+                    "English": overviewVideoUrl,
+                    "Tamil": overviewVideoUrlTamil
+                  }}
+                  nativeLanguage={user?.nativeLanguage}
+                  title="Training Overview" 
+                  userName={user?.name}
+                  userId={user?.studentId || user?.id}
+                />
+              </div>
+              <p className="text-sm text-gray-500 mt-4 leading-relaxed">
+                Get a comprehensive overview of the training modules, methodology, and career opportunities.
+              </p>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {!user.isApproved ? (
         <div className="bg-pink-50 p-8 rounded-3xl border border-pink-100 text-center">

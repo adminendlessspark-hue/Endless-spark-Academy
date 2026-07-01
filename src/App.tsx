@@ -39,6 +39,8 @@ import QueryTracker from './pages/QueryTracker';
 import HelpDesk from './pages/HelpDesk';
 import PublicQcPanel from './pages/PublicQcPanel';
 import WebinarRegistration from './pages/WebinarRegistration';
+import AdobeScriptToolkit from './pages/AdobeScriptToolkit';
+import BookConsultation from './pages/BookConsultation';
 import { useSettings } from './hooks/useSettings';
 
 function ClassroomRoute({ children }: { children: React.ReactNode }) {
@@ -204,6 +206,7 @@ function AppContent() {
         <Route path="/webinar" element={<WebinarRegistration />} />
         <Route path="/about-courses" element={<CourseOverview />} />
         <Route path="/public-qc" element={<PublicQcPanel />} />
+        <Route path="/book-consultation" element={<BookConsultation />} />
         
         <Route path="/" element={<Home />} />
         
@@ -246,6 +249,9 @@ function AppContent() {
           <ProtectedRoute allowAdmin>
             <Layout><SoftwareLibrary /></Layout>
           </ProtectedRoute>
+        } />
+        <Route path="/adobe-toolkit" element={
+          <Layout><AdobeScriptToolkit /></Layout>
         } />
         <Route path="/admin" element={
           <AdminRoute>

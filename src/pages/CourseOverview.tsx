@@ -274,6 +274,8 @@ export default function CourseOverview() {
   const [founderVideoUrlTamil, setFounderVideoUrlTamil] = useState('');
   const [overviewVideoUrl, setOverviewVideoUrl] = useState('https://www.youtube.com/embed/dQw4w9WgXcQ');
   const [overviewVideoUrlTamil, setOverviewVideoUrlTamil] = useState('');
+  const [founderVideoEnabled, setFounderVideoEnabled] = useState<boolean>(true);
+  const [overviewVideoEnabled, setOverviewVideoEnabled] = useState<boolean>(true);
   const [founders, setFounders] = useState<TeamMember[]>([]);
 
   useEffect(() => {
@@ -284,6 +286,8 @@ export default function CourseOverview() {
         if (data.founderVideoUrlTamil) setFounderVideoUrlTamil(data.founderVideoUrlTamil);
         if (data.overviewVideoUrl) setOverviewVideoUrl(data.overviewVideoUrl);
         if (data.overviewVideoUrlTamil) setOverviewVideoUrlTamil(data.overviewVideoUrlTamil);
+        setFounderVideoEnabled(data.founderVideoEnabled ?? true);
+        setOverviewVideoEnabled(data.overviewVideoEnabled ?? true);
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'settings/admin'));
 
@@ -446,70 +450,76 @@ export default function CourseOverview() {
       </div>
 
       {/* Dynamic Founder Message & Training Overview Video Section */}
-      <div className="bg-white border-y border-gray-100 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-extrabold text-gray-900 mb-4 tracking-tight">
-              Hear From Our Founder & Program Overview
-            </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Watch these videos to understand our vision and discover how we prepare you for high-paying technical careers.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Founder Message Video Card */}
-            <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
-                  <Video className="w-5 h-5 text-indigo-600" />
-                  Founder's Message
-                </h3>
-                <p className="text-gray-500 text-sm mb-6">
-                  A personal message detailing our core mission, educational philosophy, and commitment to student success.
-                </p>
-              </div>
-              <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner border border-gray-100">
-                <SecureVideoPlayer 
-                  url={founderVideoUrl} 
-                  videoUrls={{
-                    "english": founderVideoUrl,
-                    "tamil": founderVideoUrlTamil,
-                    "English": founderVideoUrl,
-                    "Tamil": founderVideoUrlTamil
-                  }}
-                  title="Founder Message" 
-                />
-              </div>
+      {(founderVideoEnabled || overviewVideoEnabled) && (
+        <div className="bg-white border-y border-gray-100 py-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-extrabold text-gray-900 mb-4 tracking-tight">
+                Hear From Our Founder & Program Overview
+              </h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Watch these videos to understand our vision and discover how we prepare you for high-paying technical careers.
+              </p>
             </div>
 
-            {/* Training Overview Video Card */}
-            <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
-                  <Video className="w-5 h-5 text-indigo-600" />
-                  Training Overview
-                </h3>
-                <p className="text-gray-500 text-sm mb-6">
-                  A comprehensive overview of our curriculum, interactive pre-press labs, and job placement process.
-                </p>
-              </div>
-              <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner border border-gray-100">
-                <SecureVideoPlayer 
-                  url={overviewVideoUrl} 
-                  videoUrls={{
-                    "english": overviewVideoUrl,
-                    "tamil": overviewVideoUrlTamil,
-                    "English": overviewVideoUrl,
-                    "Tamil": overviewVideoUrlTamil
-                  }}
-                  title="Training Overview" 
-                />
-              </div>
+            <div className={`grid grid-cols-1 ${founderVideoEnabled && overviewVideoEnabled ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'} gap-8`}>
+              {/* Founder Message Video Card */}
+              {founderVideoEnabled && (
+                <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
+                      <Video className="w-5 h-5 text-indigo-600" />
+                      Founder's Message
+                    </h3>
+                    <p className="text-gray-500 text-sm mb-6">
+                      A personal message detailing our core mission, educational philosophy, and commitment to student success.
+                    </p>
+                  </div>
+                  <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner border border-gray-100">
+                    <SecureVideoPlayer 
+                      url={founderVideoUrl} 
+                      videoUrls={{
+                        "english": founderVideoUrl,
+                        "tamil": founderVideoUrlTamil,
+                        "English": founderVideoUrl,
+                        "Tamil": founderVideoUrlTamil
+                      }}
+                      title="Founder Message" 
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Training Overview Video Card */}
+              {overviewVideoEnabled && (
+                <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
+                      <Video className="w-5 h-5 text-indigo-600" />
+                      Training Overview
+                    </h3>
+                    <p className="text-gray-500 text-sm mb-6">
+                      A comprehensive overview of our curriculum, interactive pre-press labs, and job placement process.
+                    </p>
+                  </div>
+                  <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner border border-gray-100">
+                    <SecureVideoPlayer 
+                      url={overviewVideoUrl} 
+                      videoUrls={{
+                        "english": overviewVideoUrl,
+                        "tamil": overviewVideoUrlTamil,
+                        "English": overviewVideoUrl,
+                        "Tamil": overviewVideoUrlTamil
+                      }}
+                      title="Training Overview" 
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Course Offerings */}
       <div className="bg-gray-100 py-20">

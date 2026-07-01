@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { LogIn, UserPlus, Shield, FileText, Award, BookOpen, Video, GraduationCap, MessageCircle, PhoneCall, XCircle, Mail, ChevronLeft, ChevronRight, MapPin, Zap, Sparkles } from 'lucide-react';
+import { LogIn, UserPlus, Shield, FileText, Award, BookOpen, Video, GraduationCap, MessageCircle, PhoneCall, XCircle, Mail, ChevronLeft, ChevronRight, MapPin, Zap, Sparkles, Calendar, Clock, CreditCard, CheckCircle2, User, Phone, Check, ChevronDown } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 
 export default function Landing() {
@@ -115,6 +115,10 @@ export default function Landing() {
             transition={{ duration: 0.5, delay: 0.5 }}
             className="flex flex-col sm:flex-row items-center justify-center gap-6"
           >
+            <Link to="/book-consultation" className="w-full sm:w-auto bg-pink-600 text-white px-10 py-5 text-lg rounded-[2.5rem] shadow-2xl shadow-pink-200 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 group">
+              <Calendar className="w-5 h-5 text-pink-200 group-hover:scale-125 transition-transform" />
+              Book 1-on-1 Consultation & Demo
+            </Link>
             <Link to="/signup" className="w-full sm:w-auto bg-[#1a1c25] text-white px-10 py-5 text-lg rounded-[2.5rem] shadow-2xl shadow-slate-300 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 group">
               <Zap className="w-5 h-5 text-yellow-400 fill-yellow-400 group-hover:scale-125 transition-transform" />
               Apply Now

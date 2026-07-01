@@ -97,6 +97,8 @@ export default function MarketingPanel() {
   const [webinarCustomTime, setWebinarCustomTime] = useState('11:00 AM - 12:30 PM (IST)');
   const [webinarInstructorName, setWebinarInstructorName] = useState('Prof. Anand Nair');
   const [webinarInstructorRole, setWebinarInstructorRole] = useState('Packaging Tech Lead');
+  const [webinarFeeAmount, setWebinarFeeAmount] = useState<number>(300);
+  const [webinarPaymentGatewayLink, setWebinarPaymentGatewayLink] = useState<string>('');
 
   // Online Benefits customization lists
   const [appBenefits, setAppBenefits] = useState<string[]>([
@@ -117,6 +119,8 @@ export default function MarketingPanel() {
         if (data.webinarCustomTime) setWebinarCustomTime(data.webinarCustomTime);
         if (data.webinarInstructorName) setWebinarInstructorName(data.webinarInstructorName);
         if (data.webinarInstructorRole) setWebinarInstructorRole(data.webinarInstructorRole);
+        if (data.webinarFeeAmount !== undefined) setWebinarFeeAmount(Number(data.webinarFeeAmount));
+        if (data.webinarPaymentGatewayLink !== undefined) setWebinarPaymentGatewayLink(data.webinarPaymentGatewayLink);
         if (data.appBenefits && Array.isArray(data.appBenefits)) setAppBenefits(data.appBenefits);
       }
     });
@@ -154,6 +158,8 @@ export default function MarketingPanel() {
         webinarCustomTime,
         webinarInstructorName,
         webinarInstructorRole,
+        webinarFeeAmount: Number(webinarFeeAmount) || 300,
+        webinarPaymentGatewayLink: webinarPaymentGatewayLink,
         appBenefits,
         updatedAt: new Date().toISOString()
       }, { merge: true });
@@ -355,7 +361,7 @@ export default function MarketingPanel() {
     const scheduledTime = meta?.scheduledTime || webinarCustomDate;
     const modeJoined = meta?.studyMode === 'offline' ? '📍 Physical Campus Practical Lab' : '💻 Online Interactive App';
 
-    const text = `*Hello ${attendeeJoinedName}!* 👋 \n\nWelcome to *Endless Spark School of Printing and Packaging*!\n\nYour registration for *${masterclassTitle}* is confirmed! 🚀\n\n📌 *Seat Details:*\n📅 Slot: *${scheduledTime}*\n🎓 Mode: *${modeJoined}*\n🎟️ Ticket Code: *${ticketCode}*\n\n_Next Steps:_\nOur companion app future details:\n- Real-time preflight inspector simulator\n- High-contrast interactive lab walkthroughs\n- Instant pre-press certification checks\n\nBest regards,\nThe Admissions Team`;
+    const text = `*Hello ${attendeeJoinedName}!* 👋 \n\nWelcome to *Endless Spark School of Printing and Packaging*!\n\nYour registration for *${masterclassTitle}* is confirmed! 🚀\n\n📌 *Seat Details:*\n📅 Slot: *${scheduledTime}*\n🎓 Mode: *${modeJoined}*\n🎟️ Ticket Code: *${ticketCode}*\n\n_Next Steps:_\nOur companion app future details:\n- Real-time preflight inspector simulator\n- High-contrast interactive lab walkthroughs\n- Instant pre-press certification checks\n\n📞 For queries, contact us on Call / WhatsApp: *+91 90428 21999*\n\nBest regards,\nThe Admissions Team`;
 
     const encoded = encodeURIComponent(text);
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encoded}`;
@@ -845,6 +851,33 @@ export default function MarketingPanel() {
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-dashed border-slate-200">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-700 block uppercase">Webinar Registration Fee (₹ RS)</label>
+                  <input
+                    type="number"
+                    required
+                    className="p-3 bg-white border border-gray-200 rounded-xl outline-none text-xs w-full focus:ring-2 focus:ring-pink-500 font-bold"
+                    placeholder="E.g. 300"
+                    value={webinarFeeAmount}
+                    onChange={(e) => setWebinarFeeAmount(Number(e.target.value))}
+                  />
+                  <p className="text-[9px] text-gray-400">Class entry and registration fee set for candidate tickets.</p>
+                </div>
+
+                <div className="space-y-1.5 font-sans">
+                  <label className="text-[10px] font-bold text-slate-700 block uppercase">Payment Gateway URL Link</label>
+                  <input
+                    type="text"
+                    className="p-3 bg-white border border-gray-200 rounded-xl outline-none text-xs w-full focus:ring-2 focus:ring-pink-500"
+                    placeholder="Paste Instamojo/Razorpay link or payment page URL"
+                    value={webinarPaymentGatewayLink}
+                    onChange={(e) => setWebinarPaymentGatewayLink(e.target.value)}
+                  />
+                  <p className="text-[9px] text-gray-400">Deep-link to pay online securely. Redirection handles automatically.</p>
+                </div>
+              </div>
             </div>
 
             {/* Dynamic app future points - How our app helps to learn online */}
@@ -927,11 +960,13 @@ Congratulations, your live webcast pass for *${webinarCustomTitle}* is ready.
 - Instant offset digital production color matching tool
 - Daily technical puzzles and pre-press validation checklist
 
-Reply with "YES" to schedule your live app setup walkthrough with our specialists.`}
+Reply with "YES" to schedule your live app setup walkthrough with our specialists.
+
+📞 Or reach us directly on Call / WhatsApp: *+91 90428 21999*`}
             </div>
             
             <button
-              onClick={() => triggerCopyTemplate(`*Endless Spark School Admission Invitation!* 👋 \n\nHello [Name]!\n\nCongratulations, your live webcast pass for *${webinarCustomTitle}* is ready.\n\n🗓️ Batch Date: *${webinarCustomDate}*\n⏰ Live Stream: *${webinarCustomTime}*\n🎟️ Secure ticket: *[TicketCode]*\n\n💡 *How our customized app environment helps you learn online:*\n- Visual preflight simulator directly inside your browser\n- Instant offset digital production color matching tool\n- Daily technical puzzles and pre-press validation checklist\n\nReply with "YES" to schedule your live app setup walkthrough with our specialists.`)}
+              onClick={() => triggerCopyTemplate(`*Endless Spark School Admission Invitation!* 👋 \n\nHello [Name]!\n\nCongratulations, your live webcast pass for *${webinarCustomTitle}* is ready.\n\n🗓️ Batch Date: *${webinarCustomDate}*\n⏰ Live Stream: *${webinarCustomTime}*\n🎟️ Secure ticket: *[TicketCode]*\n\n💡 *How our customized app environment helps you learn online:*\n- Visual preflight simulator directly inside your browser\n- Instant offset digital production color matching tool\n- Daily technical puzzles and pre-press validation checklist\n\nReply with "YES" to schedule your live app setup walkthrough with our specialists.\n\n📞 Or reach us directly on Call / WhatsApp: *+91 90428 21999*`)}
               className="w-full bg-slate-950 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-slate-850 transition duration-300 flex items-center justify-center gap-1.5"
             >
               <Copy className="w-3.5 h-3.5" />
@@ -954,11 +989,13 @@ Our school companion app replaces dry theory with live engineering action:
 2. *Real-time digital audits* — Submit work files directly inside of our preflight tracker.
 3. *Expert Pre-Press guidance* — Access live Q&As whenever you encounter production blockers.
 
-Join the admission webinar on *${webinarCustomDate}* to explore these tools in action!`}
+Join the admission webinar on *${webinarCustomDate}* to explore these tools in action!
+
+📞 Contact / WhatsApp: *+91 90428 21999*`}
             </div>
 
             <button
-              onClick={() => triggerCopyTemplate(`*Learn Printing & Packaging Engineering remotely* 🚀\n\nOur school companion app replaces dry theory with live engineering action:\n\n1. *Interactive Lab walkthroughs* — Master pre-press layout prep visually on any mobile screen.\n2. *Real-time digital audits* — Submit work files directly inside of our preflight tracker.\n3. *Expert Pre-Press guidance* — Access live Q&As whenever you encounter production blockers.\n\nJoin the admission webinar on *${webinarCustomDate}* to explore these tools in action!`)}
+              onClick={() => triggerCopyTemplate(`*Learn Printing & Packaging Engineering remotely* 🚀\n\nOur school companion app replaces dry theory with live engineering action:\n\n1. *Interactive Lab walkthroughs* — Master pre-press layout prep visually on any mobile screen.\n2. *Real-time digital audits* — Submit work files directly inside of our preflight tracker.\n3. *Expert Pre-Press guidance* — Access live Q&As whenever you encounter production blockers.\n\nJoin the admission webinar on *${webinarCustomDate}* to explore these tools in action!\n\n📞 Contact / WhatsApp: *+91 90428 21999*`)}
               className="w-full bg-slate-950 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-slate-850 transition duration-300 flex items-center justify-center gap-1.5"
             >
               <Copy className="w-3.5 h-3.5" />

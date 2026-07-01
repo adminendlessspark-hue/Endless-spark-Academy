@@ -153,7 +153,7 @@ export default function AdminWebinarPanel() {
     const scheduledTime = meta?.scheduledTime || 'Upcoming Batch';
     const modeJoined = meta?.studyMode === 'offline' ? '📍 Physical Campus Practical Lab' : '💻 Online Interactive App';
 
-    const text = `*Hello ${attendeeJoinedName}!* 👋 \n\nWelcome to *Endless Spark School of Printing and Packaging*!\n\nYour registration for *${masterclassTitle}* is confirmed! 🚀\n\n📌 *Seat Details:*\n📅 Slot: *${scheduledTime}*\n🎓 Mode: *${modeJoined}*\n🎟️ Ticket Code: *${ticketCode}*\n\n_Next Steps:_\nOur team will share the webinar link & student app setup shortly. Get ready for live hands-on walkthroughs!\n\nBest regards,\nThe Admissions Team`;
+    const text = `*Hello ${attendeeJoinedName}!* 👋 \n\nWelcome to *Endless Spark School of Printing and Packaging*!\n\nYour registration for *${masterclassTitle}* is confirmed! 🚀\n\n📌 *Seat Details:*\n📅 Slot: *${scheduledTime}*\n🎓 Mode: *${modeJoined}*\n🎟️ Ticket Code: *${ticketCode}*\n\n_Next Steps:_\nOur team will share the webinar link & student app setup shortly. Get ready for live hands-on walkthroughs!\n\n📞 For queries, contact us on Call / WhatsApp: *+91 90428 21999*\n\nBest regards,\nThe Admissions Team`;
 
     const encoded = encodeURIComponent(text);
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encoded}`;

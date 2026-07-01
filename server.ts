@@ -10,6 +10,7 @@ import { fileURLToPath } from "url";
 import { google } from "googleapis";
 import { WebSocketServer } from "ws";
 import { GoogleGenAI, Modality } from "@google/genai";
+import JSZip from "jszip";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,7 +189,7 @@ async function startServer() {
 
   // Google Drive Sharing API
   app.post("/api/share-drive-file", async (req: any, res: any) => {
-    const { driveUrl, studentEmail } = req.body;
+    const { driveUrl, studentEmail, role = "writer" } = req.body;
     
     if (!driveUrl || !studentEmail) {
       return res.status(400).json({ error: "driveUrl and studentEmail are required" });
@@ -220,19 +221,38 @@ async function startServer() {
       
       const drive = google.drive({ version: "v3", auth });
 
-      console.log(`Auto-pilot: Sharing file ${fileId} with ${studentEmail}`);
+      console.log(`Auto-pilot: Sharing file ${fileId} with ${studentEmail} as ${role}`);
 
+      // Share with studentEmail
       await drive.permissions.create({
         fileId: fileId,
         requestBody: {
-          role: "reader",
+          role: role,
           type: "user",
           emailAddress: studentEmail,
         },
-        sendNotificationEmail: true,
+        sendNotificationEmail: false, // Silent sharing, no mail approval or spamming
       });
 
-      res.json({ success: true, message: `File shared with ${studentEmail} successfully.` });
+      // Also automatically share with adminendlessspark@gmail.com as writer so admin always has access
+      if (studentEmail !== "adminendlessspark@gmail.com") {
+        console.log(`Auto-pilot: Also sharing file ${fileId} with adminendlessspark@gmail.com as writer`);
+        try {
+          await drive.permissions.create({
+            fileId: fileId,
+            requestBody: {
+              role: "writer",
+              type: "user",
+              emailAddress: "adminendlessspark@gmail.com",
+            },
+            sendNotificationEmail: false,
+          });
+        } catch (adminErr) {
+          console.warn("Could not auto-share with adminendlessspark@gmail.com:", adminErr);
+        }
+      }
+
+      res.json({ success: true, message: `File shared with ${studentEmail} and admin successfully.` });
     } catch (error: any) {
       console.error("Critical Drive sharing error:", error);
       res.status(500).json({ error: error.message });
@@ -674,13 +694,172 @@ async function startServer() {
     }
   });
 
-  // API Route for proxied download to bypass CORS/Iframe blocks
+  // Helper to recursively list and zip a Google Drive folder
+  async function zipFolder(drive: any, folderId: string, zip: any, currentPath: string = "") {
+    const response = await drive.files.list({
+      q: `'${folderId}' in parents and trashed = false`,
+      fields: "files(id, name, mimeType)",
+    });
+    
+    const files = response.data.files || [];
+    for (const file of files) {
+      if (!file.id || !file.name) continue;
+      const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
+      
+      if (file.mimeType === "application/vnd.google-apps.folder") {
+        await zipFolder(drive, file.id, zip, filePath);
+      } else {
+        try {
+          const fileContent = await drive.files.get(
+            { fileId: file.id, alt: "media" },
+            { responseType: "arraybuffer" }
+          );
+          zip.file(filePath, Buffer.from(fileContent.data));
+        } catch (err) {
+          console.error(`Error downloading file ${file.name} (ID: ${file.id}):`, err);
+        }
+      }
+    }
+  }
+
+  // API Route for proxied download to bypass CORS/Iframe blocks and download Google Drive links directly as zip
   app.get("/api/download", async (req: any, res: any) => {
-    const fileUrl = req.query.url as string;
-    if (!fileUrl) return res.status(400).send("No URL provided");
+    const projectId = req.query.projectId as string;
+    let fileUrl = req.query.url as string;
+    let requestedTitle = req.query.title as string;
 
     try {
-      console.log("Proxying download for:", fileUrl);
+      const auth = new google.auth.GoogleAuth({
+        scopes: ["https://www.googleapis.com/auth/drive"],
+      });
+      const drive = google.drive({ version: "v3", auth });
+
+      // If projectId is provided, look up the file URL and title from Firestore
+      if (projectId) {
+        const db = getDb();
+        const projectDoc = await db.collection("master_projects").doc(projectId).get();
+        if (projectDoc.exists) {
+          const pData = projectDoc.data();
+          if (pData) {
+            fileUrl = pData.googleDriveLink || pData.fileUrl || "";
+            if (!requestedTitle && pData.title) {
+              requestedTitle = pData.title;
+            }
+          }
+        }
+      }
+
+      console.log("Proxying download. projectId:", projectId, "fileUrl:", fileUrl, "requestedTitle:", requestedTitle);
+
+      const MASTER_FOLDER_ID = "1_bIMgMW8xqAioEq6hlz-7EgmaPgK89cz";
+      let fileId: string | null = null;
+      let isFolder = false;
+
+      // Extract file ID or folder ID from the file URL if it's a Google Drive link
+      if (fileUrl && fileUrl.includes("drive.google.com")) {
+        if (fileUrl.includes("/folders/")) {
+          const folderIdMatch = fileUrl.match(/\/folders\/([-\w]+)/);
+          if (folderIdMatch) {
+            fileId = folderIdMatch[1];
+            isFolder = true;
+          }
+        } else {
+          const fileIdMatch = fileUrl.match(/[-\w]{25,}/);
+          if (fileIdMatch) {
+            fileId = fileIdMatch[0];
+          }
+        }
+      }
+
+      // If we don't have a direct fileId, or if we want to ensure we search inside the Master Folder:
+      if (!fileId && requestedTitle) {
+        console.log(`Searching for file/folder in Master folder ${MASTER_FOLDER_ID} with title: ${requestedTitle}`);
+        const escapedTitle = requestedTitle.replace(/'/g, "\\'");
+        
+        // Search first for folder or file in parent MASTER_FOLDER_ID matching the title
+        const searchQuery = `'${MASTER_FOLDER_ID}' in parents and name contains '${escapedTitle}' and trashed = false`;
+        const searchRes = await drive.files.list({
+          q: searchQuery,
+          fields: "files(id, name, mimeType)",
+          pageSize: 5
+        });
+
+        if (searchRes.data.files && searchRes.data.files.length > 0) {
+          const found = searchRes.data.files[0];
+          fileId = found.id || null;
+          isFolder = found.mimeType === "application/vnd.google-apps.folder";
+          console.log(`Found match in Master folder: ${found.name} (ID: ${fileId}, Folder: ${isFolder})`);
+        } else {
+          // Try searching by name globally as fallback
+          const globalQuery = `name contains '${escapedTitle}' and trashed = false`;
+          const globalSearchRes = await drive.files.list({
+            q: globalQuery,
+            fields: "files(id, name, mimeType)",
+            pageSize: 5
+          });
+          if (globalSearchRes.data.files && globalSearchRes.data.files.length > 0) {
+            const found = globalSearchRes.data.files[0];
+            fileId = found.id || null;
+            isFolder = found.mimeType === "application/vnd.google-apps.folder";
+            console.log(`Found global match: ${found.name} (ID: ${fileId}, Folder: ${isFolder})`);
+          }
+        }
+      }
+
+      // Handle download if we have an identified Google Drive fileId/folderId
+      if (fileId) {
+        if (isFolder) {
+          console.log(`Zipping Google Drive folder ID: ${fileId}`);
+          const zip = new JSZip();
+          await zipFolder(drive, fileId, zip);
+          
+          const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+          
+          let finalName = requestedTitle || "project_files";
+          if (!finalName.toLowerCase().endsWith('.zip')) {
+            finalName = `${finalName}.zip`;
+          }
+
+          res.setHeader("Content-Type", "application/zip");
+          res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
+          return res.send(zipBuffer);
+        } else {
+          console.log(`Attempting backend Google Drive file download for file ID: ${fileId}`);
+          
+          // Get file metadata to determine MIME type and name
+          const metadata = await drive.files.get({ fileId, fields: "name, mimeType" });
+          const originalName = metadata.data.name || "project.zip";
+          const mimeType = metadata.data.mimeType || "application/octet-stream";
+
+          res.setHeader("Content-Type", mimeType);
+          
+          let finalName = requestedTitle || originalName;
+          if (!finalName.toLowerCase().includes('.')) {
+            const extMatch = originalName.match(/\.[0-9a-z]+$/i);
+            if (extMatch) {
+              finalName = `${finalName}${extMatch[0]}`;
+            } else {
+              finalName = `${finalName}.zip`;
+            }
+          }
+          res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
+
+          const driveResponse = await drive.files.get(
+            { fileId, alt: "media" },
+            { responseType: "arraybuffer" }
+          );
+
+          return res.send(Buffer.from(driveResponse.data as any));
+        }
+      }
+
+      // If no file ID/folder ID and we have no fileUrl, return 400
+      if (!fileUrl) {
+        return res.status(400).send("No valid file URL, project, or Google Drive matching file found");
+      }
+
+      // Fallback / Standard URL downloader (for non-Google Drive links)
+      console.log("Using standard fetch fallback for:", fileUrl);
       const response = await fetch(fileUrl);
       if (!response.ok) throw new Error(`External source returned ${response.status}`);
       
@@ -688,17 +867,26 @@ async function startServer() {
       const contentDisposition = response.headers.get("content-disposition");
       
       res.setHeader("Content-Type", contentType);
-      if (contentDisposition) {
+      
+      if (requestedTitle) {
+        let finalName = requestedTitle;
+        if (!finalName.toLowerCase().includes('.')) {
+          finalName = `${finalName}.zip`;
+        }
+        res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
+      } else if (contentDisposition) {
         res.setHeader("Content-Disposition", contentDisposition);
       }
       
-      // Use buffer to avoid stream issues in some environments
       const buffer = await response.arrayBuffer();
       res.send(Buffer.from(buffer));
     } catch (error: any) {
       console.error("Proxy download error:", error);
-      // Fallback: redirect to original URL if proxy fails
-      res.redirect(fileUrl);
+      if (fileUrl) {
+        res.redirect(fileUrl);
+      } else {
+        res.status(500).send(`Failed to process download: ${error.message}`);
+      }
     }
   });
 

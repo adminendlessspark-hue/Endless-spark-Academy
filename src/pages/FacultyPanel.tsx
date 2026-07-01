@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, CheckCircle, XCircle, Clock, Calendar, FileText, Video, UserCheck, Eye, CircleCheck, Zap } from 'lucide-react';
+import { Users, CheckCircle, XCircle, Clock, Calendar, FileText, Video, UserCheck, Eye, CircleCheck, Zap, Layers } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { User, LeaveRequest, CourseType, TopicScore, ApplicationData } from '../types';
 import { cn, getScoreKey, formatCourseName } from '../utils';
@@ -10,11 +10,12 @@ import FacultySchedule from '../components/FacultySchedule';
 import Reports from '../components/Reports';
 import { useNotifications } from '../useNotifications';
 import SecureVideoPlayer from '../components/SecureVideoPlayer';
+import FacultyRoadmapPlanner from '../components/FacultyRoadmapPlanner';
 
 export default function FacultyPanel() {
   const { user: facultyUser } = useAuth();
   const { requestPermission } = useNotifications();
-  const [activeTab, setActiveTab] = useState<'students' | 'approvals' | 'applications' | 'leaves' | 'schedule' | 'live-classes'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'approvals' | 'applications' | 'leaves' | 'schedule' | 'live-classes' | 'roadmap'>('students');
   const [students, setStudents] = useState<User[]>([]);
   const [pendingApplications, setPendingApplications] = useState<User[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
@@ -257,6 +258,13 @@ export default function FacultyPanel() {
         >
           <Video className="w-4 h-4" />
           Live Classes
+        </button>
+        <button
+          onClick={() => setActiveTab('roadmap')}
+          className={cn("btn-tab", activeTab === 'roadmap' ? "btn-tab-active" : "btn-tab-inactive")}
+        >
+          <Layers className="w-4 h-4" />
+          Curriculum Roadmap
         </button>
       </div>
 
@@ -702,6 +710,12 @@ export default function FacultyPanel() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'roadmap' && (
+          <div className="p-6 bg-gray-50">
+            <FacultyRoadmapPlanner isAdmin={false} />
           </div>
         )}
       </div>

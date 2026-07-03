@@ -286,22 +286,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
     const unsubModules = onSnapshot(collection(db, 'course_modules'), (snapshot) => {
       let allModules = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CourseModule));
       
-      if (allModules.length > 0) {
-        setCourseModules(allModules);
-        localStorage.setItem('cached_course_modules', JSON.stringify(allModules));
-      } else {
-        const cached = localStorage.getItem('cached_course_modules');
-        if (cached) {
-          try {
-            allModules = JSON.parse(cached);
-          } catch (e) {
-            allModules = FALLBACK_COURSE_MODULES;
-          }
-        } else {
-          allModules = FALLBACK_COURSE_MODULES;
-        }
-        setCourseModules(allModules);
-      }
+      setCourseModules(allModules);
       
       const paTopics = allModules.filter(m => m.category === 'production-art-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
       const prTopics = allModules.filter(m => m.category === 'print-ready-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
@@ -319,33 +304,16 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
       setColourRetouchingTopics(colourTopics);
       setPrintingAndPackagingTopics(crossTopics);
     }, (err) => {
-      console.warn("Firestore collection 'course_modules' listener failed in dashboard, loading local fallback:", err);
-      let fallbackModules = FALLBACK_COURSE_MODULES;
-      const cached = localStorage.getItem('cached_course_modules');
-      if (cached) {
-        try {
-          fallbackModules = JSON.parse(cached);
-        } catch (e) {
-          console.error("Malformed course modules cache in Dashboard:", e);
-        }
-      }
-      setCourseModules(fallbackModules);
+      console.warn("Firestore collection 'course_modules' listener failed in dashboard, keeping blank:", err);
+      setCourseModules([]);
       
-      const paTopics = fallbackModules.filter(m => m.category === 'production-art-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
-      const prTopics = fallbackModules.filter(m => m.category === 'print-ready-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
-      const qcTopics = fallbackModules.filter(m => m.category === 'quality-control-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
-      const packTopics = fallbackModules.filter(m => m.category === 'packaging-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
-      const plateTopics = fallbackModules.filter(m => m.category === 'plate-ready-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
-      const colourTopics = fallbackModules.filter(m => m.category === 'colour-retouching-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
-      const crossTopics = fallbackModules.filter(m => m.category === 'printing-and-packaging-cross-courses').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
-      
-      setProductionArtTopics(paTopics);
-      setPrintReadyTopics(prTopics);
-      setQualityControlTopics(qcTopics);
-      setPackagingTopics(packTopics);
-      setPlateReadyTopics(plateTopics);
-      setColourRetouchingTopics(colourTopics);
-      setPrintingAndPackagingTopics(crossTopics);
+      setProductionArtTopics([]);
+      setPrintReadyTopics([]);
+      setQualityControlTopics([]);
+      setPackagingTopics([]);
+      setPlateReadyTopics([]);
+      setColourRetouchingTopics([]);
+      setPrintingAndPackagingTopics([]);
       
       handleFirestoreError(err, OperationType.GET, 'course_modules');
     });

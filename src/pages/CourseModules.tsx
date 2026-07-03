@@ -58,17 +58,7 @@ export default function CourseModules() {
         setModules(allModules);
         localStorage.setItem('cached_course_modules', JSON.stringify(allModules));
       } else {
-        // Empty DB, check cache or fallback
-        const cached = localStorage.getItem('cached_course_modules');
-        if (cached) {
-          try {
-            setModules(JSON.parse(cached));
-          } catch (e) {
-            setModules(FALLBACK_COURSE_MODULES);
-          }
-        } else {
-          setModules(FALLBACK_COURSE_MODULES);
-        }
+        setModules([]);
       }
       
       // Select initial category
@@ -77,20 +67,11 @@ export default function CourseModules() {
         setCategory(defaultCat);
       }
     }, (err) => {
-      console.warn("Firestore collection 'course_modules' subscription failed, recovering via local fallback:", err);
-      let localModules = FALLBACK_COURSE_MODULES;
-      const cached = localStorage.getItem('cached_course_modules');
-      if (cached) {
-        try {
-          localModules = JSON.parse(cached);
-        } catch (e) {
-          console.error("Malformed course modules cache:", e);
-        }
-      }
-      setModules(localModules);
+      console.warn("Firestore collection 'course_modules' subscription failed, keeping blank:", err);
+      setModules([]);
       
       if (!category) {
-        const defaultCat = user?.assignedCourses?.[0] || user?.assignedCourse || localModules[0]?.category || 'production-art-engineer';
+        const defaultCat = user?.assignedCourses?.[0] || user?.assignedCourse || 'production-art-engineer';
         setCategory(defaultCat);
       }
       handleFirestoreError(err, OperationType.GET, 'course_modules');

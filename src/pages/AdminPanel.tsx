@@ -315,6 +315,7 @@ export default function AdminPanel() {
   const [newSessionInterviewerEmail, setNewSessionInterviewerEmail] = useState('');
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  const [cleanupAssignment, setCleanupAssignment] = useState<any | null>(null);
   const [sessionToUpdateRecording, setSessionToUpdateRecording] = useState<string | null>(null);
   const [recordingUrl, setRecordingUrl] = useState('');
   const [newFaculty, setNewFaculty] = useState({ name: '', email: '' });
@@ -389,7 +390,7 @@ export default function AdminPanel() {
   const [enhancingDetails, setEnhancingDetails] = useState(false);
   
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
-  const [assignmentToDelete, setAssignmentToDelete] = useState<string | null>(null);
+  const [assignmentToDelete, setAssignmentToDelete] = useState<any | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
 
   const scrollTabs = (direction: 'left' | 'right') => {
@@ -9167,16 +9168,7 @@ export default function AdminPanel() {
                                           <Copy className="w-3 h-3" />
                                         </button>
                                         <button
-                                          onClick={async () => {
-                                            if (window.confirm("Are you sure you want to remove this student's assignment?")) {
-                                              try {
-                                                await deleteDoc(doc(db, 'student_projects', assignment.id));
-                                              } catch (err) {
-                                                handleFirestoreError(err, OperationType.DELETE, `student_projects/${assignment.id}`);
-                                                alert('Failed to delete assignment: ' + (err instanceof Error ? err.message : 'Unknown error'));
-                                              }
-                                            }
-                                          }}
+                                          onClick={() => setAssignmentToDelete(assignment)}
                                           className="p-1 bg-red-50 text-red-600 rounded hover:bg-red-100 ml-1"
                                           title="Remove Student"
                                         >
@@ -9236,18 +9228,7 @@ export default function AdminPanel() {
                                           </span>
                                         ) : (
                                           <button 
-                                            onClick={async () => {
-                                              if (confirm(`Mark cloud files for ${assignment.studentName} as REMOVED to save cost?`)) {
-                                                try {
-                                                  await updateDoc(doc(db, 'student_projects', assignment.id), {
-                                                    isFilesCleanedUp: true,
-                                                    updatedAt: new Date().toISOString()
-                                                  });
-                                                } catch (err) {
-                                                  handleFirestoreError(err, OperationType.UPDATE, `student_projects/${assignment.id}`);
-                                                }
-                                              }
-                                            }}
+                                            onClick={() => setCleanupAssignment(assignment)}
                                             className="px-2 py-1 bg-white text-orange-600 border border-orange-200 rounded text-[10px] font-bold hover:bg-orange-50 flex items-center gap-1 shadow-sm"
                                             title="Remove files from cloud to save cost"
                                           >
@@ -10243,6 +10224,87 @@ export default function AdminPanel() {
                 className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-100"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Student Assignment Modal */}
+      {assignmentToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in duration-300">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Remove Assignment?</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                Are you sure you want to remove the assignment for student <strong className="text-gray-900">{assignmentToDelete.studentName}</strong>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex gap-3">
+              <button 
+                onClick={() => setAssignmentToDelete(null)}
+                className="flex-1 py-3 bg-white text-gray-700 rounded-xl font-medium border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    await deleteDoc(doc(db, 'student_projects', assignmentToDelete.id));
+                    setAssignmentToDelete(null);
+                  } catch (err) {
+                    handleFirestoreError(err, OperationType.DELETE, `student_projects/${assignmentToDelete.id}`);
+                    alert('Failed to delete assignment: ' + (err instanceof Error ? err.message : 'Unknown error'));
+                  }
+                }}
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-100"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cleanup Assignment Files Modal */}
+      {cleanupAssignment && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in duration-300">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Wind className="w-8 h-8 text-orange-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Clean Cloud Files?</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                Mark cloud files for <strong className="text-gray-900">{cleanupAssignment.studentName}</strong> as REMOVED to save cost?
+              </p>
+            </div>
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex gap-3">
+              <button 
+                onClick={() => setCleanupAssignment(null)}
+                className="flex-1 py-3 bg-white text-gray-700 rounded-xl font-medium border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, 'student_projects', cleanupAssignment.id), {
+                      isFilesCleanedUp: true,
+                      updatedAt: new Date().toISOString()
+                    });
+                    setCleanupAssignment(null);
+                  } catch (err) {
+                    handleFirestoreError(err, OperationType.UPDATE, `student_projects/${cleanupAssignment.id}`);
+                    alert('Failed to clean up files: ' + (err instanceof Error ? err.message : 'Unknown error'));
+                  }
+                }}
+                className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 transition-colors shadow-lg shadow-orange-100"
+              >
+                Cleanup
               </button>
             </div>
           </div>

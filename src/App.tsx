@@ -41,6 +41,7 @@ import PublicQcPanel from './pages/PublicQcPanel';
 import WebinarRegistration from './pages/WebinarRegistration';
 import AdobeScriptToolkit from './pages/AdobeScriptToolkit';
 import BookConsultation from './pages/BookConsultation';
+import DemoOnePager from './pages/DemoOnePager';
 import { useSettings } from './hooks/useSettings';
 
 function ClassroomRoute({ children }: { children: React.ReactNode }) {
@@ -207,6 +208,7 @@ function AppContent() {
         <Route path="/about-courses" element={<CourseOverview />} />
         <Route path="/public-qc" element={<PublicQcPanel />} />
         <Route path="/book-consultation" element={<BookConsultation />} />
+        <Route path="/demo" element={<DemoOnePager />} />
         
         <Route path="/" element={<Home />} />
         

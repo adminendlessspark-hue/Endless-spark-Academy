@@ -18,7 +18,7 @@ export default function BookConsultation() {
     email: '',
     phone: '',
     countryCode: '+91',
-    topic: 'Career Consultation & Live Demo'
+    topic: 'Student Dashboard & AI Features'
   });
   const [bookingDate, setBookingDate] = useState<string>('');
   const [bookingTime, setBookingTime] = useState<string>('');
@@ -41,7 +41,8 @@ export default function BookConsultation() {
 
   const getSlotsForDate = (dateString: string) => {
     if (!dateString) return [];
-    const date = new Date(dateString);
+    const [year, month, dayNum] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, dayNum);
     const day = date.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, ...
     const slots = [];
 
@@ -208,7 +209,11 @@ export default function BookConsultation() {
                   <div>
                     <span className="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Date</span>
                     <span className="text-sm font-bold text-indigo-600 flex items-center gap-1.5">
-                      <Calendar className="w-4 h-4" /> {new Date(bookingDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                      <Calendar className="w-4 h-4" /> {(() => {
+                        const [year, month, dayNum] = bookingDate.split('-').map(Number);
+                        const date = new Date(year, month - 1, dayNum);
+                        return date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                      })()}
                     </span>
                   </div>
                   <div>
@@ -242,7 +247,7 @@ export default function BookConsultation() {
                   setBookingSuccess(false);
                   setBookingDate('');
                   setBookingTime('');
-                  setConsultantForm({ name: '', email: '', phone: '', countryCode: '+91', topic: 'Career Consultation & Live Demo' });
+                  setConsultantForm({ name: '', email: '', phone: '', countryCode: '+91', topic: 'Student Dashboard & AI Features' });
                 }}
                 className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-slate-850 transition-colors shadow-lg"
                 id="book-another-slot-btn"
@@ -382,6 +387,8 @@ export default function BookConsultation() {
                             className="w-full pl-4 pr-10 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm appearance-none"
                             id="consultant-topic-select"
                           >
+                            <option value="Student Dashboard & AI Features">Student Dashboard & AI Features (Demo & Overview)</option>
+                            <option value="Student Projects Showcase & Review">Student Projects Showcase & Review (Demo & Showcase)</option>
                             <option value="Production Art Engineer">Production Art Engineer (Syllabus & Demo)</option>
                             <option value="Print Ready Engineer">Print Ready Engineer (Syllabus & Demo)</option>
                             <option value="Packaging Design Specialist">Packaging Design Specialist (Syllabus & Demo)</option>
@@ -401,7 +408,10 @@ export default function BookConsultation() {
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {getNext14Days().map((dayDate) => {
-                        const dateStr = dayDate.toISOString().split('T')[0];
+                        const year = dayDate.getFullYear();
+                        const month = String(dayDate.getMonth() + 1).padStart(2, '0');
+                        const dayVal = String(dayDate.getDate()).padStart(2, '0');
+                        const dateStr = `${year}-${month}-${dayVal}`;
                         const isSelected = bookingDate === dateStr;
                         const dayOfWeek = dayDate.toLocaleDateString(undefined, { weekday: 'short' });
                         const dayOfMonth = dayDate.getDate();

@@ -113,17 +113,21 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.5 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-6"
+            className="flex flex-col sm:flex-row items-center justify-center gap-4 flex-wrap"
           >
-            <Link to="/book-consultation" className="w-full sm:w-auto bg-pink-600 text-white px-10 py-5 text-lg rounded-[2.5rem] shadow-2xl shadow-pink-200 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 group">
-              <Calendar className="w-5 h-5 text-pink-200 group-hover:scale-125 transition-transform" />
-              Book 1-on-1 Consultation & Demo
+            <Link to="/demo" className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-5 text-lg rounded-[2.5rem] shadow-2xl shadow-indigo-200 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 group">
+              <Sparkles className="w-5 h-5 text-purple-200 group-hover:scale-125 transition-transform" />
+              Interactive Demo
             </Link>
-            <Link to="/signup" className="w-full sm:w-auto bg-[#1a1c25] text-white px-10 py-5 text-lg rounded-[2.5rem] shadow-2xl shadow-slate-300 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 group">
+            <Link to="/book-consultation" className="w-full sm:w-auto bg-pink-600 text-white px-8 py-5 text-lg rounded-[2.5rem] shadow-2xl shadow-pink-200 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 group">
+              <Calendar className="w-5 h-5 text-pink-200 group-hover:scale-125 transition-transform" />
+              Consultation
+            </Link>
+            <Link to="/signup" className="w-full sm:w-auto bg-[#1a1c25] text-white px-8 py-5 text-lg rounded-[2.5rem] shadow-2xl shadow-slate-300 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 group">
               <Zap className="w-5 h-5 text-yellow-400 fill-yellow-400 group-hover:scale-125 transition-transform" />
               Apply Now
             </Link>
-            <Link to="/login" className="w-full sm:w-auto bg-white text-[#1a1c25] px-10 py-5 text-lg rounded-[2.5rem] shadow-xl shadow-slate-100 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 border border-slate-50">
+            <Link to="/login" className="w-full sm:w-auto bg-white text-[#1a1c25] px-8 py-5 text-lg rounded-[2.5rem] shadow-xl shadow-slate-100 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 border border-slate-50">
               <LogIn className="w-5 h-5 text-pink-600" />
               Sign In
             </Link>

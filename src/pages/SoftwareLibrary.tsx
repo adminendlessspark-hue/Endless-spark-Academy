@@ -6,6 +6,65 @@ import SecureVideoPlayer from '../components/SecureVideoPlayer';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 
+const FALLBACK_SOFTWARE_VIDEOS = [
+  {
+    id: 'sv-1',
+    title: 'Photoshop 5-Min Tutorial: Mastering Smart Objects & Non-Destructive Scaling',
+    toolName: 'Photoshop',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    duration: '4:45',
+  },
+  {
+    id: 'sv-2',
+    title: 'Photoshop 5-Min Tutorial: Isolate Glossy Reflections for Packaging Spots',
+    toolName: 'Photoshop',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    duration: '5:00',
+  },
+  {
+    id: 'sv-3',
+    title: 'Illustrator 5-Min Tutorial: Aligning Anchor Dielines & Fold Overlaps',
+    toolName: 'Illustrator',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    duration: '5:12',
+  },
+  {
+    id: 'sv-4',
+    title: 'Illustrator 5-Min Tutorial: Creating Bleed Margin Offset Paths',
+    toolName: 'Illustrator',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    duration: '4:30',
+  },
+  {
+    id: 'sv-5',
+    title: 'Acrobat 5-Min Tutorial: Auditing Output Intents with FOGRA39 Profiles',
+    toolName: 'Adobe Acrobat',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    duration: '5:05',
+  },
+  {
+    id: 'sv-6',
+    title: 'Acrobat 5-Min Tutorial: Spot Color Plates Ink Coverage Inspection',
+    toolName: 'Adobe Acrobat',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    duration: '4:50',
+  },
+  {
+    id: 'sv-7',
+    title: 'Quality Check 5-Min Tutorial: Spectrophotometer Delta-E Rub Tolerances',
+    toolName: 'Quality Check Process',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    duration: '5:15',
+  },
+  {
+    id: 'sv-8',
+    title: 'Quality Check 5-Min Tutorial: Sutherland Rub Test Pattern Calibration',
+    toolName: 'Quality Check Process',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    duration: '4:40',
+  }
+];
+
 export default function SoftwareLibrary() {
   const { user } = useAuth();
   const { adobeCloudUrl, pantoneBooksUrl, teamViewerUrl } = useSettings();
@@ -23,7 +82,8 @@ export default function SoftwareLibrary() {
   }, []);
 
   // Filter videos based on user's assigned courses and search query
-  const filteredVideos = softwareVideos.filter(video => {
+  const videosToUse = softwareVideos.length > 0 ? softwareVideos : FALLBACK_SOFTWARE_VIDEOS;
+  const filteredVideos = videosToUse.filter(video => {
     // Search filter
     const matchesSearch = video.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           video.toolName?.toLowerCase().includes(searchQuery.toLowerCase());

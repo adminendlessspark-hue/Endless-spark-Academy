@@ -45,9 +45,12 @@ export default function Layout({ children }: LayoutProps) {
   const { logoUrl } = useSettings();
 
   const filteredNavItems = navItems.filter(item => {
-    // If it's AI tutor let all roles access it, except unapproved students 
+    // If it's AI tutor let all roles access it, except unapproved students and those without active coach
     if (item.path === '/ai-tutor') {
-      if (user?.role === 'student' && !user.isApproved) return false;
+      if (user?.role === 'student') {
+        if (!user.isApproved) return false;
+        if (!user.isCommunicationCoachActive) return false;
+      }
       return true; 
     }
     

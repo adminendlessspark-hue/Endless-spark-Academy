@@ -229,6 +229,7 @@ export interface User {
   role: 'student' | 'admin' | 'faculty' | 'telecaller' | 'accounts_executive' | 'qc' | 'marketing';
   isApproved: boolean;
   isPhasedOut?: boolean;
+  isCommunicationCoachActive?: boolean;
   mustChangePassword?: boolean;
   lastPasswordUpdate?: string;
   registeredForDemo: boolean;

@@ -61,6 +61,11 @@ function AgentRoute({ children }: { children: React.ReactNode }) {
   if (isLoading) return <div className="min-h-screen flex items-center justify-center text-gray-900 text-xl font-medium">Loading...</div>;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   
+  // Guard for students without active communication coach
+  if (user.role === 'student' && !user.isCommunicationCoachActive) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
   return <>{children}</>;
 }
 

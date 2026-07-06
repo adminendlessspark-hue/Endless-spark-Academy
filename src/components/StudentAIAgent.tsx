@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import { cn } from '../utils';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, auth } from '../firebase';
+import { useAuth } from '../AuthContext';
 
 // Audio processing functions moved locally
 const playAudio = async (base64Audio: string, audioContext: AudioContext, nextStartTimeRef: React.MutableRefObject<number>, isAgentSpeakingRef: React.MutableRefObject<boolean>) => {
@@ -56,6 +57,7 @@ interface StudentAIAgentProps {
 }
 
 export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps) {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: 'Hello! I am your Printing and Packaging expert. How can I help you today?' }
@@ -372,12 +374,14 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
             >
               <BrainCircuit className="w-3 h-3" /> Quiz
             </button>
-            <button
-              onClick={() => setMode('coach')}
-              className={cn("flex-1 text-[10px] py-1.5 rounded-md font-bold transition-colors flex items-center justify-center gap-1 uppercase", mode === 'coach' ? "bg-white text-pink-600 shadow-sm" : "text-white hover:bg-white/20 text-pink-50")}
-            >
-              <Mic className="w-3 h-3" /> Communication Coach
-            </button>
+            {(user?.role !== 'student' || user?.isCommunicationCoachActive) && (
+              <button
+                onClick={() => setMode('coach')}
+                className={cn("flex-1 text-[10px] py-1.5 rounded-md font-bold transition-colors flex items-center justify-center gap-1 uppercase", mode === 'coach' ? "bg-white text-pink-600 shadow-sm" : "text-white hover:bg-white/20 text-pink-50")}
+              >
+                <Mic className="w-3 h-3" /> Communication Coach
+              </button>
+            )}
           </div>
         </div>
 
@@ -599,12 +603,14 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
               >
                 <BrainCircuit className="w-3 h-3" /> Quiz
               </button>
-              <button
-                onClick={() => setMode('coach')}
-                className={cn("flex-1 text-[10px] py-1.5 rounded-md font-bold transition-colors flex items-center justify-center gap-1 uppercase", mode === 'coach' ? "bg-white text-pink-600 shadow-sm" : "text-white hover:bg-white/20 text-pink-50")}
-              >
-                <Mic className="w-3 h-3" /> Communication Coach
-              </button>
+              {(user?.role !== 'student' || user?.isCommunicationCoachActive) && (
+                <button
+                  onClick={() => setMode('coach')}
+                  className={cn("flex-1 text-[10px] py-1.5 rounded-md font-bold transition-colors flex items-center justify-center gap-1 uppercase", mode === 'coach' ? "bg-white text-pink-600 shadow-sm" : "text-white hover:bg-white/20 text-pink-50")}
+                >
+                  <Mic className="w-3 h-3" /> Communication Coach
+                </button>
+              )}
             </div>
           </div>
 

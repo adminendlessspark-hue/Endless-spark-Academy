@@ -223,7 +223,8 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
   // Local static uploads folder as a seamless fallback if GCS storage is not enabled
   if (!fs.existsSync(localUploadsDir)) {

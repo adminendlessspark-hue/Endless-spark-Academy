@@ -1262,6 +1262,17 @@ export default function AdminPanel() {
     }
   };
 
+  const handleToggleCommunicationCoach = async (studentId: string, currentStatus: boolean) => {
+    try {
+      await updateDoc(doc(db, 'users', studentId), {
+        isCommunicationCoachActive: !currentStatus,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${studentId}`);
+    }
+  };
+
   const handleAddHoliday = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -1674,6 +1685,7 @@ export default function AdminPanel() {
   const [viewingApplicationStudentId, setViewingApplicationStudentId] = useState<string | null>(null);
   const [viewingTestResults, setViewingTestResults] = useState<any | null>(null);
   const [viewingTestStudentName, setViewingTestStudentName] = useState<string>('');
+  const [viewingTestStudentId, setViewingTestStudentId] = useState<string>('');
   const [isEditingApplication, setIsEditingApplication] = useState(false);
   const [approvingStudentId, setApprovingStudentId] = useState<string | null>(null);
   const [reschedulingDemoStudentId, setReschedulingDemoStudentId] = useState<string | null>(null);
@@ -3511,6 +3523,7 @@ export default function AdminPanel() {
                     <th className="pb-4 text-xs font-bold text-gray-400 uppercase tracking-widest">MCQ</th>
                     <th className="pb-4 text-xs font-bold text-gray-400 uppercase tracking-widest">AI Sub-Scores</th>
                     <th className="pb-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Total Mark</th>
+                    <th className="pb-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Coach</th>
                     <th className="pb-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Status</th>
                     <th className="pb-4 text-xs font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Action</th>
                   </tr>
@@ -3579,6 +3592,29 @@ export default function AdminPanel() {
                             </span>
                           </td>
                           <td className="py-4">
+                            {results ? (
+                              <button
+                                onClick={() => handleToggleCommunicationCoach(student.id, !!student.isCommunicationCoachActive)}
+                                className={cn(
+                                  "px-3 py-1 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-1.5 shadow-sm border",
+                                  student.isCommunicationCoachActive 
+                                    ? "bg-green-500 hover:bg-green-600 text-white border-green-600" 
+                                    : "bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-200"
+                                )}
+                              >
+                                {student.isCommunicationCoachActive ? (
+                                  <>
+                                    <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Active
+                                  </>
+                                ) : (
+                                  "Inactive"
+                                )}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400 italic">Not available</span>
+                            )}
+                          </td>
+                          <td className="py-4">
                             <span className={cn(
                               "px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
                               student.entranceTestStatus === 'evaluated' ? "bg-green-100 text-green-700" : 
@@ -3594,6 +3630,7 @@ export default function AdminPanel() {
                                 onClick={() => {
                                   setViewingTestResults(results);
                                   setViewingTestStudentName(student.name);
+                                  setViewingTestStudentId(student.id);
                                 }}
                                 className="p-2 bg-white border border-gray-100 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-all shadow-sm"
                               >
@@ -4403,6 +4440,7 @@ export default function AdminPanel() {
                               onClick={() => {
                                 setViewingTestResults(student.entranceTestResults);
                                 setViewingTestStudentName(student.name);
+                                setViewingTestStudentId(student.id);
                               }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                               title="View Entrance Test Results"
@@ -9932,7 +9970,29 @@ export default function AdminPanel() {
               </div>
             </div>
             
-            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
+              {viewingTestStudentId && (
+                <button
+                  onClick={() => {
+                    const student = students.find(s => s.id === viewingTestStudentId);
+                    if (student) {
+                      handleToggleCommunicationCoach(viewingTestStudentId, !!student.isCommunicationCoachActive);
+                    }
+                  }}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 border shadow-sm transition-all duration-300",
+                    students.find(s => s.id === viewingTestStudentId)?.isCommunicationCoachActive
+                      ? "bg-green-500 text-white border-green-600 hover:bg-green-600"
+                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                  )}
+                >
+                  <Sparkles className="w-4 h-4 animate-pulse" />
+                  {students.find(s => s.id === viewingTestStudentId)?.isCommunicationCoachActive
+                    ? "Communication Coach: Activated"
+                    : "Activate Communication Coach"
+                  }
+                </button>
+              )}
               <button 
                 onClick={() => setViewingTestResults(null)}
                 className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100"

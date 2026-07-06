@@ -38,6 +38,7 @@ export default function VirtualClassroom() {
   const [selectedModuleId, setSelectedModuleId] = useState<string>('');
   const [layoutMode, setLayoutMode] = useState<'split' | 'jitsi' | 'slides'>('split');
   const [embedJitsi, setEmbedJitsi] = useState<boolean>(true);
+  const [screenshareOptimization, setScreenshareOptimization] = useState<'text' | 'motion'>('text');
 
   const handleGoBack = () => {
     navigate(-1);
@@ -242,7 +243,12 @@ export default function VirtualClassroom() {
 
   // Jitsi settings URL
   const baseDomain = jitsiServer ? jitsiServer.replace(/^(https?:\/\/)?/, '').replace(/\/$/, '') : 'jitsi.belnet.be';
-  const jitsiUrl = `https://${baseDomain}/${roomId}#config.resolution=1080&config.desktopSharingFrameRate.min=15&config.desktopSharingFrameRate.max=30&config.videoQuality.enforcePreferredCodec=true&config.startWithVideoMuted=false&config.startWithAudioMuted=false`;
+  const minFps = screenshareOptimization === 'text' ? 5 : 15;
+  const maxFps = screenshareOptimization === 'text' ? 5 : 30;
+  const extraParams = screenshareOptimization === 'text'
+    ? `&config.constraints.video.height.ideal=1080&config.constraints.video.width.ideal=1920&config.videoQuality.preferredCodec=vp9&config.videoQuality.maxReceiverVideoQuality=1080`
+    : `&config.videoQuality.preferredCodec=vp8`;
+  const jitsiUrl = `https://${baseDomain}/${roomId}#config.resolution=1080&config.desktopSharingFrameRate.min=${minFps}&config.desktopSharingFrameRate.max=${maxFps}&config.videoQuality.enforcePreferredCodec=true${extraParams}&config.startWithVideoMuted=false&config.startWithAudioMuted=false`;
 
   // Determine slide file types & viewer setup
   const hasActiveSlides = !!sessionData?.activeSlidesUrl;
@@ -312,7 +318,22 @@ export default function VirtualClassroom() {
         )}
 
         {/* Jitsi Mode Controller & Settings */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Screen Share Optimization Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
+            <Monitor className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+            <span className="text-slate-400 font-semibold hidden lg:inline">Screen Quality:</span>
+            <select
+              value={screenshareOptimization}
+              onChange={(e) => setScreenshareOptimization(e.target.value as 'text' | 'motion')}
+              className="bg-transparent text-slate-200 font-bold focus:ring-0 focus:outline-none border-none py-0.5 cursor-pointer pr-6 text-xs outline-none"
+              title="Optimize screen share for text readability (low frame rate, high resolution) or smooth video motion"
+            >
+              <option value="text" className="bg-slate-950 text-slate-200">Text & Slides (Crisp 1080p)</option>
+              <option value="motion" className="bg-slate-950 text-slate-200">Video & Motion (Smooth FPS)</option>
+            </select>
+          </div>
+
           <label className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl text-xs hover:bg-slate-850 cursor-pointer">
             <input 
               type="checkbox" 

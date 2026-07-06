@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { LiveSession } from '../types';
-import { Loader2, AlertCircle, Video, CheckCircle, Save } from 'lucide-react';
+import { Loader2, AlertCircle, Video, CheckCircle, Save, Monitor } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 
 export default function InterviewRoom() {
@@ -13,6 +13,7 @@ export default function InterviewRoom() {
   const [session, setSession] = useState<LiveSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [screenshareOptimization, setScreenshareOptimization] = useState<'text' | 'motion'>('text');
   
   const [feedback, setFeedback] = useState('');
   const [skillsGap, setSkillsGap] = useState('');
@@ -98,7 +99,12 @@ export default function InterviewRoom() {
   }
 
   const baseDomain = jitsiServer ? jitsiServer.replace(/^(https?:\/\/)?/, '').replace(/\/$/, '') : 'jitsi.belnet.be';
-  const jitsiUrl = `https://${baseDomain}/${session.roomId}#config.resolution=1080&config.desktopSharingFrameRate.min=15&config.desktopSharingFrameRate.max=30&config.videoQuality.enforcePreferredCodec=true`;
+  const minFps = screenshareOptimization === 'text' ? 5 : 15;
+  const maxFps = screenshareOptimization === 'text' ? 5 : 30;
+  const extraParams = screenshareOptimization === 'text'
+    ? `&config.constraints.video.height.ideal=1080&config.constraints.video.width.ideal=1920&config.videoQuality.preferredCodec=vp9&config.videoQuality.maxReceiverVideoQuality=1080`
+    : `&config.videoQuality.preferredCodec=vp8`;
+  const jitsiUrl = `https://${baseDomain}/${session.roomId}#config.resolution=1080&config.desktopSharingFrameRate.min=${minFps}&config.desktopSharingFrameRate.max=${maxFps}&config.videoQuality.enforcePreferredCodec=true${extraParams}`;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
@@ -111,8 +117,21 @@ export default function InterviewRoom() {
               {session.type === 'hr_interview' ? 'HR Interview' : 'Technical Interview'} - {session.studentName || 'Student'}
             </h1>
           </div>
-          <div className="text-xs text-gray-400 bg-gray-800 px-3 py-1 rounded-lg">
-            If screen share is blurry, consider checking your internet bandwidth.
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Screen Share Optimization Selector */}
+            <div className="flex items-center gap-1.5 bg-gray-800 border border-gray-700 px-3 py-1 rounded-xl text-xs text-slate-200">
+              <Monitor className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+              <span className="text-gray-400 font-semibold hidden sm:inline">Screen Quality:</span>
+              <select
+                value={screenshareOptimization}
+                onChange={(e) => setScreenshareOptimization(e.target.value as 'text' | 'motion')}
+                className="bg-transparent text-slate-200 font-bold focus:ring-0 focus:outline-none border-none py-0.5 cursor-pointer pr-6 text-xs outline-none"
+                title="Optimize screen share for text readability (low frame rate, high resolution) or smooth video motion"
+              >
+                <option value="text" className="bg-gray-900 text-slate-200">Text & Slides (Crisp 1080p)</option>
+                <option value="motion" className="bg-gray-900 text-slate-200">Video & Motion (Smooth FPS)</option>
+              </select>
+            </div>
           </div>
         </div>
         <div className="flex-1 bg-black">

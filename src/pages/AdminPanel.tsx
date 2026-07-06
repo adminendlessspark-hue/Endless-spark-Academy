@@ -367,6 +367,7 @@ export default function AdminPanel() {
   const [enableDocumentDownloads, setEnableDocumentDownloads] = useState<boolean>(false);
   const [qcErrorCategories, setQcErrorCategories] = useState<string[]>(['Typography', 'Color', 'Layout', 'Bleed/Trim', 'Other']);
   const [aiKnowledgeBase, setAiKnowledgeBase] = useState<string>('');
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
   const [googleDriveBaseLink, setGoogleDriveBaseLink] = useState<string>('');
   const [softwareVideos, setSoftwareVideos] = useState<any[]>([]);
   const [showSoftwareVideoModal, setShowSoftwareVideoModal] = useState(false);
@@ -746,6 +747,7 @@ export default function AdminPanel() {
         setTeamViewerUrlAdmin(data.teamViewerUrl || 'https://www.teamviewer.com/download');
         setAdobeScriptToolkitUrlAdmin(data.adobeScriptToolkitUrl || 'https://github.com/Adobe-CEP/CEP-Resources');
         setAiKnowledgeBase(data.aiKnowledgeBase || '');
+        setGeminiApiKey(data.geminiApiKey || '');
         setBranches(data.branches || []);
         // Still read from admin for backward compatibility
         if (data.banners) {
@@ -8355,19 +8357,37 @@ export default function AdminPanel() {
                     placeholder="Paste the authorized printing and packaging knowledge here..."
                     className="w-full h-64 p-4 text-sm border border-gray-200 rounded-2xl focus:ring-2 focus:ring-pink-500 outline-none resize-none bg-gray-50"
                   />
-                  <div className="flex justify-end">
+
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
+                      <Key className="w-4 h-4 text-pink-600" />
+                      Gemini API Key (Required for Custom Domains / Static Hosting)
+                    </label>
+                    <input
+                      type="password"
+                      value={geminiApiKey}
+                      onChange={(e) => setGeminiApiKey(e.target.value.trim())}
+                      placeholder="Enter Gemini API Key (e.g., AIzaSy...)"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm font-mono bg-gray-50/50"
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                      If your custom domain is hosted on a static server (like Hostinger cPanel File Manager, GitHub Pages, or Netlify), your Node.js backend does not run, and `/api/*` endpoints will fail. Enabling this key allows the student AI chatbot to safely make direct client-side calls to the Gemini API securely.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end mt-4">
                     <button
                       onClick={async () => {
                         try {
-                          await setDoc(doc(db, 'settings', 'admin'), { aiKnowledgeBase }, { merge: true });
-                          alert('AI Knowledge Base updated successfully!');
+                          await setDoc(doc(db, 'settings', 'admin'), { aiKnowledgeBase, geminiApiKey }, { merge: true });
+                          alert('AI Settings updated successfully!');
                         } catch (err) {
                           handleFirestoreError(err, OperationType.UPDATE, 'settings/admin');
                         }
                       }}
                       className="px-6 py-2 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 transition-colors shadow-lg shadow-pink-100"
                     >
-                      Save Knowledge Base
+                      Save AI Settings
                     </button>
                   </div>
                 </div>

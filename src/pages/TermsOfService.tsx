@@ -173,7 +173,7 @@ export default function TermsOfService() {
             <p className="text-gray-600">
               If you have any questions about these Terms of Service, please contact us at:
               <br /><br />
-              <span className="font-bold text-pink-600">adminendlessspark@gmail.com</span>
+              <span className="font-bold text-pink-600">info@endlesssparkcreativehub.in</span>
               <br />
               <span className="font-bold text-pink-600">+91 90428 21999</span>
               <br />

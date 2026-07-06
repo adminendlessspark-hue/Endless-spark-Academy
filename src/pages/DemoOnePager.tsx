@@ -136,7 +136,11 @@ const getSyllabusForCourse = (courseId: string, dbModules: any[]) => {
 // Delegated to imported functions from /src/data/courseProjects.ts
 ;
 
-export default function DemoOnePager() {
+interface DemoOnePagerProps {
+  isAdminMode?: boolean;
+}
+
+export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps = {}) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { financialSettings } = useSettings();
@@ -417,7 +421,7 @@ Question: ${text}`
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
+    <div className="text-slate-800 flex flex-col font-sans min-h-screen bg-slate-50">
       
       {/* Top Banner & Navigation */}
       <header className="bg-slate-900 text-white border-b border-slate-800 shadow-lg relative overflow-hidden">
@@ -429,34 +433,51 @@ Question: ${text}`
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 text-pink-400 font-bold text-xs uppercase tracking-widest rounded-full mb-3">
                 <Sparkles className="w-3.5 h-3.5" />
-                Live Dynamic Experience One-Pager
+                {isAdminMode ? "Admin Demonstration & Roadmap Center" : "Live Dynamic Experience One-Pager"}
               </div>
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white mb-2">
-                Interactive <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-rose-400 to-indigo-400">Demo Center</span>
+                {isAdminMode ? "Course Demonstration" : "Interactive"}{" "}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-rose-400 to-indigo-400">Demo Center</span>
               </h1>
               <p className="text-slate-300 text-sm sm:text-base max-w-3xl leading-relaxed">
-                Experience the comprehensive student workflow, test our real-time AI Printing Consultant, and inspect the automated artwork pre-flight checkers of the **Endless Spark School of Printing and Packaging** in one place.
+                {isAdminMode 
+                  ? "Demonstrate the complete student workflow, the real-time AI Printing Consultant playground, and live pre-flight packaging/artwork checker modules to potential students."
+                  : "Experience the comprehensive student workflow, test our real-time AI Printing Consultant, and inspect the automated artwork pre-flight checkers of the **Endless Spark School of Printing and Packaging** in one place."
+                }
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button 
-                onClick={() => navigate('/')}
-                className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center gap-2"
-                id="demo-back-home-btn"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Landing Page
-              </button>
-              <button 
-                onClick={() => navigate('/book-consultation')}
-                className="px-6 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-pink-900/30 flex items-center gap-2"
-                id="demo-book-direct-btn"
-              >
-                <Calendar className="w-4 h-4" />
-                Book 1-on-1 Demo Slot
-              </button>
-            </div>
+            {isAdminMode ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <button 
+                  onClick={() => navigate('/admin')}
+                  className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center gap-2"
+                  id="demo-back-admin-btn"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to Admin Panel
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <button 
+                  onClick={() => navigate('/')}
+                  className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center gap-2"
+                  id="demo-back-home-btn"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Landing Page
+                </button>
+                <button 
+                  onClick={() => navigate('/book-consultation')}
+                  className="px-6 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-pink-900/30 flex items-center gap-2"
+                  id="demo-book-direct-btn"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Book 1-on-1 Demo Slot
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Navigation Tabs */}
@@ -601,7 +622,7 @@ Question: ${text}`
                       <span className="w-3 h-3 rounded-full bg-emerald-500 block" />
                     </div>
                     <div className="bg-slate-900 rounded-lg px-4 py-1 text-[10px] text-slate-400 font-mono flex-grow max-w-sm mx-auto text-center truncate select-none border border-slate-800">
-                      https://school.endlessspark.com/student/dashboard?stage={dashboardStage}
+                      https://endlesssparkcreativehub.in/student/dashboard?stage={dashboardStage}
                     </div>
                     <span className="px-3 py-1 bg-pink-500/20 text-pink-400 text-[10px] font-bold rounded-md uppercase border border-pink-500/20">
                       Live Mock Preview

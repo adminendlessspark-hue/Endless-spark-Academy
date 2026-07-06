@@ -49,14 +49,14 @@ export default function StudentProjects() {
         }
       });
 
-      // 2. Share student submitted files with adminendlessspark@gmail.com
+      // 2. Share student submitted files with info@endlesssparkcreativehub.in
       const submittedLinks = [project.projectFileUrl];
       submittedLinks.forEach(link => {
         if (link && link.includes('drive.google.com')) {
           fetch('/api/share-drive-file', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ driveUrl: link, studentEmail: 'adminendlessspark@gmail.com', role: 'writer' })
+            body: JSON.stringify({ driveUrl: link, studentEmail: 'info@endlesssparkcreativehub.in', role: 'writer' })
           }).catch(err => console.error("Error auto-sharing submitted link with admin in list:", err));
         }
       });

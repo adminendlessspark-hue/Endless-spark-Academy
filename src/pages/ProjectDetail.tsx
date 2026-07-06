@@ -410,7 +410,7 @@ export default function ProjectDetail() {
       }
     });
 
-    // 2. Share the student's submitted project files with adminendlessspark@gmail.com so the QC team doesn't need approval
+    // 2. Share the student's submitted project files with info@endlesssparkcreativehub.in so the QC team doesn't need approval
     const submittedLinks = [project.projectFileUrl];
     submittedLinks.forEach(link => {
       if (link && link.includes('drive.google.com')) {
@@ -418,7 +418,7 @@ export default function ProjectDetail() {
         fetch('/api/share-drive-file', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ driveUrl: link, studentEmail: 'adminendlessspark@gmail.com', role: 'writer' })
+          body: JSON.stringify({ driveUrl: link, studentEmail: 'info@endlesssparkcreativehub.in', role: 'writer' })
         }).catch(err => console.error("Error auto-sharing submitted link with admin:", err));
       }
     });

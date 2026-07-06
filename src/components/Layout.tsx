@@ -21,7 +21,7 @@ const navItems = [
   { name: 'Video Intro', path: '/video-intro', icon: Video },
   { name: 'Course Modules', path: '/modules', icon: BookOpen },
   { name: 'Software Library', path: '/software-library', icon: Video },
-  { name: 'Template Library', path: '/project-library', icon: FileText },
+
   { name: 'Master Library', path: '/master-library', icon: FolderKanban, adminOnly: true },
   { name: 'My Projects', path: '/projects', icon: FolderKanban },
   { name: 'Query Tracker', path: '/queries', icon: MessageCircle },
@@ -59,7 +59,7 @@ export default function Layout({ children }: LayoutProps) {
       if (item.accountsOnly && (user?.role === 'accounts_executive' || isAdmin)) return true;
       
       // Common items for staff
-      return ['/dashboard', '/modules', '/software-library', '/project-library', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
+      return ['/dashboard', '/modules', '/software-library', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
     }
 
     if (user?.role === 'student') {
@@ -80,7 +80,7 @@ export default function Layout({ children }: LayoutProps) {
       
       // 4th stage (Approved): show Dashboard, Video intro, Course Module, Software Library, Templates, Master, My Projects, Online Test
       if (user.isApproved) {
-        return ['/dashboard', '/video-intro', '/modules', '/software-library', '/project-library', '/projects', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
+        return ['/dashboard', '/video-intro', '/modules', '/software-library', '/projects', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
       }
     }
     

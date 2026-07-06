@@ -14,7 +14,7 @@ export interface Banner {
 import { useAuth } from '../AuthContext';
 
 export function useSettings() {
-  const [logoUrl, setLogoUrl] = useState<string>(() => localStorage.getItem('cached_logoUrl') || '');
+  const [logoUrl, setLogoUrl] = useState<string>(() => localStorage.getItem('cached_logoUrl') || '/logo.png');
   const [landingPageTitleImageUrl, setLandingPageTitleImageUrl] = useState<string>(() => localStorage.getItem('cached_titleImageUrl') || '');
   const [branches, setBranches] = useState<string[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -69,8 +69,8 @@ export function useSettings() {
           setLogoUrl(data.logoUrl);
           localStorage.setItem('cached_logoUrl', data.logoUrl);
         } else {
-          setLogoUrl('');
-          localStorage.removeItem('cached_logoUrl');
+          setLogoUrl('/logo.png');
+          localStorage.setItem('cached_logoUrl', '/logo.png');
         }
         if (data.landingPageTitleImageUrl) {
           setLandingPageTitleImageUrl(data.landingPageTitleImageUrl);
@@ -199,7 +199,12 @@ export function useSettings() {
           emiRules: [
             { durationMonths: 3, emiCount: 2 },
             { durationMonths: 6, emiCount: 5 }
-          ]
+          ],
+          razorpayDetails: {
+            enabled: true,
+            keyId: '',
+            keySecret: ''
+          }
         });
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'settings/financial'));

@@ -99,6 +99,61 @@ function ensureAssignmentPdfExists() {
   }
 }
 
+// Auto-activate Razorpay checkout gateway in Firestore settings/financial document
+async function activateRazorpay() {
+  try {
+    const db = getDb();
+    const settingsDocRef = db.collection("settings").doc("financial");
+    const docSnap = await settingsDocRef.get();
+    
+    if (docSnap.exists) {
+      const data = docSnap.data() || {};
+      const razorpayDetails = data.razorpayDetails || {};
+      
+      // Update it to enable Razorpay if it's not already enabled
+      if (!razorpayDetails.enabled) {
+        console.log("Database Migration: Activating Razorpay Payment Gateway in existing financial settings...");
+        await settingsDocRef.update({
+          "razorpayDetails.enabled": true,
+          "updatedAt": new Date().toISOString(),
+          "updatedBy": "system-auto-activation"
+        });
+      }
+    } else {
+      console.log("Database Migration: Creating default financial settings document with activated Razorpay...");
+      const defaultCoursesConfig = [
+        { courseId: 'packaging-engineer', title: 'Diploma in Packaging Engineer', fees: 35000, durationMonths: 3 },
+        { courseId: 'production-art-engineer', title: 'Diploma in Production Art Engineer', fees: 35000, durationMonths: 3 },
+        { courseId: 'print-ready-engineer', title: 'Diploma in Print Ready Engineer', fees: 35000, durationMonths: 3 },
+        { courseId: 'plate-ready-engineer', title: 'Diploma in Plate Ready Engineer', fees: 35000, durationMonths: 3 },
+        { courseId: 'colour-retouching-engineer', title: 'Diploma in Colour Retouching Engineer', fees: 35000, durationMonths: 3 },
+        { courseId: 'quality-control-engineer', title: 'Diploma in Quality Control Engineer', fees: 35000, durationMonths: 3 },
+        { courseId: 'printing-and-packaging-cross-courses', title: 'Diploma in Printing and Packaging Cross Courses', fees: 35000, durationMonths: 3 }
+      ];
+      await settingsDocRef.set({
+        coursesConfig: defaultCoursesConfig,
+        emiRules: [
+          { durationMonths: 3, emiCount: 2 },
+          { durationMonths: 6, emiCount: 5 }
+        ],
+        interestRatePercentage: 7,
+        penaltyPercentage: 0,
+        internalReferralPercentage: 2,
+        externalReferralPercentage: 5,
+        razorpayDetails: {
+          enabled: true,
+          keyId: "",
+          keySecret: ""
+        },
+        updatedAt: new Date().toISOString(),
+        updatedBy: "system-auto-activation"
+      });
+    }
+  } catch (err) {
+    console.warn("Could not automatically activate Razorpay settings in Firestore:", err);
+  }
+}
+
 
 // Initialize Firebase Admin
 const firebaseConfig = JSON.parse(fs.readFileSync("./firebase-applet-config.json", "utf-8"));
@@ -175,6 +230,7 @@ async function startServer() {
     fs.mkdirSync(localUploadsDir, { recursive: true });
   }
   ensureAssignmentPdfExists();
+  await activateRazorpay();
   app.use("/uploads", express.static(localUploadsDir));
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
@@ -376,28 +432,46 @@ async function startServer() {
 
   // API route to create Razorpay Order
   app.post("/api/razorpay/create-order", async (req: any, res: any) => {
-    const { amount, description } = req.body;
+    const { amount, description, razorpayDetails } = req.body;
     if (!amount) return res.status(400).json({ error: "Amount required" });
 
     try {
-      const db = getDb();
-      // Fetch Razorpay credentials from financial settings in Firestore
-      const settingsDoc = await db.collection("settings").doc("financial").get();
-      
       let keyId = process.env.RAZORPAY_KEY_ID;
       let keySecret = process.env.RAZORPAY_KEY_SECRET;
       let enabled = false;
 
-      if (settingsDoc.exists) {
-        const data = settingsDoc.data();
-        if (data?.razorpayDetails) {
-          enabled = !!data.razorpayDetails.enabled;
-          if (data.razorpayDetails.keyId) {
-            keyId = data.razorpayDetails.keyId;
+      // First use credentials passed from client if available
+      if (razorpayDetails) {
+        enabled = !!razorpayDetails.enabled;
+        if (razorpayDetails.keyId) {
+          keyId = razorpayDetails.keyId;
+        }
+        if (razorpayDetails.keySecret) {
+          keySecret = razorpayDetails.keySecret;
+        }
+      }
+
+      // Fallback/backup: Try to read from Firestore settings
+      if (!enabled || !keyId || !keySecret) {
+        try {
+          const db = getDb();
+          const settingsDoc = await db.collection("settings").doc("financial").get();
+          if (settingsDoc.exists) {
+            const data = settingsDoc.data();
+            if (data?.razorpayDetails) {
+              if (!enabled) {
+                enabled = !!data.razorpayDetails.enabled;
+              }
+              if (!keyId && data.razorpayDetails.keyId) {
+                keyId = data.razorpayDetails.keyId;
+              }
+              if (!keySecret && data.razorpayDetails.keySecret) {
+                keySecret = data.razorpayDetails.keySecret;
+              }
+            }
           }
-          if (data.razorpayDetails.keySecret) {
-            keySecret = data.razorpayDetails.keySecret;
-          }
+        } catch (firestoreErr) {
+          console.warn("Firestore settings read failed or skipped during Razorpay order creation:", firestoreErr);
         }
       }
 
@@ -433,7 +507,14 @@ async function startServer() {
       if (!rzpResponse.ok) {
         const errorText = await rzpResponse.text();
         console.error("Razorpay API creation failure:", errorText);
-        throw new Error(`Razorpay responded with status ${rzpResponse.status}: ${errorText}`);
+        let cleanMsg = `Status ${rzpResponse.status}: ${errorText}`;
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed?.error?.description) {
+            cleanMsg = parsed.error.description;
+          }
+        } catch (e) {}
+        throw new Error(cleanMsg);
       }
 
       const rzpOrder: any = await rzpResponse.json();

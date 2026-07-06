@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { LogIn, UserPlus, Shield, FileText, Award, BookOpen, Video, GraduationCap, MessageCircle, PhoneCall, XCircle, Mail, ChevronLeft, ChevronRight, MapPin, Zap, Sparkles, Calendar, Clock, CreditCard, CheckCircle2, User, Phone, Check, ChevronDown } from 'lucide-react';
+import { LogIn, UserPlus, Shield, FileText, Award, BookOpen, Video, GraduationCap, MessageCircle, PhoneCall, Mail, ChevronLeft, ChevronRight, MapPin, Zap, Sparkles, Calendar, Clock, CreditCard, CheckCircle2, User, Phone, Check, ChevronDown } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 
 export default function Landing() {
   const { logoUrl, landingPageTitleImageUrl, branches, banners, landingPageStats, loading } = useSettings();
-  const [showEnquireModal, setShowEnquireModal] = useState(false);
-  const [enquireForm, setEnquireForm] = useState({ name: '', email: '', phone: '', countryCode: '+91' });
   const [currentBanner, setCurrentBanner] = useState(0);
 
   useEffect(() => {
@@ -17,15 +15,6 @@ export default function Landing() {
     }, 5000);
     return () => clearInterval(interval);
   }, [banners]);
-
-  const handleEnquireSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const subject = encodeURIComponent("New Enquiry from Landing Page");
-    const body = encodeURIComponent(`Name: ${enquireForm.name}\nEmail: ${enquireForm.email}\nContact Number: ${enquireForm.countryCode} ${enquireForm.phone}\n\nI would like to enquire about the courses.`);
-    window.location.href = `mailto:adminendlessspark@gmail.com?subject=${subject}&body=${body}`;
-    setShowEnquireModal(false);
-    setEnquireForm({ name: '', email: '', phone: '', countryCode: '+91' });
-  };
 
   const showLoader = loading && !logoUrl && !landingPageTitleImageUrl;
 
@@ -84,16 +73,19 @@ export default function Landing() {
             transition={{ duration: 0.6, delay: 0.1 }}
           >
             {landingPageTitleImageUrl ? (
-              <div className="flex justify-center mb-8">
-                <img src={landingPageTitleImageUrl} alt="School of Printing and Packaging" className="w-full max-w-lg h-auto object-contain transition-all duration-300 hover:scale-[1.02]" />
+              <div className="flex flex-col items-center justify-center mb-8">
+                <img src={landingPageTitleImageUrl} alt="School of Printing and Packaging" className="w-full max-w-xs md:max-w-sm h-auto object-contain transition-all duration-300 hover:scale-[1.02]" />
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black uppercase tracking-tight text-indigo-950 mt-8 max-w-4xl text-center leading-tight">
+                  PRINTING AND PACKAGING TECHNOLOGY
+                </h1>
               </div>
             ) : (
               <h1 className="tracking-tight mb-8 leading-tight">
                 <span className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 block transition-all duration-300 hover:scale-[1.02] cursor-default drop-shadow-sm">
                   Endless Spark
                 </span>
-                <span className="text-sm sm:text-lg md:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-600 to-rose-600 mt-2 block tracking-tight">
-                  School of Printing and Packaging
+                <span className="text-sm sm:text-lg md:text-xl font-bold uppercase text-indigo-950 mt-2 block tracking-tight">
+                  PRINTING AND PACKAGING TECHNOLOGY
                 </span>
               </h1>
             )}
@@ -103,22 +95,18 @@ export default function Landing() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="text-lg md:text-xl text-slate-700 max-w-3xl mx-auto mb-10 leading-relaxed font-medium"
+            className="text-lg md:text-xl text-slate-700 max-w-3xl mx-auto mb-4 leading-relaxed font-medium"
           >
             The official training and certification portal for the next generation of printing and packaging professionals. 
             Manage your admission, access specialized modules, and track your academic journey all in one place.
           </motion.p>
-          
+
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.5 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 flex-wrap"
+            className="flex flex-col sm:flex-row items-center justify-center gap-4 flex-wrap mt-8"
           >
-            <Link to="/demo" className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-5 text-lg rounded-[2.5rem] shadow-2xl shadow-indigo-200 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 group">
-              <Sparkles className="w-5 h-5 text-purple-200 group-hover:scale-125 transition-transform" />
-              Interactive Demo
-            </Link>
             <Link to="/book-consultation" className="w-full sm:w-auto bg-pink-600 text-white px-8 py-5 text-lg rounded-[2.5rem] shadow-2xl shadow-pink-200 flex items-center justify-center gap-3 font-bold hover:scale-105 transition-all duration-300 group">
               <Calendar className="w-5 h-5 text-pink-200 group-hover:scale-125 transition-transform" />
               Consultation
@@ -423,8 +411,8 @@ export default function Landing() {
                   <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0 border border-indigo-500/20 group-hover:bg-indigo-500/20 transition-all duration-300">
                     <Mail className="w-4 h-4 text-indigo-400" />
                   </div>
-                  <a href="mailto:adminendlessspark@gmail.com" className="text-slate-400 hover:text-slate-200 transition-colors truncate">
-                    adminendlessspark@gmail.com
+                  <a href="mailto:info@endlesssparkcreativehub.in" className="text-slate-400 hover:text-slate-200 transition-colors truncate">
+                    info@endlesssparkcreativehub.in
                   </a>
                 </div>
 
@@ -507,101 +495,6 @@ export default function Landing() {
           Need help? Chat with us!
         </span>
       </motion.a>
-
-      {/* Floating Enquire Button */}
-      <button
-        onClick={() => setShowEnquireModal(true)}
-        className="fixed top-1/2 right-0 -translate-y-1/2 bg-pink-600 text-white py-2 px-1 rounded-l-lg shadow-2xl hover:bg-pink-700 hover:pr-2 transition-all z-40 flex flex-col items-center justify-center"
-        style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-      >
-        <span className="font-bold tracking-widest rotate-180 uppercase text-xs">Enquire</span>
-      </button>
-
-      {/* Enquire Modal */}
-      {showEnquireModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl relative">
-            <button 
-              onClick={() => setShowEnquireModal(false)}
-              className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <XCircle className="w-6 h-6" />
-            </button>
-            
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center">
-                <Mail className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900">Enquire Now</h3>
-                <p className="text-sm text-gray-500">We'll get back to you via email.</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleEnquireSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input
-                  type="text"
-                  required
-                  value={enquireForm.name}
-                  onChange={(e) => setEnquireForm({ ...enquireForm, name: e.target.value })}
-                  className="w-full rounded-xl border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500"
-                  placeholder="Your full name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email ID</label>
-                <input
-                  type="email"
-                  required
-                  value={enquireForm.email}
-                  onChange={(e) => setEnquireForm({ ...enquireForm, email: e.target.value })}
-                  className="w-full rounded-xl border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500"
-                  placeholder="your@email.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number</label>
-                <div className="flex gap-2">
-                  <select
-                    value={enquireForm.countryCode}
-                    onChange={(e) => setEnquireForm({ ...enquireForm, countryCode: e.target.value })}
-                    className="w-24 rounded-xl border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500 bg-gray-50"
-                  >
-                    <option value="+91">+91 (IN)</option>
-                    <option value="+1">+1 (US/CA)</option>
-                    <option value="+44">+44 (UK)</option>
-                    <option value="+971">+971 (UAE)</option>
-                    <option value="+61">+61 (AU)</option>
-                    <option value="+65">+65 (SG)</option>
-                    <option value="+60">+60 (MY)</option>
-                  </select>
-                  <input
-                    type="tel"
-                    required
-                    value={enquireForm.phone}
-                    onChange={(e) => setEnquireForm({ ...enquireForm, phone: e.target.value })}
-                    className="flex-1 rounded-xl border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500"
-                    placeholder="Phone number"
-                  />
-                </div>
-              </div>
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="w-full bg-pink-600 text-white py-3 rounded-xl font-bold hover:bg-pink-700 transition-colors shadow-lg shadow-pink-200"
-                >
-                  Send Enquiry
-                </button>
-              </div>
-              <p className="text-xs text-center text-gray-500 mt-4">
-                Don't have WhatsApp? Fill out this form and we'll email you at adminendlessspark@gmail.com.
-              </p>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -73,7 +73,7 @@ export default function PrivacyPolicy() {
             <p>
               If you have any questions about this Privacy Policy, please contact us at:
               <br />
-              <span className="font-bold text-pink-600">adminendlessspark@gmail.com</span>
+              <span className="font-bold text-pink-600">info@endlesssparkcreativehub.in</span>
               <br />
               <span className="font-bold text-pink-600">+91 90428 21999</span>
               <br />

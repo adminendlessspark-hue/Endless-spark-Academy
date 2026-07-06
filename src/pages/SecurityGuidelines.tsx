@@ -206,7 +206,7 @@ export default function SecurityGuidelines() {
               <p className="text-xs text-gray-500 mt-1 mb-4">If issues persist after following these guidelines, please contact the development team.</p>
               <div className="flex gap-4">
                 <a 
-                  href="mailto:support@endlessspark.com"
+                  href="mailto:support@endlesssparkcreativehub.in"
                   className="px-6 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   Contact Support

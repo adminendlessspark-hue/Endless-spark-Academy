@@ -154,7 +154,7 @@ export default function CertificateGenerator({ user, course, logoUrl, adminSigna
       const token = `ES-${course.substring(0,2).toUpperCase()}-${Math.random().toString(36).substring(2,8).toUpperCase()}`;
       doc.setFontSize(8);
       doc.setTextColor(156, 163, 175);
-      doc.text(`Verify at: endlessspark.edu/verify/${token}`, width / 2, height - 15, { align: 'center' });
+      doc.text(`Verify at: endlesssparkcreativehub.in/verify/${token}`, width / 2, height - 15, { align: 'center' });
 
       doc.save(`EndlessSpark_Certificate_${user.name.replace(/\s+/g, '_')}.pdf`);
     } catch (error) {

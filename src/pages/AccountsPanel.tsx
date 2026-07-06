@@ -78,6 +78,11 @@ export default function AccountsPanel() {
           penaltyPercentage: 0,
           internalReferralPercentage: 2,
           externalReferralPercentage: 5,
+          razorpayDetails: {
+            enabled: true,
+            keyId: '',
+            keySecret: ''
+          },
           updatedAt: new Date().toISOString(),
           updatedBy: 'system'
         });

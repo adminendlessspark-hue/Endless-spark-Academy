@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Award, Check, Clock, CreditCard, CheckCircle2, User, Mail, Phone, ChevronDown, MessageCircle, Sparkles, Calendar, ArrowLeft, LogIn } from 'lucide-react';
+import { Award, Check, Clock, CreditCard, CheckCircle2, User, Mail, Phone, ChevronDown, MessageCircle, Sparkles, Calendar, ArrowLeft, LogIn, X } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
@@ -18,7 +18,7 @@ export default function BookConsultation() {
     email: '',
     phone: '',
     countryCode: '+91',
-    topic: 'Student Dashboard & AI Features'
+    topic: 'Career Development'
   });
   const [bookingDate, setBookingDate] = useState<string>('');
   const [bookingTime, setBookingTime] = useState<string>('');
@@ -32,9 +32,7 @@ export default function BookConsultation() {
     for (let i = 1; i <= 14; i++) {
       const d = new Date();
       d.setDate(today.getDate() + i);
-      if (d.getDay() !== 0) { // Skip Sundays
-        days.push(d);
-      }
+      days.push(d);
     }
     return days;
   };
@@ -42,19 +40,20 @@ export default function BookConsultation() {
   const getSlotsForDate = (dateString: string) => {
     if (!dateString) return [];
     const [year, month, dayNum] = dateString.split('-').map(Number);
-    const date = new Date(year, month - 1, dayNum);
-    const day = date.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, ...
+    // Explicitly use noon to prevent timezone shifts to previous/next day
+    const date = new Date(year, month - 1, dayNum, 12, 0, 0);
+    const day = date.getDay(); // 0 = Sun, 1 = Mon, ...
     const slots = [];
 
-    // Monday (1) or Saturday (6): every two hours 9:00 AM to 4:00 PM
-    if (day === 1 || day === 6) {
+    // Saturday (6) and Sunday (0): every two hours 9:00 AM to 5:00 PM
+    if (day === 6 || day === 0) {
       slots.push("09:00 AM - 11:00 AM");
       slots.push("11:00 AM - 01:00 PM");
       slots.push("01:00 PM - 03:00 PM");
       slots.push("03:00 PM - 05:00 PM");
     }
 
-    // Monday to Friday (1 to 5): After 7:30 PM to 8:00 PM
+    // Monday to Friday (1 to 5): Only available 7:30 PM to 8:00 PM
     if (day >= 1 && day <= 5) {
       slots.push("07:30 PM - 08:00 PM");
     }
@@ -171,7 +170,7 @@ export default function BookConsultation() {
               Personalized Career Guidance
             </span>
             <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mt-4">
-              Book a 1-on-1 Consultation & Demo
+              Consultation
             </h1>
             <p className="text-slate-600 mt-4 text-lg">
               Secure a dedicated slot with our leading educational consultants. Get a personalized walkthrough of the syllabus, live platform features, and a clear career roadmap.
@@ -387,12 +386,7 @@ export default function BookConsultation() {
                             className="w-full pl-4 pr-10 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm appearance-none"
                             id="consultant-topic-select"
                           >
-                            <option value="Student Dashboard & AI Features">Student Dashboard & AI Features (Demo & Overview)</option>
-                            <option value="Student Projects Showcase & Review">Student Projects Showcase & Review (Demo & Showcase)</option>
-                            <option value="Production Art Engineer">Production Art Engineer (Syllabus & Demo)</option>
-                            <option value="Print Ready Engineer">Print Ready Engineer (Syllabus & Demo)</option>
-                            <option value="Packaging Design Specialist">Packaging Design Specialist (Syllabus & Demo)</option>
-                            <option value="General Career Consultation">General 1-on-1 Career Advice</option>
+                            <option value="Career Development">Career Development</option>
                           </select>
                           <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
                         </div>
@@ -404,7 +398,7 @@ export default function BookConsultation() {
                   <div className="space-y-4 pt-4 border-t border-slate-100">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                       <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-xs font-mono">2</span>
-                      Select Date (Mon-Sat availability)
+                      Select Date (Mon-Sun availability)
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {getNext14Days().map((dayDate) => {
@@ -504,13 +498,13 @@ export default function BookConsultation() {
       {/* Digital Payment Gateway Modal */}
       {showBookingPayment && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl relative overflow-hidden" id="booking-payment-modal">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden" id="booking-payment-modal">
             <button 
               onClick={() => setShowBookingPayment(false)}
               className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors z-10"
               id="close-booking-payment-btn"
             >
-              <CheckCircle2 className="w-6 h-6" />
+              <X className="w-6 h-6" />
             </button>
             <DigitalPaymentGateway
               amount={500}

@@ -391,7 +391,7 @@ export default function WebinarRegistration() {
         {/* Direct billing modal widget popup */}
         {showPaymentModal && registeredDetails && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl p-2 animate-scale-up">
+            <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl p-2 animate-scale-up">
               <button
                 onClick={() => setShowPaymentModal(false)}
                 className="absolute top-4 right-4 text-gray-500 hover:text-slate-900 p-2 rounded-full hover:bg-gray-100 transition-colors z-10"
@@ -399,7 +399,7 @@ export default function WebinarRegistration() {
                 <X className="w-5 h-5" />
               </button>
               
-              <div className="p-1 text-slate-900">
+              <div className="p-1 text-slate-900 flex-1 flex flex-col overflow-hidden">
                 <DigitalPaymentGateway
                   amount={Number(marketingSettings?.webinarFeeAmount || 300)}
                   description={`${registeredDetails.webinarTitle} - Seat Reservation Slot`}

@@ -19,6 +19,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import AdminPanel from './pages/AdminPanel';
 import AdminDemo from './pages/AdminDemo';
+import AdminDemoCenter from './pages/AdminDemoCenter';
 import FacultyPanel from './pages/FacultyPanel';
 import TelecallerPanel from './pages/TelecallerPanel';
 import MarketingPanel from './pages/MarketingPanel';
@@ -33,7 +34,7 @@ import LeadCapture from './pages/LeadCapture';
 import CourseOverview from './pages/CourseOverview';
 import CommunicationAgent from './pages/CommunicationAgent';
 import ResumeBuilder from './pages/ResumeBuilder';
-import ProjectTemplateLibrary from './pages/ProjectTemplateLibrary';
+
 import MasterProjectLibrary from './pages/MasterProjectLibrary';
 import QueryTracker from './pages/QueryTracker';
 import HelpDesk from './pages/HelpDesk';
@@ -237,11 +238,7 @@ function AppContent() {
             <Layout><HelpDesk /></Layout>
           </ProtectedRoute>
         } />
-        <Route path="/project-library" element={
-          <ProtectedRoute allowAdmin>
-            <Layout><ProjectTemplateLibrary /></Layout>
-          </ProtectedRoute>
-        } />
+
         <Route path="/master-library" element={
           <AdminRoute>
             <Layout><MasterProjectLibrary /></Layout>
@@ -268,6 +265,11 @@ function AppContent() {
         <Route path="/admin/demo" element={
           <AdminRoute>
             <Layout><AdminDemo /></Layout>
+          </AdminRoute>
+        } />
+        <Route path="/admin/demo-center" element={
+          <AdminRoute>
+            <Layout><AdminDemoCenter /></Layout>
           </AdminRoute>
         } />
         <Route path="/faculty" element={

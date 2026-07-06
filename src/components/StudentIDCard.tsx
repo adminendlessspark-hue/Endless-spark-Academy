@@ -113,11 +113,11 @@ export default function StudentIDCard({ user, adminSignature }: StudentIDCardPro
             </div>
             <div className="flex items-center gap-1.5 text-gray-500 text-[11px] font-medium">
               <Mail className="w-3.5 h-3.5" />
-              <span>info@endlessspark.in</span>
+              <span>info@endlesssparkcreativehub.in</span>
             </div>
             <div className="flex items-center gap-1.5 text-gray-500 text-[11px] font-medium">
               <Globe className="w-3.5 h-3.5" />
-              <span>endlessspark.in</span>
+              <span>endlesssparkcreativehub.in</span>
             </div>
           </div>
           

@@ -2346,7 +2346,14 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
       {/* Digital Payment Modal */}
       {payingInvoices && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-300">
+          <div className="bg-white w-full max-w-md max-h-[90vh] flex flex-col rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-300 relative">
+            <button
+              onClick={() => setPayingInvoices(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors z-20"
+              title="Close Payment Gateway"
+            >
+              <X className="w-5 h-5" />
+            </button>
             <DigitalPaymentGateway 
               amount={payingInvoices.emi 
                 ? payingInvoices.emi.baseAmount + (payingInvoices.emi.interestAmount || 0) + (payingInvoices.emi.penaltyAmount || 0) - ((payingInvoices.invoice.waivers || []).filter((w: any) => w.emiNumber === payingInvoices.emi.emiNumber).reduce((sum: number, w: any) => sum + w.amount, 0))

@@ -10,6 +10,7 @@ import { cn, compressImage, calculateSLADate, formatCourseName, getScoreKey, get
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { FileUploader } from '../components/FileUploader';
 import FacultyRoadmapPlanner from '../components/FacultyRoadmapPlanner';
+import DemoOnePager from './DemoOnePager';
 import { 
   collection, 
   onSnapshot, 
@@ -161,7 +162,7 @@ export default function AdminPanel() {
     );
   };
   
-  const [activeTab, setActiveTab] = useState<'students' | 'videos' | 'marks' | 'settings' | 'staff' | 'holidays' | 'demo' | 'applications' | 'submissions' | 'reports' | 'live-classes' | 'invoices' | 'referrals' | 'software-videos' | 'projects' | 'pre-flight' | 'training-records' | 'entrance-test' | 'placements' | 'batch-center' | 'team' | 'system' | 'queries' | 'qc' | 'webinar' | 'roadmap' | 'training-plans'>(() => {
+  const [activeTab, setActiveTab] = useState<'students' | 'videos' | 'marks' | 'settings' | 'staff' | 'holidays' | 'demo' | 'applications' | 'submissions' | 'reports' | 'live-classes' | 'invoices' | 'referrals' | 'software-videos' | 'projects' | 'pre-flight' | 'training-records' | 'entrance-test' | 'placements' | 'batch-center' | 'team' | 'system' | 'queries' | 'qc' | 'webinar' | 'roadmap' | 'training-plans' | 'interactive-demo'>(() => {
     if (user?.role === 'qc') return 'qc';
     return 'marks';
   });
@@ -3035,6 +3036,7 @@ export default function AdminPanel() {
             { id: 'webinar', label: 'Webinar Leads', icon: Video },
             { id: 'batch-center', label: 'Batch Center', icon: Layers },
             { id: 'roadmap', label: 'Faculty Roadmap', icon: Layers },
+            { id: 'interactive-demo', label: 'Demo Center', icon: Sparkles },
             { id: 'team', label: 'Manage Team', icon: Users },
             { id: 'placements', label: 'Placements', icon: Briefcase },
             { id: 'holidays', label: 'Holidays', icon: Calendar },
@@ -3046,7 +3048,13 @@ export default function AdminPanel() {
             <button
               key={tab.id}
               id={`tab-${tab.id}`}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => {
+                if (tab.id === 'interactive-demo') {
+                  navigate('/admin/demo-center');
+                } else {
+                  setActiveTab(tab.id as any);
+                }
+              }}
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap",
                 activeTab === tab.id 
@@ -7491,37 +7499,7 @@ export default function AdminPanel() {
                 </div>
               ) : (
                 <>
-                  <div className="p-6 bg-white rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
-                <div className="relative">
-                  <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <Cloud className="w-5 h-5 text-indigo-600" />
-                    Project Template Library
-                  </h4>
-                  <p className="text-sm text-gray-600 mb-6 max-w-2xl">
-                    Manage all master project files, course assets, and templates in one centralized place using <strong>Firebase Storage</strong>. Students can download templates from the library and submit their final work via their dashboard.
-                  </p>
-                  
-                  <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-                        <FolderKanban className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h5 className="font-bold text-indigo-900">Direct File Management</h5>
-                        <p className="text-[11px] text-indigo-700">Upload direct files (Max 10GB total space) for student downloads.</p>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => navigate('/project-library')}
-                      className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all text-sm shrink-0"
-                    >
-                      Open Library
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+
 
               <AdminWhatsAppSettings />
 

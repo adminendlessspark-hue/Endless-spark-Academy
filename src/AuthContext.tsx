@@ -47,6 +47,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ADMIN_EMAILS = [
   'adminendlessspark@gmail.com',
   'endlessspark.in@gmail.com',
+  'info@endlesssparkcreativehub.in',
   // Add your new email address here to grant admin access
 ];
 
@@ -450,12 +451,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     let email = customEmail;
     if (!email) {
-      if (role === 'admin') email = 'adminendlessspark@gmail.com';
-      else if (role === 'qc') email = 'qc@endlessspark.com';
-      else if (role === 'faculty') email = 'faculty@endlessspark.com';
-      else if (role === 'telecaller') email = 'telecaller@endlessspark.com';
-      else if (role === 'marketing') email = 'marketing@endlessspark.com';
-      else email = 'student@endlessspark.com';
+      if (role === 'admin') email = 'info@endlesssparkcreativehub.in';
+      else if (role === 'qc') email = 'qc@endlesssparkcreativehub.in';
+      else if (role === 'faculty') email = 'faculty@endlesssparkcreativehub.in';
+      else if (role === 'telecaller') email = 'telecaller@endlesssparkcreativehub.in';
+      else if (role === 'marketing') email = 'marketing@endlesssparkcreativehub.in';
+      else email = 'student@endlesssparkcreativehub.in';
     }
     
     const bypassUserObj: User = {

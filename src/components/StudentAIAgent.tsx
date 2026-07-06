@@ -51,7 +51,11 @@ interface QuizQuestion {
   explanation: string;
 }
 
-export default function StudentAIAgent() {
+interface StudentAIAgentProps {
+  embedded?: boolean;
+}
+
+export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: 'Hello! I am your Printing and Packaging expert. How can I help you today?' }
@@ -323,6 +327,214 @@ export default function StudentAIAgent() {
       setIsLoading(false);
     }
   };
+
+  if (embedded) {
+    return (
+      <div className="w-full max-w-4xl mx-auto h-[600px] bg-white rounded-2xl shadow-md border border-gray-100 flex flex-col overflow-hidden no-print">
+        {/* Header */}
+        <div className="p-4 bg-pink-600 text-white flex flex-col">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                <Bot className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm">Endless Spark AI</h3>
+                <p className="text-[10px] text-pink-100 uppercase tracking-wider font-bold">Smart Student Agent (Preview Mode)</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {mode !== 'coach' && (
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="text-xs bg-pink-700 text-white border-none rounded p-1 outline-none cursor-pointer focus:ring-2 focus:ring-pink-400"
+                >
+                  <option value="English">English</option>
+                  <option value="Hindi">Hindi</option>
+                  <option value="Tamil">Tamil</option>
+                  <option value="Telugu">Telugu</option>
+                </select>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-1 bg-white/10 p-1 rounded-lg">
+            <button
+              onClick={() => { setMode('chat'); stopCoach(); }}
+              className={cn("flex-1 text-[10px] py-1.5 rounded-md font-bold transition-colors flex items-center justify-center gap-1 uppercase", mode === 'chat' ? "bg-white text-pink-600 shadow-sm" : "text-white hover:bg-white/20")}
+            >
+              <MessageCircle className="w-3 h-3" /> Chat
+            </button>
+            <button
+              onClick={() => { setMode('quiz'); stopCoach(); }}
+              className={cn("flex-1 text-[10px] py-1.5 rounded-md font-bold transition-colors flex items-center justify-center gap-1 uppercase", mode === 'quiz' ? "bg-white text-pink-600 shadow-sm" : "text-white hover:bg-white/20")}
+            >
+              <BrainCircuit className="w-3 h-3" /> Quiz
+            </button>
+            <button
+              onClick={() => setMode('coach')}
+              className={cn("flex-1 text-[10px] py-1.5 rounded-md font-bold transition-colors flex items-center justify-center gap-1 uppercase", mode === 'coach' ? "bg-white text-pink-600 shadow-sm" : "text-white hover:bg-white/20 text-pink-50")}
+            >
+              <Mic className="w-3 h-3" /> Communication Coach
+            </button>
+          </div>
+        </div>
+
+        {mode === 'chat' && (
+          <>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
+              {messages.map((msg, idx) => (
+                <div key={idx} className={cn("flex gap-3", msg.role === 'user' ? "flex-row-reverse" : "")}>
+                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", msg.role === 'user' ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600")}>
+                    {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                  </div>
+                  <div className={cn("p-3 rounded-2xl text-sm max-w-[80%] overflow-hidden", msg.role === 'user' ? "bg-blue-600 text-white rounded-tr-none" : "bg-white text-gray-800 shadow-sm border border-gray-100 rounded-tl-none")}>
+                    {msg.role === 'user' ? msg.content : <div className="markdown-body prose prose-sm max-w-none"><ReactMarkdown>{msg.content}</ReactMarkdown></div>}
+                  </div>
+                </div>
+              ))}
+              {isLoading && <div className="flex gap-3"><div className="w-8 h-8 bg-pink-100 text-pink-600 rounded-lg flex items-center justify-center shrink-0"><Bot className="w-4 h-4" /></div><div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-100"><Loader2 className="w-4 h-4 animate-spin text-pink-600" /></div></div>}
+              <div ref={messagesEndRef} />
+            </div>
+            <div className="p-4 bg-white border-t border-gray-100">
+              <div className="flex gap-2">
+                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="Ask anything..." className="flex-1 px-4 py-2 bg-gray-100 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500" />
+                <button onClick={handleSend} disabled={!input.trim() || isLoading} className="p-2 bg-pink-600 text-white rounded-xl hover:bg-pink-700 disabled:opacity-50 transition-all"><Send className="w-5 h-5" /></button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {mode === 'quiz' && (
+          <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50">
+            {quizState === 'idle' && (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4">
+                <BrainCircuit className="w-12 h-12 text-pink-600 bg-pink-100 p-2 rounded-2xl" />
+                <h4 className="font-bold text-gray-900">Study Quiz</h4>
+                <input type="text" value={quizTopic} onChange={(e) => setQuizTopic(e.target.value)} placeholder="Topic e.g. Flexography" className="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none" />
+                <button onClick={() => handleGenerateQuiz()} disabled={isLoading || !quizTopic} className="w-full py-3 bg-pink-600 text-white rounded-xl font-bold">Start Quiz</button>
+                <button onClick={() => handleGenerateQuiz("Our AI Agent Knowledge Base Content")} disabled={isLoading} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold">Quiz from Library</button>
+              </div>
+            )}
+            {quizState === 'generating' && <div className="flex-1 flex flex-col items-center justify-center space-y-2"><Loader2 className="w-8 h-8 animate-spin text-pink-600" /><p className="text-sm text-gray-500">Crafting questions...</p></div>}
+            {quizState === 'taking' && (
+              <div className="space-y-4">
+                {quizData.map((q, idx) => (
+                  <div key={idx} className="p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
+                    <p className="font-bold text-sm mb-3">{idx + 1}. {q.question}</p>
+                    <div className="space-y-2">
+                      {q.options.map((opt, oIdx) => (
+                        <button key={oIdx} onClick={() => setUserAnswers(prev => ({ ...prev, [idx]: oIdx }))} className={cn("w-full p-2.5 text-left text-sm rounded-lg border transition-colors", userAnswers[idx] === oIdx ? "bg-pink-50 border-pink-200 text-pink-700 font-medium" : "bg-gray-50 border-gray-100 text-gray-600 hover:bg-white")}>{opt}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <button onClick={() => setQuizState('results')} disabled={Object.keys(userAnswers).length < quizData.length} className="w-full py-3 bg-green-600 text-white rounded-xl font-bold">Submit Results</button>
+              </div>
+            )}
+            {quizState === 'results' && (
+              <div className="space-y-4">
+                <div className="bg-white p-6 rounded-xl border border-gray-100 text-center">
+                  <CheckCircle className="w-10 h-10 text-green-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold">Score: {Object.keys(userAnswers).filter(k => userAnswers[Number(k)] === quizData[Number(k)].answer).length}/{quizData.length}</p>
+                  <button onClick={() => setQuizState('idle')} className="mt-4 text-sm font-bold text-pink-600 underline">Try Another</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {mode === 'coach' && (
+          <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50 flex flex-col">
+            {!isCoachActive ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-6">
+                <div className="w-20 h-20 bg-pink-100 rounded-3xl flex items-center justify-center animate-pulse">
+                  <Mic className="w-10 h-10 text-pink-600" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-gray-900 text-lg">AI Communication Coach</h4>
+                  <p className="text-sm text-gray-500 mt-2">Practice your soft skills and spoken English with real-time feedback.</p>
+                </div>
+                
+                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-left animate-in fade-in zoom-in-95 duration-200">
+                  <h5 className="text-xs font-bold text-blue-800 uppercase mb-2 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Practice Topics
+                  </h5>
+                  <ul className="text-xs text-blue-700 space-y-1">
+                    <li>• Career Introduction</li>
+                    <li>• Describing Printing Processes</li>
+                    <li>• Client Communication</li>
+                  </ul>
+                </div>
+
+                <button
+                  onClick={startCoach}
+                  disabled={coachInitializing}
+                  className="w-full py-4 bg-pink-600 text-white rounded-2xl font-bold hover:bg-pink-700 transition-all shadow-lg shadow-pink-200 flex items-center justify-center gap-2"
+                >
+                  {coachInitializing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                  {coachInitializing ? 'Connecting Coach...' : 'Start Voice Session'}
+                </button>
+                
+                {coachError && (
+                  <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-xs font-medium">
+                    <ShieldAlert className="w-4 h-4 shrink-0" />
+                    {coachError}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col space-y-6">
+                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-pink-600/10" />
+                  <div className="w-16 h-16 bg-pink-600 rounded-full flex items-center justify-center mb-4 relative z-10">
+                    <Volume2 className="w-8 h-8 text-white animate-bounce" />
+                  </div>
+                  <p className="text-xs font-bold text-pink-600 uppercase tracking-widest animate-pulse">Agent is Listening...</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 relative">
+                     <MessageSquareQuote className="w-4 h-4 text-blue-300 absolute top-2 right-2" />
+                     <h5 className="text-[10px] font-bold text-blue-400 uppercase mb-1">Your Speech</h5>
+                     <p className="text-sm text-blue-800 italic">"{coachUserTranscript || 'Say something to start...'}"</p>
+                  </div>
+
+                  <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm relative">
+                     <Bot className="w-4 h-4 text-pink-200 absolute top-2 right-2" />
+                     <h5 className="text-[10px] font-bold text-gray-400 uppercase mb-1">Coach Feedback</h5>
+                     <p className="text-sm text-gray-700">{coachAgentTranscript.split('*FEEDBACK*')[0]}</p>
+                  </div>
+                </div>
+
+                {coachFeedbackNotes.length > 0 && (
+                  <div className="space-y-2">
+                     <h5 className="text-[10px] font-bold text-gray-400 uppercase px-1">Soft Skill Notes</h5>
+                     <div className="space-y-1">
+                       {coachFeedbackNotes.map((note, idx) => (
+                         <div key={idx} className="p-2 bg-green-50 text-green-700 rounded-lg text-xs border border-green-100 flex items-center gap-2">
+                           <CheckCircle className="w-3 h-3 shrink-0" />
+                           {note}
+                         </div>
+                       ))}
+                     </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={stopCoach}
+                  className="mt-auto w-full py-3 bg-gray-900 text-white rounded-2xl font-bold hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
+                >
+                  <X className="w-4 h-4" /> End Practice
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="no-print">

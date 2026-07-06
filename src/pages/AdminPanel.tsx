@@ -48,6 +48,7 @@ import { generateGeminiContent } from '../services/gemini';
 import * as mammoth from 'mammoth';
 import PrinterSpecForm from '../components/PrinterSpecForm';
 import { PrintStyles, ClientBriefPrintable } from '../components/PrintableChecklists';
+import StudentAIAgent from '../components/StudentAIAgent';
 
 const defaultCourseModules = [
   { id: 'packaging-engineer', title: 'Diploma in Packaging Engineer' },
@@ -162,7 +163,7 @@ export default function AdminPanel() {
     );
   };
   
-  const [activeTab, setActiveTab] = useState<'students' | 'videos' | 'marks' | 'settings' | 'staff' | 'holidays' | 'demo' | 'applications' | 'submissions' | 'reports' | 'live-classes' | 'invoices' | 'referrals' | 'software-videos' | 'projects' | 'pre-flight' | 'training-records' | 'entrance-test' | 'placements' | 'batch-center' | 'team' | 'system' | 'queries' | 'qc' | 'webinar' | 'roadmap' | 'training-plans' | 'interactive-demo'>(() => {
+  const [activeTab, setActiveTab] = useState<'students' | 'videos' | 'marks' | 'settings' | 'staff' | 'holidays' | 'demo' | 'applications' | 'submissions' | 'reports' | 'live-classes' | 'invoices' | 'referrals' | 'software-videos' | 'projects' | 'pre-flight' | 'training-records' | 'entrance-test' | 'placements' | 'batch-center' | 'team' | 'system' | 'queries' | 'qc' | 'webinar' | 'roadmap' | 'training-plans' | 'interactive-demo' | 'ai-agent'>(() => {
     if (user?.role === 'qc') return 'qc';
     return 'marks';
   });
@@ -3042,6 +3043,7 @@ export default function AdminPanel() {
             { id: 'team', label: 'Manage Team', icon: Users },
             { id: 'placements', label: 'Placements', icon: Briefcase },
             { id: 'holidays', label: 'Holidays', icon: Calendar },
+            { id: 'ai-agent', label: 'AI Agent', icon: Bot },
             { id: 'settings', label: 'Settings', icon: ShieldCheck }
           ].filter(tab => {
             if (isQC) return tab.id === 'projects' || tab.id === 'qc' || tab.id === 'settings';
@@ -7445,6 +7447,33 @@ export default function AdminPanel() {
                   No holidays added yet.
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'ai-agent' && (
+          <div className="p-6 space-y-6">
+            <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <Bot className="w-6 h-6 text-pink-600" />
+                    Student AI Agent Console
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Interact, test, and preview the AI Assistant, Study Quiz, and Communication Coach exactly as students experience it.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 bg-pink-50 text-pink-700 px-4 py-2 rounded-xl text-xs font-bold border border-pink-100">
+                  <Sparkles className="w-4 h-4 animate-pulse" />
+                  Gemini Powered
+                </div>
+              </div>
+
+              {/* Render the fully responsive embedded AI Agent */}
+              <div className="border border-gray-100 rounded-3xl overflow-hidden shadow-inner bg-gray-50/30 p-2">
+                <StudentAIAgent embedded />
+              </div>
             </div>
           </div>
         )}

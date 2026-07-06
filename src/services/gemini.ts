@@ -25,7 +25,10 @@ async function callGeminiDirectly(apiKey: string, params: {
   contents: any;
   config?: any;
 }) {
-  let modelName = params.model;
+  let modelName = params.model || "gemini-1.5-flash";
+  if (modelName.startsWith("models/")) {
+    modelName = modelName.substring(7);
+  }
   // Use gemini-1.5-flash for maximum client stability & speed if unspecified or legacy preview is requested
   if (modelName.includes("gemini-3") || modelName.includes("preview")) {
     modelName = "gemini-1.5-flash";

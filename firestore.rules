@@ -134,7 +134,9 @@ service cloud.firestore {
     match /leads/{leadId} {
       allow read: if isSignedIn() && (isAdmin() || isTelecaller() || isMarketing());
       allow create: if true; // Public lead capture
-      allow update, delete: if isSignedIn() && (isAdmin() || isTelecaller() || isMarketing());
+      allow update: if (isSignedIn() && (isAdmin() || isTelecaller() || isMarketing())) ||
+                       (incoming().diff(existing()).affectedKeys().hasOnly(['webinarFeePaid', 'paymentId', 'updatedAt']));
+      allow delete: if isSignedIn() && (isAdmin() || isTelecaller() || isMarketing());
     }
 
     // Authenticated matches
@@ -142,7 +144,7 @@ service cloud.firestore {
       allow get: if isSignedIn();
       allow list: if isStaffForList() || (isSignedIn() && (resource.data.role == 'student' || resource.data.uid == request.auth.uid));
       
-      allow create: if isSignedIn() && (isStaff() || isOwner(userId));
+      allow create: if (incoming().registeredForDemo == true) || (isSignedIn() && (isStaff() || isOwner(userId)));
       
       allow update: if isSignedIn() && (
         isStaff() || 
@@ -192,7 +194,8 @@ service cloud.firestore {
     match /invoices/{invoiceId} {
       allow get: if isSignedIn() && (isStaff() || isOwner(existing().studentId));
       allow list: if isSignedIn() && (isStaffForList() || resource.data.studentId == request.auth.uid);
-      allow create, update: if isStaff();
+      allow create: if isStaff();
+      allow update: if isStaff() || (isSignedIn() && isOwner(existing().studentId) && incoming().diff(existing()).affectedKeys().hasOnly(['emis']));
       allow delete: if isStaff();
     }
 

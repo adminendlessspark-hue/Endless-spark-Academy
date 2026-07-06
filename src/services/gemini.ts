@@ -3,20 +3,21 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 async function getClientGeminiApiKey(): Promise<string | null> {
-  // 1. Check client-side environment variable
-  const envKey = ((import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.VITE_API_KEY) as string | undefined;
-  if (envKey) return envKey;
-
-  // 2. Fallback to reading from Firestore settings/admin
+  // 1. Prioritize reading from Firestore settings/admin (manually saved by Admin)
   try {
     const docRef = doc(db, 'settings', 'admin');
     const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return docSnap.data().geminiApiKey || null;
+    if (docSnap.exists() && docSnap.data().geminiApiKey) {
+      return docSnap.data().geminiApiKey;
     }
   } catch (e) {
     console.error("Failed to fetch client Gemini API key from Firestore:", e);
   }
+
+  // 2. Check client-side specific Gemini environment variable
+  const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
+  if (envKey) return envKey;
+
   return null;
 }
 

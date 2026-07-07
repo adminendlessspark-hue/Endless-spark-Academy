@@ -6,10 +6,22 @@ import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Allow dynamic Firestore database ID override (e.g., to switch to '(default)' for production/Blaze database)
+const getStoredDbId = (): string => {
+  try {
+    const override = localStorage.getItem('firestore_db_id');
+    if (override !== null) {
+      return override;
+    }
+  } catch (e) {}
+  return firebaseConfig.firestoreDatabaseId || '(default)';
+};
+
 export const db = initializeFirestore(app, {
-  localCache: memoryLocalCache(),
-  experimentalForceLongPolling: true
-}, firebaseConfig.firestoreDatabaseId);
+  localCache: memoryLocalCache()
+}, getStoredDbId());
+
 export const storage = getStorage(app);
 console.log("Firebase Storage initialized with bucket:", firebaseConfig.storageBucket);
 export const googleProvider = new GoogleAuthProvider();

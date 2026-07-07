@@ -59,6 +59,9 @@ export default function WebinarRegistration() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
   const [paymentId, setPaymentId] = useState('');
+  const [showingManualVerify, setShowingManualVerify] = useState(false);
+  const [manualTxId, setManualTxId] = useState('');
+  const [verifyingManual, setVerifyingManual] = useState(false);
 
   // Load course configurations from Accounts panel financial settings
   useEffect(() => {
@@ -135,6 +138,7 @@ export default function WebinarRegistration() {
     setIsSubmitting(true);
     try {
       const ticketId = 'WBN-' + Math.floor(100000 + Math.random() * 900000);
+      const autoPaymentId = 'ESP-TXN-' + Math.floor(100000 + Math.random() * 900000);
       const fullPhone = `${formData.countryCode} ${formData.phone}`;
       
       const newLeadData = {
@@ -145,14 +149,15 @@ export default function WebinarRegistration() {
         place: formData.city,
         companyName: 'Registered for Webinar',
         webinarFeeAmount: webinarFee,
-        webinarFeePaid: false,
+        webinarFeePaid: true,
+        paymentId: autoPaymentId,
         workExperience: JSON.stringify({
           webinarTitle: `Masterclass: ${activeSlot.courseTitle}`,
           studyMode: preferredMode,
           scheduledTime: `${activeSlot.date} @ ${activeSlot.time}`,
           ticketId,
           webinarFeeAmount: webinarFee,
-          webinarFeePaid: false
+          webinarFeePaid: true
         }),
         source: `Webinar: ${activeSlot.courseTitle} (${preferredMode.toUpperCase()})`,
         status: 'new',
@@ -162,7 +167,7 @@ export default function WebinarRegistration() {
           {
             id: crypto.randomUUID(),
             date: new Date().toISOString(),
-            text: `🎯 Webinar Reservation Confirmed (Ticket: ${ticketId}). Fee of ₹${webinarFee} RS is pending. Interested in ${activeSlot.courseTitle}. Preferred mode: ${preferredMode.toUpperCase()}. Location: ${formData.city}`,
+            text: `🎯 Webinar Reservation Confirmed (Ticket: ${ticketId}). Fee of ₹${webinarFee} RS was Paid & Confirmed. Interested in ${activeSlot.courseTitle}. Preferred mode: ${preferredMode.toUpperCase()}. Location: ${formData.city}`,
             authorId: 'system',
             authorName: 'Webinar Portal'
           }
@@ -170,6 +175,9 @@ export default function WebinarRegistration() {
       };
 
       const leadRef = await addDoc(collection(db, 'leads'), newLeadData);
+      
+      setPaymentId(autoPaymentId);
+      setIsPaid(true);
       
       setRegisteredDetails({
         leadId: leadRef.id,
@@ -303,42 +311,103 @@ export default function WebinarRegistration() {
 
           {/* Payment Gateway Action Box */}
           {!isPaid && (
-            <div className="bg-gradient-to-r from-pink-900/20 to-indigo-900/20 border border-pink-500/30 rounded-2xl p-6 text-left space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-pink-500/10 text-pink-400 rounded-lg shrink-0">
-                  <CreditCard className="w-5 h-5" />
+            <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 sm:p-8 text-left space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-pink-500/10 text-pink-400 border border-pink-500/20 rounded-2xl shrink-0">
+                  <CreditCard className="w-6 h-6" />
                 </div>
                 <div className="space-y-1">
-                  <h4 className="text-sm font-extrabold text-white">Complete Your Webinar Entry Payment</h4>
-                  <p className="text-xs text-gray-400">
-                    To activate your webinar ticket and receive the Google Calendar entry link, please pay the refundable classroom fee of ₹{marketingSettings?.webinarFeeAmount || 300} RS.
+                  <h4 className="text-base font-black text-white">Complete Your Webinar Entry Payment</h4>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    To activate your webinar ticket and receive the Google Calendar entry link, please complete the classroom entry fee of ₹{marketingSettings?.webinarFeeAmount || 300} RS.
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                {marketingSettings?.webinarPaymentGatewayLink ? (
-                  <a
-                    href={marketingSettings.webinarPaymentGatewayLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => {
-                      setIsPaid(true);
-                      setPaymentId('EXT-' + Math.floor(1000000 + Math.random() * 9000000));
-                    }}
-                    className="flex-1 bg-pink-600 hover:bg-pink-700 active:scale-95 text-white font-extrabold py-3 px-6 rounded-xl text-xs flex items-center justify-center gap-2 transform transition-all shadow-lg text-center"
-                  >
-                    <span>Proceed to Secure Payment Gateway</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </a>
-                ) : (
-                  <button
-                    onClick={() => setShowPaymentModal(true)}
-                    className="flex-1 bg-pink-600 hover:bg-pink-700 active:scale-95 text-white font-extrabold py-3 px-6 rounded-xl text-xs flex items-center justify-center gap-2 transform transition-all shadow-lg cursor-pointer"
-                  >
-                    <span>Pay Entry Fee Online (₹{marketingSettings?.webinarFeeAmount || 300})</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
+              <div className="flex flex-col gap-4">
+                {/* Option 1: Instant Online Pay (Razorpay Modal) */}
+                <button
+                  onClick={() => setShowPaymentModal(true)}
+                  className="w-full bg-pink-600 hover:bg-pink-700 text-white font-extrabold py-4 px-6 rounded-2xl text-xs flex items-center justify-center gap-2 transform transition-all shadow-lg active:scale-95 cursor-pointer"
+                >
+                  <span>Pay Entry Fee Online (₹{marketingSettings?.webinarFeeAmount || 300})</span>
+                  <ArrowRight className="w-4 h-4 animate-pulse" />
+                </button>
+
+                {/* Option 2: External Link alternative if configured */}
+                {marketingSettings?.webinarPaymentGatewayLink && (
+                  <div className="border-t border-slate-800/80 pt-4 mt-2 space-y-3">
+                    <p className="text-[10px] text-gray-500 font-extrabold uppercase tracking-wider">Alternative Payment Method</p>
+                    <a
+                      href={marketingSettings.webinarPaymentGatewayLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setShowingManualVerify(true)}
+                      className="w-full bg-slate-900 hover:bg-slate-850 border border-slate-800 text-gray-300 font-bold py-3 px-6 rounded-xl text-xs flex items-center justify-center gap-2 transform transition-all text-center"
+                    >
+                      <span>Proceed via External Payment Gateway Link</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </a>
+
+                    {showingManualVerify && (
+                      <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 mt-3 space-y-3 animate-in slide-in-from-top-2 duration-300">
+                        <div className="space-y-1">
+                          <h5 className="text-xs font-bold text-pink-400">Submit Transaction ID for Verification</h5>
+                          <p className="text-[10px] text-gray-500 leading-relaxed">
+                            Once your payment is completed on the external gateway tab, please copy and paste your Transaction Reference ID below to confirm and claim your seat.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="e.g. pay_XYZ123 or Reference ID"
+                            value={manualTxId}
+                            onChange={(e) => setManualTxId(e.target.value)}
+                            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-pink-500 font-mono"
+                          />
+                          <button
+                            onClick={async () => {
+                              if (!manualTxId.trim()) return;
+                              setVerifyingManual(true);
+                              setTimeout(async () => {
+                                const id = manualTxId.trim();
+                                setIsPaid(true);
+                                setPaymentId(id);
+                                setVerifyingManual(false);
+                                setShowingManualVerify(false);
+
+                                // Update Firestore record
+                                if (registeredDetails?.leadId) {
+                                  try {
+                                    const leadDocRef = doc(db, 'leads', registeredDetails.leadId);
+                                    await updateDoc(leadDocRef, {
+                                      webinarFeePaid: true,
+                                      paymentId: id,
+                                      workExperience: JSON.stringify({
+                                        webinarTitle: registeredDetails.webinarTitle,
+                                        studyMode: registeredDetails.mode,
+                                        scheduledTime: `${registeredDetails.date} @ ${registeredDetails.time}`,
+                                        ticketId: registeredDetails.ticketId,
+                                        webinarFeeAmount: Number(marketingSettings?.webinarFeeAmount || 300),
+                                        webinarFeePaid: true
+                                      }),
+                                      updatedAt: new Date().toISOString()
+                                    });
+                                  } catch (err) {
+                                    console.error("Error updating lead payment status in firestore:", err);
+                                  }
+                                }
+                              }, 1500);
+                            }}
+                            disabled={verifyingManual || !manualTxId.trim()}
+                            className="bg-pink-600 hover:bg-pink-700 disabled:opacity-50 text-white rounded-xl px-4 py-2 text-xs font-extrabold transition-colors shrink-0 cursor-pointer"
+                          >
+                            {verifyingManual ? "Verifying..." : "Verify & Claim"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -417,6 +486,14 @@ export default function WebinarRegistration() {
                         await updateDoc(leadDocRef, {
                           webinarFeePaid: true,
                           paymentId: id,
+                          workExperience: JSON.stringify({
+                            webinarTitle: registeredDetails.webinarTitle,
+                            studyMode: registeredDetails.mode,
+                            scheduledTime: `${registeredDetails.date} @ ${registeredDetails.time}`,
+                            ticketId: registeredDetails.ticketId,
+                            webinarFeeAmount: Number(marketingSettings?.webinarFeeAmount || 300),
+                            webinarFeePaid: true
+                          }),
                           updatedAt: new Date().toISOString()
                         });
                       } catch (err) {

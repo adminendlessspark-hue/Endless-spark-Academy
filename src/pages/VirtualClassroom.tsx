@@ -38,7 +38,7 @@ export default function VirtualClassroom() {
   const [selectedModuleId, setSelectedModuleId] = useState<string>('');
   const [layoutMode, setLayoutMode] = useState<'split' | 'jitsi' | 'slides'>('split');
   const [embedJitsi, setEmbedJitsi] = useState<boolean>(true);
-  const [screenshareOptimization, setScreenshareOptimization] = useState<'text' | 'motion'>('text');
+  const [screenshareOptimization, setScreenshareOptimization] = useState<'text' | 'motion' | 'lowres_text' | 'lowres_motion'>('lowres_text');
 
   const handleGoBack = () => {
     navigate(-1);
@@ -243,12 +243,35 @@ export default function VirtualClassroom() {
 
   // Jitsi settings URL
   const baseDomain = jitsiServer ? jitsiServer.replace(/^(https?:\/\/)?/, '').replace(/\/$/, '') : 'jitsi.belnet.be';
-  const minFps = screenshareOptimization === 'text' ? 5 : 15;
-  const maxFps = screenshareOptimization === 'text' ? 5 : 30;
-  const extraParams = screenshareOptimization === 'text'
-    ? `&config.constraints.video.height.ideal=1080&config.constraints.video.width.ideal=1920&config.videoQuality.preferredCodec=vp9&config.videoQuality.maxReceiverVideoQuality=1080`
-    : `&config.videoQuality.preferredCodec=vp8`;
-  const jitsiUrl = `https://${baseDomain}/${roomId}#config.resolution=1080&config.desktopSharingFrameRate.min=${minFps}&config.desktopSharingFrameRate.max=${maxFps}&config.videoQuality.enforcePreferredCodec=true${extraParams}&config.startWithVideoMuted=false&config.startWithAudioMuted=false`;
+  
+  let resolution = '1080';
+  let minFps = 5;
+  let maxFps = 5;
+  let extraParams = '';
+
+  if (screenshareOptimization === 'text') {
+    resolution = '1080';
+    minFps = 5;
+    maxFps = 5;
+    extraParams = '&config.constraints.video.height.ideal=1080&config.constraints.video.width.ideal=1920&config.videoQuality.preferredCodec=vp9&config.videoQuality.maxReceiverVideoQuality=1080';
+  } else if (screenshareOptimization === 'motion') {
+    resolution = '1080';
+    minFps = 15;
+    maxFps = 30;
+    extraParams = '&config.constraints.video.height.ideal=1080&config.constraints.video.width.ideal=1920&config.videoQuality.preferredCodec=vp8&config.videoQuality.maxReceiverVideoQuality=1080';
+  } else if (screenshareOptimization === 'lowres_text') {
+    resolution = '720';
+    minFps = 5;
+    maxFps = 5;
+    extraParams = '&config.constraints.video.height.ideal=720&config.constraints.video.width.ideal=1280&config.videoQuality.preferredCodec=vp9&config.videoQuality.maxReceiverVideoQuality=720';
+  } else if (screenshareOptimization === 'lowres_motion') {
+    resolution = '480';
+    minFps = 10;
+    maxFps = 15;
+    extraParams = '&config.constraints.video.height.ideal=480&config.constraints.video.width.ideal=854&config.videoQuality.preferredCodec=vp8&config.videoQuality.maxReceiverVideoQuality=480';
+  }
+
+  const jitsiUrl = `https://${baseDomain}/${roomId}#config.resolution=${resolution}&config.desktopSharingFrameRate.min=${minFps}&config.desktopSharingFrameRate.max=${maxFps}&config.videoQuality.enforcePreferredCodec=true${extraParams}&config.startWithVideoMuted=false&config.startWithAudioMuted=false`;
 
   // Determine slide file types & viewer setup
   const hasActiveSlides = !!sessionData?.activeSlidesUrl;
@@ -325,12 +348,14 @@ export default function VirtualClassroom() {
             <span className="text-slate-400 font-semibold hidden lg:inline">Screen Quality:</span>
             <select
               value={screenshareOptimization}
-              onChange={(e) => setScreenshareOptimization(e.target.value as 'text' | 'motion')}
+              onChange={(e) => setScreenshareOptimization(e.target.value as any)}
               className="bg-transparent text-slate-200 font-bold focus:ring-0 focus:outline-none border-none py-0.5 cursor-pointer pr-6 text-xs outline-none"
               title="Optimize screen share for text readability (low frame rate, high resolution) or smooth video motion"
             >
               <option value="text" className="bg-slate-950 text-slate-200">Text & Slides (Crisp 1080p)</option>
               <option value="motion" className="bg-slate-950 text-slate-200">Video & Motion (Smooth FPS)</option>
+              <option value="lowres_text" className="bg-slate-950 text-slate-200">Low-Res Readable (720p Text)</option>
+              <option value="lowres_motion" className="bg-slate-950 text-slate-200">Low-Res Smooth (480p Low Bandwidth)</option>
             </select>
           </div>
 

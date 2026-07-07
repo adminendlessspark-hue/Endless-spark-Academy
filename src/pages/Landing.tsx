@@ -82,7 +82,7 @@ export default function Landing() {
             ) : (
               <h1 className="tracking-tight mb-8 leading-tight">
                 <span className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 block transition-all duration-300 hover:scale-[1.02] cursor-default drop-shadow-sm">
-                  Endless Spark
+                  Endless Spark Creative Hub
                 </span>
                 <span className="text-sm sm:text-lg md:text-xl font-bold uppercase text-indigo-950 mt-2 block tracking-tight">
                   PRINTING AND PACKAGING TECHNOLOGY

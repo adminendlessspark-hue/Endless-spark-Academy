@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateGeminiContent } from '../services/gemini';
-import { MessageCircle, Send, X, Bot, User, Loader2, BookOpen, CheckCircle, XCircle, BrainCircuit, Mic, Volume2, Settings2, Sparkles, MessageSquareQuote, ShieldAlert } from 'lucide-react';
+import { MessageCircle, Send, X, Bot, User, Loader2, BookOpen, CheckCircle, XCircle, BrainCircuit, Mic, Volume2, Settings2, Sparkles, MessageSquareQuote, ShieldAlert, RotateCcw, EyeOff, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '../utils';
@@ -69,6 +69,13 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
   
   // Tabs State
   const [mode, setMode] = useState<'chat' | 'quiz' | 'coach'>('chat');
+
+  // Custom Reset & Remove options
+  const [isDismissed, setIsDismissed] = useState(() => {
+    return localStorage.getItem('endless_spark_ai_dismissed') === 'true';
+  });
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showHideConfirm, setShowHideConfirm] = useState(false);
   
   // Quiz State
   const [quizTopic, setQuizTopic] = useState('');
@@ -330,6 +337,24 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
     }
   };
 
+  if (isDismissed && !embedded) {
+    return (
+      <div className="no-print">
+        <button
+          onClick={() => {
+            setIsDismissed(false);
+            localStorage.removeItem('endless_spark_ai_dismissed');
+          }}
+          className="fixed bottom-6 right-44 px-3 py-2 bg-pink-50 hover:bg-pink-100 border border-pink-200 text-pink-700 rounded-xl shadow-lg flex items-center gap-1.5 text-xs font-black z-50 animate-in fade-in duration-300 cursor-pointer"
+          title="Restore Endless Spark AI Agent"
+        >
+          <Bot className="w-4 h-4 text-pink-600 animate-bounce" />
+          <span>Restore AI</span>
+        </button>
+      </div>
+    );
+  }
+
   if (embedded) {
     return (
       <div className="w-full max-w-4xl mx-auto h-[600px] bg-white rounded-2xl shadow-md border border-gray-100 flex flex-col overflow-hidden no-print">
@@ -346,6 +371,16 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {mode === 'chat' && (
+                <button
+                  onClick={() => setShowResetConfirm(true)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold bg-pink-700 text-white cursor-pointer"
+                  title="Reset Chat History"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Reset Chat</span>
+                </button>
+              )}
               {mode !== 'coach' && (
                 <select
                   value={language}
@@ -388,6 +423,36 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
         {mode === 'chat' && (
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
+              {showResetConfirm && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-xs space-y-2 animate-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center gap-2 font-bold">
+                    <Trash2 className="w-4 h-4 text-amber-600 animate-pulse" />
+                    <span>Reset this conversation history?</span>
+                  </div>
+                  <p className="text-gray-600">This will wipe your current chat messages and start a new conversation. This action cannot be undone.</p>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setMessages([
+                          { role: 'assistant', content: 'Hello! I am your Printing and Packaging expert. How can I help you today?' }
+                        ]);
+                        setInput('');
+                        setIsLoading(false);
+                        setShowResetConfirm(false);
+                      }}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold transition-colors cursor-pointer"
+                    >
+                      Yes, Reset Chat
+                    </button>
+                    <button
+                      onClick={() => setShowResetConfirm(false)}
+                      className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
               {messages.map((msg, idx) => (
                 <div key={idx} className={cn("flex gap-3", msg.role === 'user' ? "flex-row-reverse" : "")}>
                   <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", msg.role === 'user' ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600")}>
@@ -571,12 +636,21 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
                   <p className="text-[10px] text-pink-100 uppercase tracking-wider font-bold">Smart Student Agent</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                {mode === 'chat' && (
+                  <button
+                    onClick={() => setShowResetConfirm(true)}
+                    className="p-1.5 hover:bg-white/10 rounded-lg transition-colors bg-pink-700 text-white cursor-pointer"
+                    title="Reset Chat History"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                )}
                 {mode !== 'coach' && (
                   <select
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
-                    className="text-xs bg-pink-700 text-white border-none rounded p-1 outline-none cursor-pointer focus:ring-2 focus:ring-pink-400"
+                    className="text-xs bg-pink-700 text-white border-none rounded p-1.5 outline-none cursor-pointer focus:ring-2 focus:ring-pink-400"
                   >
                     <option value="English">English</option>
                     <option value="Hindi">Hindi</option>
@@ -584,7 +658,14 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
                     <option value="Telugu">Telugu</option>
                   </select>
                 )}
-                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                <button
+                  onClick={() => setShowHideConfirm(true)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors bg-pink-700 text-white cursor-pointer"
+                  title="Hide Floating Bot from screen"
+                >
+                  <EyeOff className="w-4 h-4" />
+                </button>
+                <button onClick={() => setIsOpen(false)} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -617,6 +698,66 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
           {mode === 'chat' && (
             <>
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
+                {showResetConfirm && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-xs space-y-2 animate-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <Trash2 className="w-4 h-4 text-amber-600 animate-pulse" />
+                      <span>Reset this chat session?</span>
+                    </div>
+                    <p className="text-gray-600 leading-relaxed">This will clear your current messages. You'll start fresh with the AI Assistant.</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setMessages([
+                            { role: 'assistant', content: 'Hello! I am your Printing and Packaging expert. How can I help you today?' }
+                          ]);
+                          setInput('');
+                          setIsLoading(false);
+                          setShowResetConfirm(false);
+                        }}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                      <button
+                        onClick={() => setShowResetConfirm(false)}
+                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {showHideConfirm && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs space-y-2 animate-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <EyeOff className="w-4 h-4 text-rose-600 animate-pulse" />
+                      <span>Hide floating AI button?</span>
+                    </div>
+                    <p className="text-gray-600 leading-relaxed">The floating launcher will be hidden. You can bring it back anytime with the "Restore AI" button in the corner.</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setIsDismissed(true);
+                          setIsOpen(false);
+                          localStorage.setItem('endless_spark_ai_dismissed', 'true');
+                          setShowHideConfirm(false);
+                        }}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold cursor-pointer"
+                      >
+                        Hide Bot
+                      </button>
+                      <button
+                        onClick={() => setShowHideConfirm(false)}
+                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {messages.map((msg, idx) => (
                   <div key={idx} className={cn("flex gap-3", msg.role === 'user' ? "flex-row-reverse" : "")}>
                     <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", msg.role === 'user' ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600")}>

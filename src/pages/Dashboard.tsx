@@ -216,9 +216,9 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
   }, [user?.mustChangePassword]);
 
   useEffect(() => {
-    if (wellnessEnabled && user && !previewUser) {
-      const today = new Date().toISOString().split('T')[0];
-      if (user.lastWellnessDate !== today && user.isApproved) {
+    if (wellnessEnabled && user && user.role === 'student' && !previewUser) {
+      // Only show on first login (if lastWellnessDate is not set yet)
+      if (!user.lastWellnessDate && user.isApproved) {
         setShowWellness(true);
       }
     }

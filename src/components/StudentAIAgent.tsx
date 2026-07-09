@@ -409,7 +409,7 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
             >
               <BrainCircuit className="w-3 h-3" /> Quiz
             </button>
-            {(user?.role !== 'student' || user?.isCommunicationCoachActive) && (
+            {(user?.role !== 'student' || user?.isCommunicationCoachActive || embedded) && (
               <button
                 onClick={() => setMode('coach')}
                 className={cn("flex-1 text-[10px] py-1.5 rounded-md font-bold transition-colors flex items-center justify-center gap-1 uppercase", mode === 'coach' ? "bg-white text-pink-600 shadow-sm" : "text-white hover:bg-white/20 text-pink-50")}
@@ -684,7 +684,7 @@ export default function StudentAIAgent({ embedded = false }: StudentAIAgentProps
               >
                 <BrainCircuit className="w-3 h-3" /> Quiz
               </button>
-              {(user?.role !== 'student' || user?.isCommunicationCoachActive) && (
+              {(user?.role !== 'student' || user?.isCommunicationCoachActive || embedded) && (
                 <button
                   onClick={() => setMode('coach')}
                   className={cn("flex-1 text-[10px] py-1.5 rounded-md font-bold transition-colors flex items-center justify-center gap-1 uppercase", mode === 'coach' ? "bg-white text-pink-600 shadow-sm" : "text-white hover:bg-white/20 text-pink-50")}

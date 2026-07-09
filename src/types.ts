@@ -166,6 +166,7 @@ export interface DemoData {
   currentCity?: string;
   completed?: boolean;
   mode?: 'physical' | 'online';
+  roomId?: string;
 }
 
 export interface SoftwareToolVideo {

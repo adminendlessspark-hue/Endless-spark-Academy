@@ -30,7 +30,25 @@ import {
   FileCheck2,
   Send,
   Download,
-  Video
+  Video,
+  Award,
+  Briefcase,
+  GraduationCap,
+  TrendingUp,
+  Users,
+  MapPin,
+  IndianRupee,
+  CreditCard,
+  Plus,
+  Trash2,
+  Settings,
+  AlertTriangle,
+  Lock,
+  Bot,
+  Mic,
+  Terminal,
+  Type,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../utils';
 import { db, handleFirestoreError, OperationType } from '../firebase';
@@ -39,6 +57,7 @@ import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestor
 import { useSettings } from '../hooks/useSettings';
 import { useAuth } from '../AuthContext';
 import { getProjectsForCourse, getCapstoneProjectForCourse } from '../data/courseProjects';
+import StudentAIAgent from '../components/StudentAIAgent';
 
 // Predefined Mock Projects for Showcase
 const DEMO_PROJECTS = [
@@ -182,60 +201,27 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
   const selectedCourseCapstone = getCapstoneProjectForCourse(selectedCourse.id);
 
   const getDisplayProjects = (courseId: string) => {
-    const dbProjects = studentProjects.filter((p: any) => p.courseId === courseId);
-
-    if (dbProjects.length > 0) {
-      return dbProjects.map((proj: any, idx: number) => {
-        let specsStr = 'CMYK Coated FOGRA39 | 3.0mm Bleeds';
-        if (proj.printerSpec?.artworkInfo) {
-          const info = proj.printerSpec.artworkInfo;
-          specsStr = `${info.bleed || '3.0mm'} Bleed | ${proj.printerSpec.printMethod || 'Offset'} | ${info.maxInkCoverage || '300% TAC'}`;
-        } else if (proj.details && proj.details.length < 100) {
-          specsStr = proj.details;
-        }
-
-        const filename = proj.clientBrief?.fileName || proj.projectFileUrl || proj.googleDriveLink || 'artwork_v1.pdf';
-        let cleanFilename = filename;
-        if (filename.includes('/') && !filename.startsWith('http')) {
-          cleanFilename = filename.split('/').pop() || filename;
-        }
-
-        let badge = 'Pre-Flight Verification';
-        if (proj.status === 'approved') {
-          badge = 'Certified Pass';
-        } else if (proj.status === 'qc') {
-          badge = 'QC Review Required';
-        } else if (proj.status === 'production' || proj.status === 'pqc') {
-          badge = 'Production Checking';
-        }
-
-        return {
-          title: proj.title || 'Untitled Student Project',
-          projectCode: proj.projectCode || '',
-          studentName: proj.studentName || '',
-          courseName: proj.courseName || '',
-          filename: cleanFilename,
-          specs: specsStr,
-          desc: proj.details || proj.clientBrief?.briefDetails || 'Review artwork specifications and preflight compliance.',
-          badge: badge,
-          activeStudents: 1
-        };
-      });
-    }
-
-    // Fallback: If no projects exist in the database for this course, return the pre-defined capstone project course-wise.
-    const cap = getCapstoneProjectForCourse(courseId);
-    return [{
-      title: cap.title,
-      projectCode: 'CAPSTONE',
-      studentName: user?.name || 'Student',
-      courseName: coursesList.find((c: any) => c.id === courseId)?.title || '',
-      filename: cap.filename,
-      specs: cap.specs,
-      desc: cap.desc,
-      badge: cap.badge || 'Verification Required',
-      activeStudents: 1
-    }];
+    // Only show the Master Projects that we provide. Do not add student projects here.
+    const masterProjects = getProjectsForCourse(courseId);
+    return masterProjects.map((proj, idx) => {
+      const codePrefix = courseId === 'packaging-engineer' ? 'PE' :
+                         courseId === 'production-art-engineer' ? 'PA' :
+                         courseId === 'print-ready-engineer' ? 'PR' :
+                         courseId === 'plate-ready-engineer' ? 'PL' :
+                         courseId === 'colour-retouching-engineer' ? 'CR' :
+                         courseId === 'quality-control-engineer' ? 'QC' : 'CC';
+      return {
+        title: proj.title,
+        projectCode: `${codePrefix}_0${idx + 1}`,
+        studentName: '', // Do not show student name for master projects provided by us
+        courseName: coursesList.find((c: any) => c.id === courseId)?.title || '',
+        filename: proj.filename,
+        specs: proj.specs,
+        desc: proj.desc,
+        badge: proj.badge || 'Master Project Spec',
+        activeStudents: proj.activeStudents || 1
+      };
+    });
   };
 
   useEffect(() => {
@@ -272,11 +258,12 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
     return () => unsub();
   }, [user]);
   
-  // Tabs: 'journey' (Student Dashboard), 'ai' (AI Tutor Playground), 'preflight' (Artwork Checker), 'projects' (Showcase)
-  const [activeTab, setActiveTab] = useState<'journey' | 'ai' | 'preflight' | 'projects'>('journey');
+  // Tabs: 'journey' (Student Dashboard), 'ai' (AI Tutor Playground), 'preflight' (Artwork Checker), 'projects' (Showcase), 'accounts' (Accounts Panel)
+  const [activeTab, setActiveTab] = useState<'journey' | 'ai' | 'preflight' | 'projects' | 'accounts'>('journey');
 
   // Student Dashboard Simulator state
-  const [dashboardStage, setDashboardStage] = useState<1 | 2 | 3 | 4 | 5>(4);
+  const [dashboardStage, setDashboardStage] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12>(4);
+  const [offerAccepted, setOfferAccepted] = useState(false);
 
   // Entrance Assessment Demo MCQ State
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
@@ -289,12 +276,55 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
     { role: 'assistant', content: "Hello! I am your Printing & Packaging Expert AI. Select a topic or type any question below to see me analyze print specifications, explain trapping tolerances, or write Adobe automation scripts!" }
   ]);
   const [isAiResponding, setIsAiResponding] = useState(false);
+  const [aiSubTab, setAiSubTab] = useState<'prepress' | 'student-agent'>('prepress');
+
+  // Software & Toolkit Hub State
+  const [selectedSoftwareId, setSelectedSoftwareId] = useState<string>('illustrator');
+  const [isSoftwareSimulating, setIsSoftwareSimulating] = useState(false);
+  const [softwareSimProgress, setSoftwareSimProgress] = useState(0);
+  const [softwareTerminalLogs, setSoftwareTerminalLogs] = useState<string[]>([]);
+  const [bananaCompression, setBananaCompression] = useState<number>(100);
+  const [fireflyPrompt, setFireflyPrompt] = useState<string>('Luxury geometric rose-gold packaging grid');
+  const [fireflyImage, setFireflyImage] = useState<string | null>(null);
+  const [photoshopMode, setPhotoshopMode] = useState<'RGB' | 'CMYK'>('RGB');
+  const [activeFonts, setActiveFonts] = useState<string[]>(['Space Grotesk', 'Inter', 'JetBrains Mono']);
+  const [fontServerSynced, setFontServerSynced] = useState(false);
 
   // Preflight Simulator State
   const [selectedPreset, setSelectedPreset] = useState<string>('pass_pack');
   const [isPreflighting, setIsPreflighting] = useState(false);
   const [preflightProgress, setPreflightProgress] = useState(0);
   const [preflightResult, setPreflightResult] = useState<any | null>(null);
+
+  // Simulated Accounts Tab State
+  const initialDemoInvoice = {
+    id: 'INV-DEMO-2026',
+    courseName: 'Diploma in Production Art Engineer',
+    courseId: 'production-art-engineer',
+    baseFee: 35000,
+    concessionApplied: 'none' as 'none' | 'single-parent' | 'transgender',
+    customDiscount: 0,
+    emis: [
+      { emiNumber: 1, baseAmount: 12000, interestAmount: 700, penaltyAmount: 0, waiverAmount: 0, status: 'paid' as 'paid' | 'pending' | 'overdue', dueDate: '2026-05-15', paidDate: '2026-05-14' },
+      { emiNumber: 2, baseAmount: 12000, interestAmount: 700, penaltyAmount: 0, waiverAmount: 0, status: 'overdue' as 'paid' | 'pending' | 'overdue', dueDate: '2026-06-15', paidDate: null as string | null },
+      { emiNumber: 3, baseAmount: 11000, interestAmount: 350, penaltyAmount: 0, waiverAmount: 0, status: 'pending' as 'paid' | 'pending' | 'overdue', dueDate: '2026-07-15', paidDate: null as string | null }
+    ],
+    waivers: [] as Array<{emiNumber: number, type: 'interest' | 'penalty', percentage: number, amount: number, reason: string, date: string, approvedBy: string}>,
+    referrals: [
+      { id: 'ref-1', name: 'Rajesh Kumar', status: 'Registered (Telecaller)', date: '2026-06-10', rewardAmount: 1000, paid: false },
+      { id: 'ref-2', name: 'Priya Sharma', status: 'Enrolled & Paid', date: '2026-06-25', rewardAmount: 1500, paid: true }
+    ],
+    referralCode: 'ES-STUDENT-99',
+    bonusWithdrawn: 1500
+  };
+
+  const [demoInvoice, setDemoInvoice] = useState(initialDemoInvoice);
+  const [newWaiverEmiNum, setNewWaiverEmiNum] = useState<number>(2);
+  const [newWaiverType, setNewWaiverType] = useState<'interest' | 'penalty'>('penalty');
+  const [newWaiverPercent, setNewWaiverPercent] = useState<number>(100);
+  const [newWaiverReason, setNewWaiverReason] = useState<string>('Academic performance attendance consistency waiver');
+  const [couponCode, setCouponCode] = useState<string>('');
+  const [isWithdrawingBonus, setIsWithdrawingBonus] = useState(false);
 
   // MCQs for Stage 3 Demo
   const MOCK_MCQS = [
@@ -420,6 +450,169 @@ Question: ${text}`
     }, 250);
   };
 
+  // Software Hub Action Simulators
+  const [acrobatChecked, setAcrobatChecked] = useState(false);
+
+  const handleIllustratorSim = () => {
+    if (isSoftwareSimulating) return;
+    setIsSoftwareSimulating(true);
+    setSoftwareSimProgress(0);
+    setSoftwareTerminalLogs([
+      '[SYS] Initializing Adobe Illustrator ExtendScript context...',
+      '[SYS] Fetching document handle... app.activeDocument detected.'
+    ]);
+    const interval = setInterval(() => {
+      setSoftwareSimProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsSoftwareSimulating(false);
+          setSoftwareTerminalLogs(logs => [
+            ...logs,
+            '[SYS] Text layer traversing completed.',
+            '[SYS] Text outlines generated successfully for all unvectorized blocks.',
+            '[SYS] Script compiled for standard prepress execution.'
+          ]);
+          return 100;
+        }
+        if (prev === 40) {
+          setSoftwareTerminalLogs(logs => [
+            ...logs,
+            '[SYS] Scanning active layers for unoutlined fonts...',
+            '[SYS] Found 12 active textframes (fonts: Space Grotesk, Inter).'
+          ]);
+        }
+        return prev + 20;
+      });
+    }, 150);
+  };
+
+  const handleAcrobatSim = () => {
+    if (isSoftwareSimulating) return;
+    setIsSoftwareSimulating(true);
+    setSoftwareSimProgress(0);
+    setAcrobatChecked(false);
+    setSoftwareTerminalLogs([
+      '[SYS] Starting Adobe PDFPrintEngine pre-flight diagnostics...',
+      '[SYS] Validating file structures against PDF/X-4:2010 profile...'
+    ]);
+    const interval = setInterval(() => {
+      setSoftwareSimProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsSoftwareSimulating(false);
+          setAcrobatChecked(true);
+          setSoftwareTerminalLogs(logs => [
+            ...logs,
+            '[SYS] PDF compliance certified: PASS',
+            '[SYS] OutputIntent FOGRA39 profile is valid.',
+            '[SYS] No Low-Res images or active system fonts found.'
+          ]);
+          return 100;
+        }
+        if (prev === 40) {
+          setSoftwareTerminalLogs(logs => [
+            ...logs,
+            '[SYS] Checking embedded color spaces... (Coated GRACoL/FOGRA found)',
+            '[SYS] Verifying bleed boundaries... (3.0mm margin confirmed)'
+          ]);
+        }
+        if (prev === 80) {
+          setSoftwareTerminalLogs(logs => [
+            ...logs,
+            '[SYS] Scanning text vector elements... (100% outlined)',
+            '[SYS] Analyzing image plate resolution... (300+ DPI confirmed)'
+          ]);
+        }
+        return prev + 20;
+      });
+    }, 150);
+  };
+
+  const handlePhotoshopModeChange = (mode: 'RGB' | 'CMYK') => {
+    setPhotoshopMode(mode);
+    if (mode === 'CMYK') {
+      setSoftwareTerminalLogs([
+        `[SYS] Switching active workspace profile to: Coated GRACoL 2006`,
+        `[SYS] Performing RGB to CMYK process plate separation...`,
+        `[SYS] Out-of-gamut pixels normalized. Cyan, Magenta, Yellow, Key (Black) plates synchronized.`
+      ]);
+    } else {
+      setSoftwareTerminalLogs([
+        `[SYS] Switching active workspace profile to: sRGB IEC61966-2.1`,
+        `[SYS] WARNING: RGB profiles are not supported for offset plate production.`,
+        `[SYS] Workspace is now calibrated for high-dynamic digital display only.`
+      ]);
+    }
+  };
+
+  const handleFireflySim = () => {
+    if (isSoftwareSimulating) return;
+    setIsSoftwareSimulating(true);
+    setSoftwareSimProgress(0);
+    setSoftwareTerminalLogs([
+      '[SYS] Connecting to Adobe Firefly Image Generation pipeline...',
+      `[SYS] Processing structured design prompt: "${fireflyPrompt}"`
+    ]);
+    const interval = setInterval(() => {
+      setSoftwareSimProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsSoftwareSimulating(false);
+          setFireflyImage(fireflyPrompt.toLowerCase().includes('gold') ? 'gold' : fireflyPrompt.toLowerCase().includes('floral') ? 'floral' : 'geometric');
+          setSoftwareTerminalLogs(logs => [
+            ...logs,
+            '[SYS] Generative AI tile computed.',
+            '[SYS] Tile seamlessness boundaries matched.',
+            '[SYS] CMYK color separation metadata embedded successfully.'
+          ]);
+          return 100;
+        }
+        if (prev === 50) {
+          setSoftwareTerminalLogs(logs => [
+            ...logs,
+            '[SYS] Generating high-fidelity vector lattice texture...',
+            '[SYS] Normalizing ink weights for industrial press coverage...'
+          ]);
+        }
+        return prev + 25;
+      });
+    }, 150);
+  };
+
+  const handleFontServerSync = () => {
+    if (isSoftwareSimulating) return;
+    setIsSoftwareSimulating(true);
+    setSoftwareSimProgress(0);
+    setSoftwareTerminalLogs([
+      '[SYS] Querying Central Font Server typographical catalog...',
+      `[SYS] Selected fonts for distribution: ${activeFonts.join(', ')}`
+    ]);
+    const interval = setInterval(() => {
+      setSoftwareSimProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsSoftwareSimulating(false);
+          setFontServerSynced(true);
+          setSoftwareTerminalLogs(logs => [
+            ...logs,
+            '[SYS] Typographical digital licensing tokens validated.',
+            '[SYS] Client terminal synchronization complete.',
+            `[SYS] System-wide fonts active: ${activeFonts.length} families.`
+          ]);
+          return 100;
+        }
+        if (prev === 50) {
+          setSoftwareTerminalLogs(logs => [
+            ...logs,
+            '[SYS] Packaging OTF/TTF format outlines into RIP cache...',
+            '[SYS] Deploying secure licensing tokens to client machines...'
+          ]);
+        }
+        return prev + 25;
+      });
+    }, 150);
+  };
+
   return (
     <div className="text-slate-800 flex flex-col font-sans min-h-screen bg-slate-50">
       
@@ -518,8 +711,8 @@ Question: ${text}`
               )}
               id="demo-tab-preflight"
             >
-              <FileCheck2 className="w-4 h-4" />
-              Pre-flight Artwork Checker
+              <Laptop className="w-4 h-4" />
+              Licensed Software & Toolkit Hub
             </button>
             <button
               onClick={() => setActiveTab('projects')}
@@ -533,6 +726,19 @@ Question: ${text}`
             >
               <Layers className="w-4 h-4" />
               Interactive Project Portfolio
+            </button>
+            <button
+              onClick={() => setActiveTab('accounts')}
+              className={cn(
+                "px-5 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2.5",
+                activeTab === 'accounts' 
+                  ? "border-pink-500 text-white bg-slate-800/40" 
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              )}
+              id="demo-tab-accounts"
+            >
+              <CreditCard className="w-4 h-4" />
+              Accounts & Fees Panel
             </button>
           </div>
         </div>
@@ -559,17 +765,32 @@ Question: ${text}`
                     Click each phase below to view the exact dashboard state, features, and required checks the student experiences at that point in the portal.
                   </p>
 
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
                     {[
                       { num: 1, name: 'Phase 1: Registration Complete', desc: 'Pre-requisite video & registration verification.' },
                       { num: 2, name: 'Phase 2: Self-Care & Wellness', desc: '15-minute mandatory morning routine module.' },
                       { num: 3, name: 'Phase 3: Entrance Assessment', desc: 'Interactive grammar & logic MCQ test.' },
                       { num: 4, name: 'Phase 4: Verified Class Modules', desc: 'Access to dynamic syllabus, tools, & AI assistance.' },
-                      { num: 5, name: 'Phase 5: Capstone Project Draft', desc: 'PDF upload, automated pre-flight audit & pass.' }
+                      { num: 5, name: 'Phase 5: Master Projects Provided', desc: 'Browse the list of real-world industrial projects we provide.' },
+                      { num: 6, name: 'Phase 6: Industrial Visit (IV)', desc: 'On-site industry visits to premier printing and packaging plants.' },
+                      { num: 7, name: 'Phase 7: Student Score Card', desc: 'Real-time performance metrics, marks, and attendance log.' },
+                      { num: 8, name: 'Phase 8: Internal Interviews', desc: 'Pre-press portfolio defense with senior faculty assessors.' },
+                      { num: 9, name: 'Phase 9: HR Interviews', desc: 'Mock HR interviews, communication check, & placement review.' },
+                      { num: 10, name: 'Phase 10: Placement Assistance', desc: 'Direct corporate referral and interview dispatch center.' },
+                      { num: 11, name: 'Phase 11: Course Certification', desc: 'Award of verified digital diploma in Print & Packaging.' },
+                      { num: 12, name: 'Phase 12: Endless Spark Hiring', desc: 'Secured internal employment within our pre-press design agency.' }
                     ].map((stg) => (
                       <button
                         key={stg.num}
-                        onClick={() => setDashboardStage(stg.num as any)}
+                        onClick={() => {
+                          if (stg.num === 12) {
+                            const hasPendingInvoices = demoInvoice.emis.some(emi => emi.status !== 'paid');
+                            if (hasPendingInvoices) {
+                              alert("🚫 Access Blocked: Outstanding Dues Detected!\n\nYou have overdue course fee instalments in your commercial ledger. Please resolve all outstanding EMIs under the 'Accounts & Fees Panel' to unlock your internal prepress design employment offer.");
+                            }
+                          }
+                          setDashboardStage(stg.num as any);
+                        }}
                         className={cn(
                           "w-full text-left p-4 rounded-2xl border transition-all flex gap-3.5 items-start group relative overflow-hidden",
                           dashboardStage === stg.num 
@@ -930,12 +1151,12 @@ Question: ${text}`
                             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
                               <div>
                                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                  <FileCheck2 className="w-5 h-5 text-indigo-600" /> Capstone Project Verification
+                                  <FileCheck2 className="w-5 h-5 text-pink-600" /> Provided Master Projects
                                 </h3>
-                                <p className="text-xs text-slate-500">Auto-validating artwork boundaries and press variables</p>
+                                <p className="text-xs text-slate-500">Explore the industrial master projects provided for hands-on student training</p>
                               </div>
-                              <span className="px-3 py-1 bg-amber-500/10 text-amber-700 rounded-full text-[10px] font-bold">
-                                Final Evaluation Stage
+                              <span className="px-3 py-1 bg-pink-500/10 text-pink-700 rounded-full text-[10px] font-bold">
+                                Master Project Showcase
                               </span>
                             </div>
 
@@ -981,44 +1202,14 @@ Question: ${text}`
                                   activeProjects.map((proj, idx) => (
                                     <div 
                                       key={idx}
-                                      className="p-4 bg-slate-50/70 hover:bg-slate-50 rounded-2xl border border-slate-150 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                                      className="p-3.5 bg-slate-50/70 hover:bg-slate-50 rounded-2xl border border-slate-150 transition-colors flex items-center gap-4"
                                     >
-                                      <div className="flex items-start gap-3 min-w-0 flex-grow">
-                                        <span className="w-6 h-6 rounded-lg bg-pink-100 text-pink-700 text-xs font-bold flex items-center justify-center shrink-0 mt-1">
-                                          {String(idx + 1).padStart(2, '0')}
-                                        </span>
-                                        <div className="min-w-0 flex-1">
-                                          <div className="flex flex-wrap items-center gap-2 mb-1">
-                                            <h4 className="font-bold text-xs sm:text-sm text-slate-800 tracking-tight break-all">
-                                              {proj.projectCode ? `${proj.projectCode} - ${proj.title}` : proj.title}
-                                            </h4>
-                                            {proj.studentName && (
-                                              <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md border border-blue-100 uppercase tracking-wider">
-                                                Student: {proj.studentName}
-                                              </span>
-                                            )}
-                                            {proj.courseName && (
-                                              <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md border border-purple-100 uppercase tracking-wider">
-                                                {proj.courseName}
-                                              </span>
-                                            )}
-                                          </div>
-                                          <p className="text-xs text-slate-500 mt-1 leading-relaxed break-all">{proj.desc}</p>
-                                          <div className="flex flex-wrap gap-2 mt-2">
-                                            <span className="text-[9px] font-semibold bg-white text-slate-600 border border-slate-200 px-2 py-0.5 rounded-md font-mono">
-                                              File: {proj.filename}
-                                            </span>
-                                            <span className="text-[9px] font-semibold bg-white text-slate-600 border border-slate-200 px-2 py-0.5 rounded-md font-mono">
-                                              Specs: {proj.specs}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="shrink-0 flex items-center self-start sm:self-center">
-                                        <span className="px-2.5 py-1 bg-pink-50 text-pink-700 rounded-full text-[10px] font-bold border border-pink-100 uppercase tracking-wider">
-                                          {proj.badge}
-                                        </span>
-                                      </div>
+                                      <span className="w-6 h-6 rounded-lg bg-pink-100 text-pink-700 text-xs font-bold flex items-center justify-center shrink-0">
+                                        {String(idx + 1).padStart(2, '0')}
+                                      </span>
+                                      <h4 className="font-bold text-xs sm:text-sm text-slate-800 tracking-tight break-words min-w-0 flex-1">
+                                        {proj.projectCode ? `${proj.projectCode} - ${proj.title}` : proj.title}
+                                      </h4>
                                     </div>
                                   ))
                                 ) : (
@@ -1041,13 +1232,512 @@ Question: ${text}`
                           </div>
 
                           <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-4 mt-5">
-                            <span className="text-[10px] text-slate-500">Supervisor validation will trigger once artwork passes all pre-checks.</span>
+                            <span className="text-[10px] text-slate-500">Access campus-wide design licensing, compression algorithms, and font servers.</span>
                             <button 
                               onClick={() => setActiveTab('preflight')}
                               className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors flex items-center gap-1.5 shrink-0"
                             >
-                              Launch Artwork Auditor <ChevronRight className="w-3.5 h-3.5" />
+                              Open Licensed Software Hub <ChevronRight className="w-3.5 h-3.5" />
                             </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Stage 6 Render: Industrial Visit (IV) */}
+                    {dashboardStage === 6 && (
+                      <div className="flex-grow flex flex-col justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+                            <div>
+                              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                <MapPin className="w-5 h-5 text-pink-600" /> Industrial Visit (IV)
+                              </h3>
+                              <p className="text-xs text-slate-500">Practical on-site factory learning and machinery plant inspection</p>
+                            </div>
+                            <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-bold border border-emerald-100">
+                              Status: Completed
+                            </span>
+                          </div>
+
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 mb-5 text-slate-700 leading-relaxed space-y-3">
+                            <div className="flex justify-between text-xs font-semibold text-slate-800">
+                              <span>Visited Plant: Vanguard Corrugated & Offset Packagers Ltd</span>
+                              <span>Date: June 25, 2026</span>
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              Students witnessed heavy industrial prepress and high-speed multi-color printing machines in action, gaining deep vocational exposure to commercial manufacturing.
+                            </p>
+                          </div>
+
+                          <div className="space-y-3">
+                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Inspected Plant Modules:</h4>
+                            {[
+                              { section: 'CTP Direct-Imaging Plate Room', detail: 'Observed thermographic laser exposure & FOGRA39 calibration charts.', duration: '2 Hours' },
+                              { section: 'High-Speed 6-Color Offset Press Line', detail: 'Monitored automatic densitometer scanning & ink key controls.', duration: '3 Hours' },
+                              { section: 'Post-Press Die-Cutting & Structural Nesting', detail: 'Analyzed automated flatbed punch machines & folding gluers.', duration: '2 Hours' }
+                            ].map((item, idx) => (
+                              <div key={idx} className="p-3 bg-white border border-slate-150 rounded-xl hover:bg-slate-50 transition-colors flex items-start justify-between gap-3">
+                                <div>
+                                  <h5 className="text-xs font-bold text-slate-800">{item.section}</h5>
+                                  <p className="text-[10px] text-slate-500 mt-0.5">{item.detail}</p>
+                                </div>
+                                <span className="text-[9px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full shrink-0">{item.duration}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-4 mt-5">
+                          <span className="text-[10px] text-slate-500">A detailed photo-dossier of the Industrial Visit (IV) has been uploaded & certified.</span>
+                          <button 
+                            onClick={() => alert("Industrial Visit (IV) Report PDF downloaded successfully!")}
+                            className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download IV Report
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stage 7 Render: Student Score Card */}
+                    {dashboardStage === 7 && (
+                      <div className="flex-grow flex flex-col justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+                            <div>
+                              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                <TrendingUp className="w-5 h-5 text-pink-600" /> Student Score Card & Marks Tracker
+                              </h3>
+                              <p className="text-xs text-slate-500">Real-time academic records, grades, and overall progress report</p>
+                            </div>
+                            <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-bold border border-emerald-100">
+                              Status: Distinction
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 text-center">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Aggregate Marks</span>
+                              <span className="text-3xl font-black text-pink-600 block mt-1">84 / 90</span>
+                              <span className="text-[10px] text-slate-500 mt-1 block">Percentage: 93.3%</span>
+                            </div>
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 text-center">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Grade</span>
+                              <span className="text-3xl font-black text-indigo-600 block mt-1">A+</span>
+                              <span className="text-[10px] text-slate-500 mt-1 block">Outstanding Excellence</span>
+                            </div>
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 text-center">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Class Attendance</span>
+                              <span className="text-3xl font-black text-slate-800 block mt-1">96%</span>
+                              <span className="text-[10px] text-slate-500 mt-1 block">24 of 25 Sessions</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Detailed Marks Breakdown:</h4>
+                            {[
+                              { label: 'Video Lecture Attendance', score: '20 / 20', status: 'Approved', color: 'text-emerald-600 bg-emerald-50' },
+                              { label: 'Practical Assignment Draft', score: '9 / 10', status: 'Approved', color: 'text-emerald-600 bg-emerald-50' },
+                              { label: 'Weekly Theoretical Worksheet', score: '18 / 20', status: 'Approved', color: 'text-emerald-600 bg-emerald-50' },
+                              { label: 'Master Project Execution spec', score: '19 / 20', status: 'Approved', color: 'text-emerald-600 bg-emerald-50' },
+                              { label: 'Concept Mind Map Construction', score: '9 / 10', status: 'Approved', color: 'text-emerald-600 bg-emerald-50' },
+                              { label: 'Final Online Examination', score: '9 / 10', status: 'Completed', color: 'text-pink-600 bg-pink-50' }
+                            ].map((row, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-3 bg-white border border-slate-150 rounded-xl hover:bg-slate-50 transition-colors">
+                                <span className="text-xs text-slate-700 font-medium">{row.label}</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs font-bold text-slate-900">{row.score}</span>
+                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${row.color}`}>
+                                    {row.status}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-4 mt-5">
+                          <span className="text-[10px] text-slate-500">Grading scales strictly comply with industrial pre-press QA standards.</span>
+                          <button 
+                            onClick={() => alert("Digital Score Card downloaded successfully!")}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download PDF Report
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stage 8 Render: Internal Interviews */}
+                    {dashboardStage === 8 && (
+                      <div className="flex-grow flex flex-col justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+                            <div>
+                              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                <Users className="w-5 h-5 text-pink-600" /> Internal Pre-Press & Design Interviews
+                              </h3>
+                              <p className="text-xs text-slate-500">Technical assessment with our senior subject matter experts</p>
+                            </div>
+                            <span className="px-3 py-1 bg-amber-500/10 text-amber-700 rounded-full text-[10px] font-bold">
+                              Evaluation Completed
+                            </span>
+                          </div>
+
+                          <div className="p-4 bg-slate-950 rounded-2xl text-white mb-6 border border-slate-800 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-5">
+                              <Video className="w-24 h-24" />
+                            </div>
+                            <div className="flex items-center gap-3 mb-3">
+                              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
+                              <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest font-bold">Recorded Assessment Session</span>
+                            </div>
+                            <h4 className="font-bold text-sm text-slate-100 mb-1">Pre-Press Technology Panel</h4>
+                            <p className="text-xs text-slate-400">Interviewer: <strong>Er. Rajesh Kumar</strong> (Chief Trapping Specialist)</p>
+                          </div>
+
+                          <div className="bg-slate-50 rounded-2xl p-5 border border-slate-150 space-y-4">
+                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Assessor Ratings & Metrics:</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="space-y-1 bg-white p-3 rounded-xl border border-slate-150">
+                                <span className="text-[10px] text-slate-400 block font-medium">Technical & Preflight Concepts</span>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-slate-800">Trapping, Bleed, Gutter settings</span>
+                                  <span className="text-xs font-bold text-pink-600">9.0 / 10</span>
+                                </div>
+                              </div>
+                              <div className="space-y-1 bg-white p-3 rounded-xl border border-slate-150">
+                                <span className="text-[10px] text-slate-400 block font-medium">Software Excellence</span>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-slate-800">Illustrator & Automation Scripts</span>
+                                  <span className="text-xs font-bold text-pink-600">8.5 / 10</span>
+                                </div>
+                              </div>
+                              <div className="space-y-1 bg-white p-3 rounded-xl border border-slate-150">
+                                <span className="text-[10px] text-slate-400 block font-medium">Color Calibration Know-How</span>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-slate-800">FOGRA39 & Dot Gain compensation</span>
+                                  <span className="text-xs font-bold text-indigo-600">9.5 / 10</span>
+                                </div>
+                              </div>
+                              <div className="space-y-1 bg-white p-3 rounded-xl border border-slate-150">
+                                <span className="text-[10px] text-slate-400 block font-medium">Portfolio Presentation</span>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-slate-800">Master Project layouts</span>
+                                  <span className="text-xs font-bold text-indigo-600">8.8 / 10</span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-800 leading-relaxed">
+                              <strong>Assessor Feedback:</strong> "Exceptional grasp of mechanical parameters. The candidate explained dot gain compensation curve models flawlessly and illustrated standard nesting algorithms. Highly recommended for corporate interviews."
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-4 mt-5">
+                          <span className="text-[10px] text-slate-500">Upon clearing internal interviews, the profile lock releases for external placement.</span>
+                          <span className="px-3 py-1 bg-emerald-500/10 text-emerald-700 rounded-full text-[10px] font-bold">
+                            Overall Status: Passed & Recommended
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stage 9 Render: HR Interviews */}
+                    {dashboardStage === 9 && (
+                      <div className="flex-grow flex flex-col justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+                            <div>
+                              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                <User className="w-5 h-5 text-pink-600" /> HR Interviews & Corporate Readiness
+                              </h3>
+                              <p className="text-xs text-slate-500">Professional behavior, mock interviews, and communication evaluation</p>
+                            </div>
+                            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-[10px] font-bold border border-indigo-100">
+                              Stage: Complete
+                            </span>
+                          </div>
+
+                          <div className="grid md:grid-cols-12 gap-6 items-start mb-6">
+                            <div className="md:col-span-4 text-center p-4 bg-slate-50 border border-slate-150 rounded-2xl">
+                              <div className="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-3 font-bold text-lg">
+                                HR
+                              </div>
+                              <h4 className="font-bold text-xs text-slate-800">Ms. Neha Sharma</h4>
+                              <p className="text-[10px] text-slate-500 mt-0.5">Corporate Placement Head</p>
+                              <div className="mt-3 inline-block px-2 py-0.5 bg-emerald-500/10 text-emerald-700 text-[9px] font-bold rounded-full">
+                                Mock Rated: 4.8 / 5
+                              </div>
+                            </div>
+
+                            <div className="md:col-span-8 space-y-4">
+                              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Corporate Preparation Checklist:</h4>
+                              <div className="space-y-2">
+                                {[
+                                  { task: 'Self-Introduction & Elevator Pitch Tuning', status: 'Completed', detail: 'Formulated a concise summary of specialized training.' },
+                                  { task: 'Professional Behavior & Workplace Ethics', status: 'Completed', detail: 'Passed mock behavioral situational scenario test.' },
+                                  { task: 'Salary and Package Negotiation Workshop', status: 'Completed', detail: 'Trained on industrial benchmarks and salary structure.' },
+                                  { task: 'Pre-press Agency Portfolio Compilation', status: 'Completed', detail: 'Consolidated master project sheets in clean physical folders.' }
+                                ].map((item, idx) => (
+                                  <div key={idx} className="p-3 bg-white border border-slate-150 rounded-xl hover:bg-slate-50 transition-colors">
+                                    <div className="flex items-center justify-between gap-3 mb-1">
+                                      <span className="text-xs font-bold text-slate-800">{item.task}</span>
+                                      <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">{item.status}</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 pl-0.5">{item.detail}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-4 mt-5">
+                          <span className="text-[10px] text-slate-500">Corporate readiness certificate is appended to final student dossier.</span>
+                          <button 
+                            onClick={() => alert("Ready to dispatch! Placement support activated.")}
+                            className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0"
+                          >
+                            Activate Placements Portal
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stage 10 Render: Placement Assistance */}
+                    {dashboardStage === 10 && (
+                      <div className="flex-grow flex flex-col justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+                            <div>
+                              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                <Briefcase className="w-5 h-5 text-pink-600" /> Industrial Job Placement Assistance
+                              </h3>
+                              <p className="text-xs text-slate-500">Active resume dispatch tracker and coordinated recruitment events</p>
+                            </div>
+                            <span className="px-3 py-1 bg-pink-500/10 text-pink-700 rounded-full text-[10px] font-bold">
+                              4 Open Interviews
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-150 mb-5 text-xs text-slate-700 leading-relaxed">
+                            💡 <strong>Direct Placement Pipeline:</strong> We share student profiles and certified project briefs with premium print and packaging industries directly. Here is your application dispatch log:
+                          </div>
+
+                          <div className="space-y-3">
+                            {[
+                              { company: 'Vanguard Carton Packaging Ltd', role: 'Junior Pre-Press Engineer', status: 'Interview Scheduled', date: 'July 15, 2026', type: 'Off-Campus', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                              { company: 'Galaxy Flexibles Private Ltd', role: 'Plate-Ready Engineer', status: 'Shortlisted', date: 'Under Review', type: 'Direct Placement', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+                              { company: 'Trident Print Media Group', role: 'Color Specialist', status: 'Application Dispatched', date: 'Dispatched July 05', type: 'Partner Pool', color: 'bg-slate-100 text-slate-700 border-slate-200' },
+                              { company: 'Alpha Corrugated Box Labs', role: 'Structural Packaging Draftsman', status: 'Screening Passed', date: 'July 18, 2026', type: 'Off-Campus', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+                            ].map((job, idx) => (
+                              <div key={idx} className="p-3.5 bg-white border border-slate-150 rounded-xl hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-bold text-xs text-slate-800">{job.company}</h4>
+                                    <span className="text-[9px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">{job.type}</span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500">{job.role} • <span className="font-mono text-[10px] text-indigo-500 font-semibold">{job.date}</span></p>
+                                </div>
+                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border text-center shrink-0 ${job.color}`}>
+                                  {job.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-4 mt-5">
+                          <span className="text-[10px] text-slate-500">Placement coordinators update selection statuses directly through Firestore.</span>
+                          <button 
+                            onClick={() => alert("Placement coordinator contacted. They will email your schedule!")}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0"
+                          >
+                            Contact Placement Officer
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stage 11 Render: Course Certification */}
+                    {dashboardStage === 11 && (
+                      <div className="flex-grow flex flex-col justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+                            <div>
+                              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                <GraduationCap className="w-5 h-5 text-pink-600" /> Professional Course Certification
+                              </h3>
+                              <p className="text-xs text-slate-500">Verified institutional diploma credential in Printing & Packaging Engineering</p>
+                            </div>
+                            <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-bold border border-emerald-100">
+                              Verified Issued
+                            </span>
+                          </div>
+
+                          {/* Certificate Mock Box */}
+                          <div className="p-6 bg-gradient-to-br from-amber-50/50 to-orange-50/50 rounded-2xl border-4 border-double border-amber-300 relative text-center mb-6 shadow-inner overflow-hidden">
+                            <div className="absolute inset-0 border border-slate-200/50 m-2.5" />
+                            <div className="absolute top-0 right-0 p-4 opacity-5">
+                              <Award className="w-32 h-32 text-amber-500" />
+                            </div>
+                            
+                            <h4 className="font-serif text-amber-800 text-[11px] font-bold tracking-widest uppercase mb-1">Diploma Certificate of Completion</h4>
+                            <div className="w-10 h-0.5 bg-amber-400 mx-auto mb-4" />
+                            
+                            <p className="text-[9px] text-slate-500 italic">This is proudly presented to</p>
+                            <h5 className="font-extrabold text-slate-900 text-base my-2 font-sans tracking-tight">
+                              {user?.name || "Distinguished Student Lead"}
+                            </h5>
+                            <p className="text-[10px] text-slate-600 leading-relaxed max-w-md mx-auto mb-4">
+                              for successfully demonstrating absolute technical proficiency and clearing all pre-flight automation, trapping layout, and structural specifications in
+                            </p>
+                            <h6 className="font-bold text-indigo-700 text-xs uppercase tracking-wider mb-5">
+                              {selectedCourse.title}
+                            </h6>
+
+                            <div className="flex items-center justify-between px-6 text-left mt-6 pt-3 border-t border-slate-200/50">
+                              <div>
+                                <span className="text-[8px] text-slate-400 block font-bold">VERIFICATION ID</span>
+                                <span className="font-mono text-[9px] text-slate-700 font-bold">ES-CERT-94031-2026</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[8px] text-slate-400 block font-bold">ACADEMIC REGISTRAR</span>
+                                <span className="text-[9px] text-slate-800 font-semibold italic">Endless Spark School</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-4 mt-5">
+                          <span className="text-[10px] text-slate-500">This certificate carries an authentic cryptographical QR code for employer verification.</span>
+                          <button 
+                            onClick={() => alert("High-res diploma PDF generation started!")}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download High-Res PDF
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stage 12 Render: Employment in Endless Spark */}
+                    {dashboardStage === 12 && (() => {
+                      const hasPendingInvoices = demoInvoice.emis.some(emi => emi.status !== 'paid');
+                      
+                      if (hasPendingInvoices) {
+                        return (
+                          <div className="flex-grow flex flex-col justify-between">
+                            <div>
+                              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+                                <div>
+                                  <h3 className="text-lg font-bold text-red-600 flex items-center gap-2">
+                                    <AlertTriangle className="w-5 h-5 text-red-600 animate-pulse" /> Access Locked: Outstanding Dues Detected
+                                  </h3>
+                                  <p className="text-xs text-slate-500">Student Account Ledger holds pending commercial invoices</p>
+                                </div>
+                                <span className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-[10px] font-bold border border-red-100">
+                                  Hiring Lock Active
+                                </span>
+                              </div>
+
+                              <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center space-y-4 my-6">
+                                <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+                                  <Lock className="w-6 h-6" />
+                                </div>
+                                <h4 className="text-sm font-extrabold text-red-800">Commercial Ledger Verification Failed</h4>
+                                <p className="text-xs text-red-700 max-w-md mx-auto leading-relaxed">
+                                  Your final internal employment contract with the **Endless Spark Pre-Press Design Hub** has been temporarily locked. Institutional policies require a clean commercial balance sheet before executing payroll and corporate onboarding.
+                                </p>
+                                
+                                <div className="bg-white rounded-xl p-4 border border-red-150 max-w-sm mx-auto text-left space-y-2">
+                                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unpaid Dues Summary:</p>
+                                  {demoInvoice.emis.filter(e => e.status !== 'paid').map(e => (
+                                    <div key={e.emiNumber} className="flex items-center justify-between text-xs font-mono">
+                                      <span className="text-slate-600">EMI instalment #{e.emiNumber} (Due: {e.dueDate})</span>
+                                      <span className="font-bold text-red-600">₹{(e.baseAmount + e.interestAmount).toLocaleString()}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="border-t border-slate-100 pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 mt-5">
+                              <span className="text-[10px] text-slate-500">Go to the Accounts & Fees Panel to clear outstanding instalments to automatically unlock this stage.</span>
+                              <button 
+                                onClick={() => setActiveTab('accounts')}
+                                className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0 shadow-sm shadow-pink-900/15 cursor-pointer"
+                              >
+                                Go to Accounts & Fees <ChevronRight className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="flex-grow flex flex-col justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+                              <div>
+                                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                  <Award className="w-5 h-5 text-pink-600" /> Internal Employment: Endless Spark Prepress Hub
+                                </h3>
+                                <p className="text-xs text-slate-500">Congratulations! Employment offer for internal production agency</p>
+                              </div>
+                              <span className="px-3 py-1 bg-pink-500/10 text-pink-700 rounded-full text-[10px] font-bold">
+                                {offerAccepted ? "Offer Accepted!" : "Offer Released"}
+                              </span>
+                            </div>
+
+                            <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-5 rounded-2xl border border-slate-800 mb-6 relative overflow-hidden">
+                              <div className="absolute top-0 right-0 p-4 opacity-10">
+                                <Award className="w-24 h-24 text-pink-500" />
+                              </div>
+                              <h4 className="font-bold text-sm mb-1 text-pink-300">Pre-Press Automation Engineer / QC Specialist</h4>
+                              <p className="text-xs text-slate-300">Division: Prepress, Art, Trapping & Verification Center</p>
+                              
+                              <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
+                                <div>
+                                  <span className="text-slate-400 block text-[9px] uppercase tracking-wider font-bold">Starting Package</span>
+                                  <span className="font-bold text-white">₹4.8 Lakhs Per Annum (LPA)</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-slate-400 block text-[9px] uppercase tracking-wider font-bold">Work Location</span>
+                                  <span className="font-bold text-white">Endless Spark Design Hub / Remote</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 space-y-3">
+                              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Internal Onboarding Requirements:</h4>
+                              <div className="space-y-2 text-xs text-slate-600">
+                                <p>• <strong>Joining Date:</strong> August 01, 2026</p>
+                                <p>• <strong>Direct Scope:</strong> Handle high-resolution pre-flight packaging artwork diagnostics and construct production-ready trap lines.</p>
+                                <p>• <strong>Verification Step:</strong> Digitally execute the employment bond agreement directly inside your dashboard.</p>
+                              </div>
+
+                              {offerAccepted ? (
+                                <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold text-center">
+                                  🎉 Offer Accepted! Welcome to the Endless Spark Core Team. We are preparing your login credentials!
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setOfferAccepted(true)}
+                                  className="mt-4 w-full py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-colors shadow-md shadow-pink-900/10 cursor-pointer"
+                                >
+                                  Digitally Sign & Accept Employment Offer
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-4 mt-5">
+                            <span className="text-[10px] text-slate-500">Employment with Endless Spark is subject to satisfactory completion of final master project specifications.</span>
+                            <span className="text-[10px] text-slate-400 italic">Issued by: Director of Admissions & Recruiting</span>
                           </div>
                         </div>
                       );
@@ -1066,347 +1756,915 @@ Question: ${text}`
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="grid lg:grid-cols-12 gap-8"
+              className="space-y-6"
             >
-              {/* Left Info Panel */}
-              <div className="lg:col-span-4 space-y-4">
-                <div className="bg-white rounded-3xl p-6 border border-slate-150 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
-                    <BrainCircuit className="w-5 h-5 text-pink-600" /> Print AI Assistant
-                  </h3>
-                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
-                    The Endless Spark custom-trained AI handles production guidelines, answers complex print variables, and writes ExtendScript code to automate Adobe tools.
-                  </p>
-
-                  <div className="border-t border-slate-100 pt-4">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Click to Simulate Prompts:</h4>
-                    <div className="space-y-2">
-                      {[
-                        { title: 'Explain Trapping Widths', query: 'What are the standard trapping width settings for Commercial Offset press?' },
-                        { title: 'Convert RGB to CMYK Guidelines', query: 'Why is printing CMYK different from RGB? What happens if I print RGB?' },
-                        { title: 'Explain Bleed Tolerances', query: 'How does bleed work and why do I need 3mm to 5mm margin on physical cuts?' },
-                        { title: 'Illustrator ExtendScript Tool', query: 'Write a Javascript script for Adobe Illustrator to outline text frames' }
-                      ].map((item, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleSendAiMessage(item.query)}
-                          className="w-full text-left p-2.5 bg-slate-50 hover:bg-pink-50/50 hover:text-pink-600 rounded-xl text-xs text-slate-700 font-medium transition-all border border-slate-100 truncate block"
-                          id={`ai-prompt-btn-${idx}`}
-                        >
-                          &rarr; {item.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-900 text-white rounded-3xl p-6 border border-slate-800 shadow-sm">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-pink-400 mb-2">Syllabus Integrations</h4>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    Unlike standard models, our tutor is explicitly bounded with FOGRA, GRACOL, and ISO standard offset margins, enabling students to troubleshoot real-world mechanical discrepancies instantly.
-                  </p>
+              {/* AI Agent Sub-navigation Switcher */}
+              <div className="bg-slate-900 border border-slate-800 p-2 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 max-w-4xl mx-auto">
+                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-3 flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-pink-500 animate-pulse" />
+                  Select AI Agent Demo View:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setAiSubTab('prepress')}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
+                      aiSubTab === 'prepress'
+                        ? "bg-pink-600 text-white shadow-md shadow-pink-900/20"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                    )}
+                    id="ai-subtab-prepress"
+                  >
+                    <BrainCircuit className="w-3.5 h-3.5" />
+                    Pre-press Expert Chatbot
+                  </button>
+                  <button
+                    onClick={() => setAiSubTab('student-agent')}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
+                      aiSubTab === 'student-agent'
+                        ? "bg-pink-600 text-white shadow-md shadow-pink-900/20"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                    )}
+                    id="ai-subtab-student-agent"
+                  >
+                    <Bot className="w-3.5 h-3.5" />
+                    Smart Student Agent Console
+                  </button>
                 </div>
               </div>
 
-              {/* Chat Interface Rendering */}
-              <div className="lg:col-span-8 flex flex-col">
-                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col min-h-[500px]">
-                  
-                  {/* Chat Header */}
-                  <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center font-bold">
-                        AI
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Academic AI Tutor</h4>
-                        <p className="text-[10px] text-slate-500 font-mono">Status: Connected to model/gemini-2.5-flash</p>
-                      </div>
-                    </div>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  </div>
+              {aiSubTab === 'prepress' ? (
+                <div className="grid lg:grid-cols-12 gap-8">
+                  {/* Left Info Panel */}
+                  <div className="lg:col-span-4 space-y-4">
+                    <div className="bg-white rounded-3xl p-6 border border-slate-150 shadow-sm">
+                      <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                        <BrainCircuit className="w-5 h-5 text-pink-600" /> Print AI Assistant
+                      </h3>
+                      <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                        The Endless Spark custom-trained AI handles production guidelines, answers complex print variables, and writes ExtendScript code to automate Adobe tools.
+                      </p>
 
-                  {/* Messages container */}
-                  <div className="flex-grow p-6 overflow-y-auto space-y-4 max-h-[400px]">
-                    {aiMessages.map((msg, idx) => (
-                      <div 
-                        key={idx}
-                        className={cn(
-                          "flex gap-3 max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed",
-                          msg.role === 'user' 
-                            ? "bg-pink-600 text-white ml-auto rounded-tr-none" 
-                            : "bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none font-sans"
-                        )}
-                      >
-                        {msg.role !== 'user' && (
-                          <div className="w-5 h-5 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center shrink-0 font-bold text-[9px] mt-0.5">
-                            AI
-                          </div>
-                        )}
-                        <div className="flex-grow space-y-1 overflow-x-auto">
-                          {msg.role === 'user' ? (
-                            <p>{msg.content}</p>
-                          ) : (
-                            <div className="whitespace-pre-wrap font-sans text-slate-700">
-                              {/* Simple renderer for custom layout format */}
-                              {msg.content.split('\n\n').map((para, pIdx) => {
-                                if (para.startsWith('###')) {
-                                  return <h5 key={pIdx} className="text-xs font-black text-slate-950 mt-2 mb-1 uppercase tracking-wider">{para.replace('###', '')}</h5>;
-                                }
-                                if (para.startsWith('```')) {
-                                  const codeContent = para.replace(/```[a-z]*/g, '').trim();
-                                  return (
-                                    <pre key={pIdx} className="bg-slate-950 text-emerald-400 font-mono p-3 rounded-lg overflow-x-auto text-[10px] border border-slate-850 mt-2 mb-2 select-all">
-                                      <code>{codeContent}</code>
-                                    </pre>
-                                  );
-                                }
-                                if (para.startsWith('*')) {
-                                  return (
-                                    <ul key={pIdx} className="list-disc pl-5 space-y-1.5 my-2">
-                                      {para.split('\n').map((li, lIdx) => (
-                                        <li key={lIdx}>{li.replace('*', '').trim()}</li>
-                                      ))}
-                                    </ul>
-                                  );
-                                }
-                                return <p key={pIdx} className="leading-relaxed text-slate-600">{para}</p>;
-                              })}
-                            </div>
-                          )}
+                      <div className="border-t border-slate-100 pt-4">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Click to Simulate Prompts:</h4>
+                        <div className="space-y-2">
+                          {[
+                            { title: 'Explain Trapping Widths', query: 'What are the standard trapping width settings for Commercial Offset press?' },
+                            { title: 'Convert RGB to CMYK Guidelines', query: 'Why is printing CMYK different from RGB? What happens if I print RGB?' },
+                            { title: 'Explain Bleed Tolerances', query: 'How does bleed work and why do I need 3mm to 5mm margin on physical cuts?' },
+                            { title: 'Illustrator ExtendScript Tool', query: 'Write a Javascript script for Adobe Illustrator to outline text frames' }
+                          ].map((item, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handleSendAiMessage(item.query)}
+                              className="w-full text-left p-2.5 bg-slate-50 hover:bg-pink-50/50 hover:text-pink-600 rounded-xl text-xs text-slate-700 font-medium transition-all border border-slate-100 truncate block cursor-pointer"
+                              id={`ai-prompt-btn-${idx}`}
+                            >
+                              &rarr; {item.title}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    ))}
+                    </div>
 
-                    {isAiResponding && (
-                      <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl p-3.5 max-w-[200px]">
-                        <Loader2 className="w-4 h-4 text-pink-600 animate-spin" />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI analyzing...</span>
+                    <div className="bg-slate-900 text-white rounded-3xl p-6 border border-slate-800 shadow-sm">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-pink-400 mb-2">Syllabus Integrations</h4>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Unlike standard models, our tutor is explicitly bounded with FOGRA, GRACOL, and ISO standard offset margins, enabling students to troubleshoot real-world mechanical discrepancies instantly.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Chat Interface Rendering */}
+                  <div className="lg:col-span-8 flex flex-col">
+                    <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col min-h-[500px]">
+                      
+                      {/* Chat Header */}
+                      <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center font-bold">
+                            AI
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Academic AI Tutor</h4>
+                            <p className="text-[10px] text-slate-500 font-mono">Status: Connected to model/gemini-2.5-flash</p>
+                          </div>
+                        </div>
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                       </div>
-                    )}
-                  </div>
 
-                  {/* Input container */}
-                  <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Type your printing specifications question..."
-                      value={aiChatInput}
-                      onChange={(e) => setAiChatInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendAiMessage()}
-                      className="flex-grow px-4 py-3 bg-white border border-slate-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 text-xs text-slate-800"
-                      id="ai-chat-input-field"
-                    />
-                    <button
-                      onClick={() => handleSendAiMessage()}
-                      className="px-5 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-xl transition-all font-bold flex items-center justify-center shrink-0"
-                      id="ai-chat-send-btn"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
-                  </div>
+                      {/* Messages container */}
+                      <div className="flex-grow p-6 overflow-y-auto space-y-4 max-h-[400px]">
+                        {aiMessages.map((msg, idx) => (
+                          <div 
+                            key={idx}
+                            className={cn(
+                              "flex gap-3 max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed",
+                              msg.role === 'user' 
+                                ? "bg-pink-600 text-white ml-auto rounded-tr-none" 
+                                : "bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none font-sans"
+                            )}
+                          >
+                            {msg.role !== 'user' && (
+                              <div className="w-5 h-5 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center shrink-0 font-bold text-[9px] mt-0.5">
+                                AI
+                              </div>
+                            )}
+                            <div className="flex-grow space-y-1 overflow-x-auto">
+                              {msg.role === 'user' ? (
+                                <p>{msg.content}</p>
+                              ) : (
+                                <div className="whitespace-pre-wrap font-sans text-slate-700">
+                                  {/* Simple renderer for custom layout format */}
+                                  {msg.content.split('\n\n').map((para, pIdx) => {
+                                    if (para.startsWith('###')) {
+                                      return <h5 key={pIdx} className="text-xs font-black text-slate-950 mt-2 mb-1 uppercase tracking-wider">{para.replace('###', '')}</h5>;
+                                    }
+                                    if (para.startsWith('```')) {
+                                      const codeContent = para.replace(/```[a-z]*/g, '').trim();
+                                      return (
+                                        <pre key={pIdx} className="bg-slate-950 text-emerald-400 font-mono p-3 rounded-lg overflow-x-auto text-[10px] border border-slate-850 mt-2 mb-2 select-all">
+                                          <code>{codeContent}</code>
+                                        </pre>
+                                      );
+                                    }
+                                    if (para.startsWith('*')) {
+                                      return (
+                                        <ul key={pIdx} className="list-disc pl-5 space-y-1.5 my-2">
+                                          {para.split('\n').map((li, lIdx) => (
+                                            <li key={lIdx}>{li.replace('*', '').trim()}</li>
+                                          ))}
+                                        </ul>
+                                      );
+                                    }
+                                    return <p key={pIdx} className="leading-relaxed text-slate-600">{para}</p>;
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
 
+                        {isAiResponding && (
+                          <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl p-3.5 max-w-[200px]">
+                            <Loader2 className="w-4 h-4 text-pink-600 animate-spin" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI analyzing...</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Input container */}
+                      <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Type your printing specifications question..."
+                          value={aiChatInput}
+                          onChange={(e) => setAiChatInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSendAiMessage()}
+                          className="flex-grow px-4 py-3 bg-white border border-slate-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 text-xs text-slate-800"
+                          id="ai-chat-input-field"
+                        />
+                        <button
+                          onClick={() => handleSendAiMessage()}
+                          className="px-5 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-xl transition-all font-bold flex items-center justify-center shrink-0 cursor-pointer"
+                          id="ai-chat-send-btn"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-white rounded-[2.5rem] border border-slate-150 p-6 md:p-8 shadow-xl max-w-4xl mx-auto space-y-6">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                      <Bot className="w-6 h-6 text-pink-600 animate-bounce" /> Smart Student AI Agent Console
+                    </h3>
+                    <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                      Experience the multi-functional companion built for Endless Spark students. Learn concepts via chat, test your knowledge with instant AI-generated MCQ quizzes, or practice standard speech interviews using the verbal <strong>Communication Coach</strong>.
+                    </p>
+                  </div>
+                  <StudentAIAgent embedded />
+                </div>
+              )}
             </motion.div>
           )}
 
-          {/* TAB 3: Pre-flight Artwork Checker */}
-          {activeTab === 'preflight' && (
-            <motion.div
-              key="preflight"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="grid lg:grid-cols-12 gap-8"
-            >
-              {/* Left Selector & Upload */}
-              <div className="lg:col-span-5 space-y-4">
-                <div className="bg-white rounded-3xl p-6 border border-slate-150 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
-                    <FileCheck2 className="w-5 h-5 text-pink-600" /> Artwork Pre-Flight Audit
-                  </h3>
-                  <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-                    Simulate how our automated pre-flight system scans PDF and Vector formats to flag colorspace mismatches, missing bleed margins, and raw typography.
-                  </p>
+          {/* TAB 3: Licensed Software & Font Server Workspace */}
+          {activeTab === 'preflight' && (() => {
+            const softwares = [
+              {
+                id: 'illustrator',
+                name: 'Adobe Illustrator',
+                tagline: 'Vector Pre-press & Packaging Design',
+                version: '2026 (v30.2.1) Enterprise',
+                status: 'Running',
+                licenseType: 'Creative Cloud Floating',
+                icon: 'Laptop',
+                color: 'amber',
+                info: 'Used for bleed definition, custom trapping paths, spot colors, and packaging layouts. Automate text-to-outline conversion with ExtendScript.',
+                specs: [
+                  { label: 'Spot Plates', value: 'Pantone® Solid Coated active' },
+                  { label: 'Standard Profile', value: 'FOGRA39 (ISO 12647-2)' },
+                  { label: 'ExtendScript Engine', value: 'v4.8 Active' }
+                ]
+              },
+              {
+                id: 'photoshop',
+                name: 'Adobe Photoshop',
+                tagline: 'High-Resolution Raster Color Separation',
+                version: '2026 (v27.0.1) Enterprise',
+                status: 'Active',
+                licenseType: 'Creative Cloud Floating',
+                icon: 'Layers',
+                color: 'blue',
+                info: 'Used for photographic image cropping, high-DPI raster pre-processing, and multi-channel CMYK plate adjustments.',
+                specs: [
+                  { label: 'Max Target Resolution', value: '300-600 DPI' },
+                  { label: 'ICC Profile Link', value: 'Coated GRACoL 2006' },
+                  { label: 'Dot Gain Calibration', value: 'Standard 15% Offset' }
+                ]
+              },
+              {
+                id: 'acrobat',
+                name: 'Adobe Acrobat Pro',
+                tagline: 'PDF/X Compliance, Preflighting & RIP Optimization',
+                version: '2026 Continuous Edition',
+                status: 'Active',
+                licenseType: 'Enterprise Standard',
+                icon: 'FileText',
+                color: 'red',
+                info: 'Ensures output files are fully compliant with PDF/X-1a, PDF/X-3, or PDF/X-4 print standards, ensuring fonts are fully embedded or vectorized.',
+                specs: [
+                  { label: 'PDF Compliance Standard', value: 'PDF/X-4:2010 compliant' },
+                  { label: 'PostScript Engine', value: 'Adobe PDFPrintEngine v6' },
+                  { label: 'Font Inclusions', value: '100% Embedded' }
+                ]
+              },
+              {
+                id: 'nanobanana',
+                name: 'Nano Banana',
+                tagline: 'High-Performance Asset Compression & Vector Micro-Packer',
+                version: 'v2.8.4 Academic Build',
+                status: 'Ready',
+                licenseType: 'Academic Campus Site License',
+                icon: 'Cpu',
+                color: 'yellow',
+                info: 'A specialized, ultra-fast vector cruncher that cleans layout waste, strips metadata duplicates, and shrinks complex files to save bandwidth on automated high-speed printers.',
+                specs: [
+                  { label: 'Compression Ratio', value: 'Average 62% reduction' },
+                  { label: 'SVG Optimizer', value: 'SVGO-Banana custom' },
+                  { label: 'File Integrity', value: 'Lossless' }
+                ]
+              },
+              {
+                id: 'firefly',
+                name: 'Adobe Firefly',
+                tagline: 'Generative AI for Smart Assets & Packaging Textures',
+                version: 'v4.0 API Integrator',
+                status: 'Connected',
+                licenseType: 'API Commercial License',
+                icon: 'Bot',
+                color: 'purple',
+                info: 'Generate pristine packaging background patterns, high-fidelity mock textures, and prompt-driven brand assets seamlessly.',
+                specs: [
+                  { label: 'Model Version', value: 'Firefly Image v4.0' },
+                  { label: 'Resolution Cap', value: '4096 x 4096 SuperRes' },
+                  { label: 'Safety Filters', value: 'Commercial safe active' }
+                ]
+              },
+              {
+                id: 'fontserver',
+                name: 'Endless Spark Font Server',
+                tagline: 'Academic Typographical Distribution & Server License',
+                version: 'v5.1 Central',
+                status: 'Online',
+                licenseType: 'Unlimited Client License',
+                icon: 'Type',
+                color: 'teal',
+                info: 'Ensures license-compliant typography distribution across all classroom terminals. Auto-injects standard prepress font libraries to prevent rasterization failures.',
+                specs: [
+                  { label: 'Active Distribution', value: 'Space Grotesk, Inter, Fira Code' },
+                  { label: 'Licensing Verification', value: 'OFL & Commercial active' },
+                  { label: 'Server Ingress Port', value: 'Port 8042 (Secure TLS)' }
+                ]
+              }
+            ];
 
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                        Select Demo File Draft:
-                      </label>
-                      <div className="space-y-2">
-                        {PREFLIGHT_PRESETS.map((preset) => (
+            const currentSoftware = softwares.find(s => s.id === selectedSoftwareId) || softwares[0];
+
+            return (
+              <motion.div
+                key="preflight"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="grid lg:grid-cols-12 gap-8"
+              >
+                {/* Left Software List */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="bg-white rounded-3xl p-6 border border-slate-150 shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="p-2 bg-pink-50 text-pink-600 rounded-xl">
+                        <Laptop className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900 leading-none">
+                          Software & Licensing Hub
+                        </h3>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">Central Academic Directory</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+                      All campus terminals are fully equipped with enterprise-grade design utilities and font sync systems. Select an active platform below to interact with its virtual prepress workstation.
+                    </p>
+
+                    <div className="space-y-2">
+                      {softwares.map((sw) => {
+                        return (
                           <button
-                            key={preset.id}
+                            key={sw.id}
                             onClick={() => {
-                              setSelectedPreset(preset.id);
-                              setPreflightResult(null);
+                              setSelectedSoftwareId(sw.id);
+                              setSoftwareTerminalLogs([`[SYS] Switched console workspace focus to: ${sw.name}`]);
+                              setSoftwareSimProgress(0);
                             }}
                             className={cn(
-                              "w-full text-left p-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all",
-                              selectedPreset === preset.id 
-                                ? "border-pink-600 bg-pink-50/20 text-pink-700" 
-                                : "border-slate-150 hover:border-slate-200"
+                              "w-full text-left p-3.5 rounded-2xl border text-xs font-semibold flex items-center justify-between transition-all cursor-pointer",
+                              selectedSoftwareId === sw.id 
+                                ? "border-pink-600 bg-pink-50/10 text-pink-700 shadow-sm" 
+                                : "border-slate-150 hover:border-slate-200 hover:bg-slate-50/50"
                             )}
-                            id={`preflight-preset-${preset.id}`}
+                            id={`software-item-${sw.id}`}
                           >
-                            <span className="truncate pr-4">{preset.name}</span>
-                            <span className="text-[10px] text-slate-400 font-mono shrink-0">{preset.fileSize}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={handleRunPreflight}
-                      disabled={isPreflighting}
-                      className="w-full py-3.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-pink-600 transition-all shadow-md flex items-center justify-center gap-2"
-                      id="run-preflight-btn"
-                    >
-                      {isPreflighting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Auditing Layout Components...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Cpu className="w-4 h-4" />
-                          <span>Run Pre-Flight Checker</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-3xl p-6 border border-slate-150 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                    <Laptop className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-800">Need Custom Formats?</h4>
-                    <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
-                      Our live application lets students outline fonts directly using ExtendScripts before uploading to avoid RIP processing errors.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Output results */}
-              <div className="lg:col-span-7">
-                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden min-h-[420px] flex flex-col justify-between">
-                  <div className="p-6 sm:p-8">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
-                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Audit Compliance Report</h4>
-                      <span className="text-[10px] text-slate-400 font-mono">Variable Engine: V1.4.2</span>
-                    </div>
-
-                    {isPreflighting && (
-                      <div className="space-y-6 py-8">
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs font-bold text-slate-700">
-                            <span>Scanning Vectors & Outlines...</span>
-                            <span>{preflightProgress}%</span>
-                          </div>
-                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                            <div 
-                              className="bg-pink-600 h-full transition-all duration-300"
-                              style={{ width: `${preflightProgress}%` }}
-                            />
-                          </div>
-                        </div>
-                        <p className="text-[11px] text-slate-400 font-mono text-center animate-pulse">
-                          Reading raster maps, font descriptors, colorspaces and bounding dimensions...
-                        </p>
-                      </div>
-                    )}
-
-                    {!isPreflighting && !preflightResult && (
-                      <div className="text-center py-12 text-slate-400">
-                        <FileCheck2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                        <h5 className="font-bold text-xs text-slate-700 mb-1">No Active Audit</h5>
-                        <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
-                          Select a layout preset file on the left and click "Run Pre-Flight Checker" to simulate production validation.
-                        </p>
-                      </div>
-                    )}
-
-                    {!isPreflighting && preflightResult && (
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between gap-4 p-4 rounded-2xl border bg-slate-50">
-                          <div>
-                            <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">File Selected</span>
-                            <h5 className="text-xs font-bold text-slate-800">{preflightResult.name}</h5>
-                          </div>
-                          <span className={cn(
-                            "px-3 py-1 text-xs font-black uppercase rounded-full shrink-0 tracking-widest",
-                            preflightResult.status === 'PASS' 
-                              ? "bg-emerald-100 text-emerald-800" 
-                              : "bg-rose-100 text-rose-800"
-                          )}>
-                            {preflightResult.status}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          {[
-                            { label: 'Color space', val: preflightResult.colorSpace, passed: preflightResult.colorSpace === 'CMYK' },
-                            { label: 'Bleed bounds', val: preflightResult.bleed, passed: preflightResult.bleed !== '0.0 mm (Missing)' },
-                            { label: 'Fonts outlined', val: preflightResult.fontsOutlined ? 'Yes' : 'No', passed: preflightResult.fontsOutlined },
-                            { label: 'Resolution', val: preflightResult.resolution, passed: preflightResult.resolution !== '72 DPI (Low Res)' }
-                          ].map((item, idx) => (
-                            <div key={idx} className="p-3 bg-white border border-slate-150 rounded-xl">
-                              <span className="text-[9px] text-slate-400 font-semibold uppercase block mb-1">{item.label}</span>
-                              <div className="flex items-center justify-between gap-1.5">
-                                <span className="text-xs font-bold text-slate-800">{item.val}</span>
-                                {item.passed ? (
-                                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                ) : (
-                                  <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                                )}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={cn(
+                                "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-white font-black text-xs",
+                                sw.color === 'amber' && "bg-amber-500",
+                                sw.color === 'blue' && "bg-blue-600",
+                                sw.color === 'red' && "bg-rose-600",
+                                sw.color === 'yellow' && "bg-yellow-500 text-slate-950",
+                                sw.color === 'purple' && "bg-purple-600",
+                                sw.color === 'teal' && "bg-teal-600"
+                              )}>
+                                {sw.name.split(' ').pop()?.substring(0, 2).toUpperCase() || 'SW'}
                               </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-800 block truncate">{sw.name}</span>
+                                <span className="text-[10px] text-slate-400 font-medium block truncate mt-0.5">{sw.tagline}</span>
+                              </div>
+                            </div>
+                            <span className={cn(
+                              "text-[9px] font-bold px-2 py-0.5 rounded-full uppercase border shrink-0",
+                              sw.status === 'Running' || sw.status === 'Active' || sw.status === 'Connected' || sw.status === 'Online'
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                : "bg-blue-50 text-blue-700 border-blue-100"
+                            )}>
+                              {sw.status}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 text-white rounded-3xl p-5 border border-slate-800 shadow-md">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-pink-400">Licensing Status Dashboard</span>
+                      <span className="flex h-2 w-2 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Seat Limit:</span>
+                        <span className="font-bold text-slate-200">500 Terminals</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Active Sync:</span>
+                        <span className="font-bold text-slate-200 text-emerald-400">100% OK</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Interactive Prepress Workspace */}
+                <div className="lg:col-span-7">
+                  <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden min-h-[500px] flex flex-col justify-between">
+                    <div className="p-6 sm:p-8 space-y-6">
+                      
+                      {/* Workstation Header */}
+                      <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={cn(
+                              "text-[9px] font-black uppercase px-2 py-0.5 rounded font-mono text-white",
+                              currentSoftware.color === 'amber' && "bg-amber-500",
+                              currentSoftware.color === 'blue' && "bg-blue-600",
+                              currentSoftware.color === 'red' && "bg-rose-600",
+                              currentSoftware.color === 'yellow' && "bg-yellow-500 text-slate-950",
+                              currentSoftware.color === 'purple' && "bg-purple-600",
+                              currentSoftware.color === 'teal' && "bg-teal-600"
+                            )}>
+                              {currentSoftware.id.toUpperCase()}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold font-mono">{currentSoftware.version}</span>
+                          </div>
+                          <h4 className="text-xl font-black text-slate-900 tracking-tight">{currentSoftware.name}</h4>
+                          <p className="text-xs text-slate-500 font-medium mt-0.5">{currentSoftware.tagline}</p>
+                        </div>
+                        <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full font-mono shrink-0">
+                          ✓ LICENSED
+                        </span>
+                      </div>
+
+                      {/* Info and specs */}
+                      <div className="space-y-4">
+                        <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                          {currentSoftware.info}
+                        </p>
+
+                        {/* Specs Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {currentSoftware.specs.map((sp, idx) => (
+                            <div key={idx} className="p-3 bg-white border border-slate-150 rounded-xl">
+                              <span className="text-[9px] text-slate-400 font-semibold uppercase block mb-1">{sp.label}</span>
+                              <span className="text-xs font-bold text-slate-800 block truncate">{sp.value}</span>
                             </div>
                           ))}
                         </div>
+                      </div>
 
-                        {preflightResult.issues.length > 0 ? (
-                          <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl space-y-2">
-                            <h5 className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
-                              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" /> Flagged Pre-Flight Mismatches:
-                            </h5>
-                            <ul className="text-[11px] text-rose-800 space-y-1.5 pl-4 list-disc leading-relaxed">
-                              {preflightResult.issues.map((issue: string, idx: number) => (
-                                <li key={idx}>{issue}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : (
-                          <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3">
-                            <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
-                            <div>
-                              <h5 className="text-xs font-bold text-emerald-900">100% Production Ready</h5>
-                              <p className="text-[10px] text-emerald-700 leading-relaxed mt-0.5">
-                                No errors or warnings detected. This artwork contains appropriate bleeds and spot configurations. Ready for commercial plate separation.
+                      {/* INTERACTIVE WORKSPACE DESK */}
+                      <div className="border-t border-slate-100 pt-5 space-y-4">
+                        <h5 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                          <Terminal className="w-4 h-4 text-pink-600" /> Interactive Prepress Workstation Sandbox
+                        </h5>
+
+                        {/* WORKSPACE COMPONENT BY ID */}
+                        {selectedSoftwareId === 'illustrator' && (
+                          <div className="space-y-3">
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800">Dynamic Text-to-Outline ExtendScript Compiler</span>
+                                <span className="text-[10px] text-pink-600 font-bold font-mono">Adobe Scripting SDK</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                                Automatically outlines all text elements in an open Illustrator layout draft before rendering plates. Outlining stops font substitution failures in the raster line.
                               </p>
+                              <div className="pt-2">
+                                <button
+                                  onClick={handleIllustratorSim}
+                                  disabled={isSoftwareSimulating}
+                                  className="px-4 py-2.5 bg-slate-900 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                >
+                                  {isSoftwareSimulating ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      Compiling Outliner Script...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Cpu className="w-3.5 h-3.5" />
+                                      Compile Text Outlining Script
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Compiled script view */}
+                            {!isSoftwareSimulating && softwareSimProgress === 100 && (
+                              <div className="space-y-1.5">
+                                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">✓ Build Complete</span>
+                                <pre className="bg-slate-950 text-emerald-400 font-mono p-4 rounded-2xl overflow-x-auto text-[10px] border border-slate-850 select-all max-h-[160px]">
+                                  <code>{`// Endless Spark Prepress Font Outliner
+(function() {
+  var doc = app.activeDocument;
+  var textFrames = doc.textFrames;
+  var count = 0;
+  for (var i = textFrames.length - 1; i >= 0; i--) {
+    var tf = textFrames[i];
+    if (!tf.locked && tf.layer.visible) {
+      tf.createOutline();
+      count++;
+    }
+  }
+  alert('Outlined ' + count + ' layout elements successfully.');
+})();`}</code>
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {selectedSoftwareId === 'photoshop' && (
+                          <div className="space-y-4">
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-150 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800">Raster CMYK Color Plate Separation</span>
+                                <span className="text-[10px] text-blue-600 font-bold font-mono">ICC Engine V4</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                                Switch the color workspace mode to convert image arrays from display RGB into subtractive Cyan, Magenta, Yellow, and Black plate separations.
+                              </p>
+
+                              <div className="flex gap-2 pt-1">
+                                <button
+                                  onClick={() => handlePhotoshopModeChange('RGB')}
+                                  className={cn(
+                                    "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                                    photoshopMode === 'RGB'
+                                      ? "bg-rose-500 text-white shadow-sm"
+                                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                  )}
+                                >
+                                  RGB (Digital Monitor)
+                                </button>
+                                <button
+                                  onClick={() => handlePhotoshopModeChange('CMYK')}
+                                  className={cn(
+                                    "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                                    photoshopMode === 'CMYK'
+                                      ? "bg-emerald-600 text-white shadow-sm"
+                                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                  )}
+                                >
+                                  CMYK (Offset Press Safe)
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Color Profile split preview simulation */}
+                            <div className="p-4 border border-slate-150 rounded-2xl space-y-2">
+                              <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Dynamic Color Profile Gamut Preview</span>
+                              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                                <div className={cn(
+                                  "w-28 h-28 rounded-2xl transition-all duration-500 flex items-center justify-center text-center p-3 text-white font-extrabold text-xs shadow-md",
+                                  photoshopMode === 'RGB' 
+                                    ? "bg-pink-500 shadow-pink-500/40 border-4 border-pink-400" 
+                                    : "bg-pink-700 border-4 border-pink-800 shadow-none"
+                                )}>
+                                  {photoshopMode === 'RGB' ? 'RGB Neon (Non-Printable)' : 'CMYK Plated (Calibrated)'}
+                                </div>
+                                <div className="text-xs space-y-1 text-slate-600 flex-1">
+                                  {photoshopMode === 'RGB' ? (
+                                    <>
+                                      <p className="text-rose-600 font-bold">⚠️ Warning: Out of Print Gamut</p>
+                                      <p className="text-[11px] leading-relaxed">Colors look vibrant on monitors, but lack physical equivalents. Printing raw RGB will result in muddy, desaturated packaging plates.</p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="text-emerald-600 font-bold">✓ Print Ready CMYK Separation</p>
+                                      <p className="text-[11px] leading-relaxed">Cyan, Magenta, Yellow, Black inks are fully mapped. Output is balanced to GRACol 2006 prepress standard specifications.</p>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         )}
-                      </div>
-                    )}
-                  </div>
 
-                  <div className="p-4 sm:px-8 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-500">Integrates with Supervisor plate-making dashboard directly.</span>
-                    {preflightResult?.status === 'PASS' && (
-                      <button className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1">
-                        <Download className="w-3.5 h-3.5" /> Download Checked PDF
-                      </button>
-                    )}
+                        {selectedSoftwareId === 'acrobat' && (
+                          <div className="space-y-4">
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800">PDF/X-4:2010 Production Pre-Flight</span>
+                                <span className="text-[10px] text-rose-600 font-bold font-mono">Adobe PDF Library</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                                Scans final file drafts for critical compliance markers: vector font outlines, 3.0mm bleeds, and high plate resolution (&gt;=300 DPI).
+                              </p>
+                              <div className="pt-2">
+                                <button
+                                  onClick={handleAcrobatSim}
+                                  disabled={isSoftwareSimulating}
+                                  className="px-4 py-2.5 bg-slate-900 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                >
+                                  {isSoftwareSimulating ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      Auditing PDF Compliance...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FileCheck2 className="w-3.5 h-3.5" />
+                                      Run PDF/X Preflight Audit
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Compliance results */}
+                            {acrobatChecked && !isSoftwareSimulating && (
+                              <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-3">
+                                <h6 className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Preflight Audit Passed successfully
+                                </h6>
+                                <div className="grid grid-cols-2 gap-2 text-[11px] text-emerald-800">
+                                  <div className="flex items-center gap-1">✓ Fonts: Outlined & Vectorized</div>
+                                  <div className="flex items-center gap-1">✓ Bleed: 3.0mm Boundary Valid</div>
+                                  <div className="flex items-center gap-1">✓ Profile: FOGRA39 OutputIntent</div>
+                                  <div className="flex items-center gap-1">✓ Images: 300 DPI High-Res</div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {selectedSoftwareId === 'nanobanana' && (
+                          <div className="space-y-4">
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800">Nano Banana Lossless Vector Cruncher</span>
+                                <span className="text-[10px] text-yellow-600 font-bold font-mono">Banana Core v2.8</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                                Drag the slider to simulate optimizing coordinate points, removing unused styles, and compressing vector layouts. Highly useful for reducing RIP process load times.
+                              </p>
+
+                              <div className="space-y-2 pt-2">
+                                <div className="flex justify-between text-xs font-bold text-slate-700">
+                                  <span>Compression Strength:</span>
+                                  <span className="text-pink-600 font-mono">{100 - bananaCompression}%</span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="20"
+                                  max="100"
+                                  value={bananaCompression}
+                                  onChange={(e) => {
+                                    setBananaCompression(Number(e.target.value));
+                                    setSoftwareTerminalLogs([
+                                      `[SYS] Nano Banana vector micro-packer active.`,
+                                      `[SYS] Mesh optimization strength: ${100 - Number(e.target.value)}%`,
+                                      `[SYS] Outlines simplified. Unused coordinate precision trimmed.`,
+                                      `[SYS] Output package size: ${(14.2 * (Number(e.target.value) / 100)).toFixed(2)} MB`
+                                    ]);
+                                  }}
+                                  className="w-full accent-pink-600 cursor-pointer h-2 bg-slate-200 rounded-lg appearance-none"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Compression comparison metrics */}
+                            <div className="p-4 border border-slate-150 rounded-2xl bg-white flex items-center justify-between gap-4">
+                              <div>
+                                <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Original File Size</span>
+                                <h5 className="text-lg font-black text-slate-700 leading-none mt-1">14.2 MB</h5>
+                              </div>
+                              <div className="text-center font-black text-pink-600 text-lg">
+                                &rarr; {100 - bananaCompression}% Optimized &rarr;
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Compressed Size</span>
+                                <h5 className="text-lg font-black text-emerald-600 leading-none mt-1">
+                                  {(14.2 * (bananaCompression / 100)).toFixed(2)} MB
+                                </h5>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedSoftwareId === 'firefly' && (
+                          <div className="space-y-4">
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800">Generative Brand Texture Studio</span>
+                                <span className="text-[10px] text-purple-600 font-bold font-mono">Firefly REST API</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                                Enter a style prompt to synthetically generate seamless, high-resolution background textures for your packaging cartons.
+                              </p>
+
+                              <div className="space-y-3">
+                                <input
+                                  type="text"
+                                  placeholder="Luxury geometric rose-gold packaging grid..."
+                                  value={fireflyPrompt}
+                                  onChange={(e) => setFireflyPrompt(e.target.value)}
+                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 text-xs text-slate-800 font-bold"
+                                />
+                                <div className="flex flex-wrap gap-1.5">
+                                  <button
+                                    onClick={() => setFireflyPrompt('Minimalist botanical leaves pastel outline')}
+                                    className="px-2.5 py-1 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-[10px] font-bold text-slate-600 transition-colors"
+                                  >
+                                    Botanical
+                                  </button>
+                                  <button
+                                    onClick={() => setFireflyPrompt('Gold luxury linear hexagonal mosaic')}
+                                    className="px-2.5 py-1 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-[10px] font-bold text-slate-600 transition-colors"
+                                  >
+                                    Gold Lattice
+                                  </button>
+                                  <button
+                                    onClick={() => setFireflyPrompt('Neon cyber grid packaging overlay')}
+                                    className="px-2.5 py-1 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-[10px] font-bold text-slate-600 transition-colors"
+                                  >
+                                    Cyber Matrix
+                                  </button>
+                                </div>
+                                <div className="pt-1">
+                                  <button
+                                    onClick={handleFireflySim}
+                                    disabled={isSoftwareSimulating}
+                                    className="px-4 py-2.5 bg-slate-900 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                  >
+                                    {isSoftwareSimulating ? (
+                                      <>
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        Computing Vector Layers...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Bot className="w-3.5 h-3.5" />
+                                        Generate Brand Asset Tile
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Generative texture rendering panel */}
+                            {fireflyImage && !isSoftwareSimulating && (
+                              <div className="p-4 border border-slate-150 rounded-2xl space-y-2">
+                                <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Computed Seamless Vector Pattern</span>
+                                <div className="flex gap-4 items-center">
+                                  <div className="w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-slate-950 flex items-center justify-center relative border border-slate-800">
+                                    {/* Procedural Pattern render using CSS vector SVGs */}
+                                    {fireflyImage === 'gold' && (
+                                      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" className="opacity-80">
+                                        <defs>
+                                          <pattern id="gold-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                                            <path d="M 20 0 L 0 20 M 0 0 L 20 20" fill="none" stroke="#fbbf24" strokeWidth="1"/>
+                                          </pattern>
+                                        </defs>
+                                        <rect width="100%" height="100%" fill="url(#gold-grid)" />
+                                      </svg>
+                                    )}
+                                    {fireflyImage === 'floral' && (
+                                      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" className="opacity-80">
+                                        <defs>
+                                          <pattern id="floral-circles" width="30" height="30" patternUnits="userSpaceOnUse">
+                                            <circle cx="15" cy="15" r="10" fill="none" stroke="#ec4899" strokeWidth="1.5"/>
+                                            <circle cx="15" cy="15" r="5" fill="none" stroke="#a855f7" strokeWidth="1"/>
+                                          </pattern>
+                                        </defs>
+                                        <rect width="100%" height="100%" fill="url(#floral-circles)" />
+                                      </svg>
+                                    )}
+                                    {fireflyImage === 'geometric' && (
+                                      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" className="opacity-80">
+                                        <defs>
+                                          <pattern id="geo-squares" width="25" height="25" patternUnits="userSpaceOnUse">
+                                            <rect x="5" y="5" width="15" height="15" fill="none" stroke="#3b82f6" strokeWidth="1"/>
+                                            <circle cx="12.5" cy="12.5" r="3" fill="#6366f1" />
+                                          </pattern>
+                                        </defs>
+                                        <rect width="100%" height="100%" fill="url(#geo-squares)" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                  <div className="text-xs space-y-1 text-slate-600">
+                                    <p className="text-purple-600 font-extrabold font-mono">✓ High Resolution SVG Tile Ready</p>
+                                    <p className="text-[11px] leading-relaxed font-semibold">Prompt matching: "{fireflyPrompt}"</p>
+                                    <p className="text-[10px] text-slate-400 font-mono font-semibold">License: Authorized for commercial printing under classroom API credentials.</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {selectedSoftwareId === 'fontserver' && (
+                          <div className="space-y-4">
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800">Campus Typography Catalog Synchronization</span>
+                                <span className="text-[10px] text-teal-600 font-bold font-mono">Secure TLS Server</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                                Select default font families to sync with client workstation catalogs. All selected fonts will bypass licensing validation checks on classroom terminals.
+                              </p>
+
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                {['Space Grotesk', 'Inter', 'JetBrains Mono', 'Outfit', 'Playfair Display'].map((fontName) => {
+                                  const isSelected = activeFonts.includes(fontName);
+                                  return (
+                                    <button
+                                      key={fontName}
+                                      onClick={() => {
+                                        if (isSelected) {
+                                          setActiveFonts(activeFonts.filter(f => f !== fontName));
+                                        } else {
+                                          setActiveFonts([...activeFonts, fontName]);
+                                        }
+                                        setFontServerSynced(false);
+                                      }}
+                                      className={cn(
+                                        "px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border",
+                                        isSelected 
+                                          ? "bg-teal-50 border-teal-200 text-teal-800 shadow-sm" 
+                                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                                      )}
+                                    >
+                                      <span>{fontName}</span>
+                                      {isSelected && <span className="text-[10px] text-teal-600 font-black">✓</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              <div className="pt-2">
+                                <button
+                                  onClick={handleFontServerSync}
+                                  disabled={isSoftwareSimulating || activeFonts.length === 0}
+                                  className="px-4 py-2.5 bg-slate-900 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                >
+                                  {isSoftwareSimulating ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      Syncing Vault with Classroom Terminals...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <RefreshCw className="w-3.5 h-3.5" />
+                                      Synchronize Font Server Catalog
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Typography preview panel */}
+                            <div className="p-4 border border-slate-150 rounded-2xl space-y-2.5">
+                              <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Workstation Typography Render Preview</span>
+                              <div className="space-y-3">
+                                {activeFonts.map((font) => (
+                                  <div key={font} className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-4">
+                                    <div className="min-w-0 flex-1">
+                                      <span className="text-[9px] text-slate-400 block font-mono">{font} font style</span>
+                                      <span 
+                                        className="text-xs font-extrabold text-slate-800 leading-tight block truncate mt-0.5"
+                                        style={{ fontFamily: font === 'Space Grotesk' ? 'Space Grotesk, sans-serif' : font === 'JetBrains Mono' ? 'monospace' : 'sans-serif' }}
+                                      >
+                                        The quick brown fox jumps over the lazy dog (Print Outlines Validated)
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-emerald-600 font-black shrink-0 font-mono">
+                                      {fontServerSynced ? '✓ Synced' : '● Ready'}
+                                    </span>
+                                  </div>
+                                ))}
+                                {activeFonts.length === 0 && (
+                                  <p className="text-[11px] text-rose-500 font-bold text-center py-4">No active typography selected! Sync catalog immediately.</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TERMINAL OUTPUT LOGGER */}
+                        <div className="space-y-2 pt-1">
+                          <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider flex items-center gap-1.5">
+                            <Terminal className="w-3.5 h-3.5 text-slate-500" /> Active Console Terminal Log Output:
+                          </span>
+                          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl font-mono text-[10px] text-slate-300 space-y-1.5 max-h-[120px] overflow-y-auto">
+                            {softwareTerminalLogs.map((log, lIdx) => (
+                              <div key={lIdx} className={cn(
+                                "leading-relaxed",
+                                log.includes('WARNING') || log.includes('Warning') ? "text-rose-400 font-bold" : log.includes('✓') || log.includes('certified') ? "text-emerald-400 font-bold" : "text-slate-300"
+                              )}>
+                                {log}
+                              </div>
+                            ))}
+                            {softwareTerminalLogs.length === 0 && (
+                              <div className="text-slate-500 italic">No console logs recorded yet. Run a simulation trigger above.</div>
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                    {/* Footer */}
+                    <div className="p-4 sm:px-8 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between font-mono">
+                      <span className="text-[10px] text-slate-500">Licensed software and typography synced with local RIP classroom hardware.</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          )}
+
+              </motion.div>
+            );
+          })()}
 
           {/* TAB 4: Interactive Project Portfolio */}
           {activeTab === 'projects' && (
@@ -1494,6 +2752,322 @@ Question: ${text}`
                     </div>
                   </div>
                 ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* TAB 5: Interactive Student Account Panel */}
+          {activeTab === 'accounts' && (
+            <motion.div
+              key="accounts"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              {/* Account Overview Header */}
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-150 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                  <div className="flex items-center gap-2 text-pink-600 font-bold mb-1">
+                    <Settings className="w-5 h-5 animate-spin-slow text-pink-500" />
+                    <span className="text-xs uppercase tracking-wider">Simulated Institutional Accounts System</span>
+                  </div>
+                  <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight">Student Billing & Accounts Panel</h3>
+                  <p className="text-xs text-slate-500 max-w-2xl mt-1">
+                    Manage your commercial fee ledger, EMI instalment dates, institutional waivers, and live referral cashback metrics. Perfect for testing financial ledger math and administrative overrides.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      setDemoInvoice(initialDemoInvoice);
+                      alert("Simulated accounts database reset to defaults successfully!");
+                    }}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-200"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Reset Ledger
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const printWindow = window.open('', '_blank');
+                      if (printWindow) {
+                        printWindow.document.write(`
+                          <html>
+                            <head>
+                              <title>Official Ledger Statement - ${demoInvoice.id}</title>
+                              <style>
+                                body { font-family: monospace; padding: 40px; color: #333; }
+                                h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
+                                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                                th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+                                th { background-color: #f5f5f5; }
+                              </style>
+                            </head>
+                            <body>
+                              <h1>ENDLESS SPARK ACADEMY - ACCOUNT LEDGER</h1>
+                              <p><strong>Invoice ID:</strong> ${demoInvoice.id}</p>
+                              <p><strong>Course Name:</strong> ${demoInvoice.courseName}</p>
+                              <p><strong>Base Course Fee:</strong> INR ${demoInvoice.baseFee.toLocaleString()}</p>
+                              <p><strong>Total Paid Balance:</strong> INR ${demoInvoice.emis.filter(e => e.status === 'paid').reduce((sum, e) => sum + e.baseAmount + e.interestAmount, 0).toLocaleString()}</p>
+                              <h2>EMI Schedule</h2>
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>EMI No</th>
+                                    <th>Due Date</th>
+                                    <th>Base Amount</th>
+                                    <th>Interest</th>
+                                    <th>Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  ${demoInvoice.emis.map(e => `
+                                    <tr>
+                                      <td>EMI ${e.emiNumber}</td>
+                                      <td>${e.dueDate}</td>
+                                      <td>INR ${e.baseAmount.toLocaleString()}</td>
+                                      <td>INR ${e.interestAmount.toLocaleString()}</td>
+                                      <td><strong>${e.status.toUpperCase()}</strong></td>
+                                    </tr>
+                                  `).join('')}
+                                </tbody>
+                              </table>
+                              <p style="margin-top: 40px; font-size: 11px; color: #777;">* This is a simulated academy ledger statement produced for demonstration purposes.</p>
+                            </body>
+                          </html>
+                        `);
+                        printWindow.document.close();
+                        printWindow.print();
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Export PDF Statement
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Scorecard Bento */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {(() => {
+                  const base = demoInvoice.baseFee;
+                  const finalBillable = base;
+
+                  const totalInterest = demoInvoice.emis.reduce((sum, e) => sum + e.interestAmount, 0);
+                  const finalPayableNet = finalBillable + totalInterest;
+                  const totalPaid = demoInvoice.emis.filter(e => e.status === 'paid').reduce((sum, e) => {
+                    return sum + e.baseAmount + e.interestAmount;
+                  }, 0);
+                  const outstandingBalance = Math.max(0, finalPayableNet - totalPaid);
+
+                  return (
+                    <>
+                      <div className="bg-white p-5 rounded-3xl border border-slate-150 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Base Course Fee</span>
+                        <div className="mt-2">
+                          <p className="text-xl font-extrabold text-slate-900 font-mono">₹{base.toLocaleString()}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Commercial List Price</p>
+                        </div>
+                      </div>
+                      <div className="bg-white p-5 rounded-3xl border border-slate-150 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Net Billable Amount</span>
+                        <div className="mt-2">
+                          <p className="text-xl font-extrabold text-indigo-600 font-mono">₹{finalPayableNet.toLocaleString()}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Inc. Interest (7%)</p>
+                        </div>
+                      </div>
+                      <div className="bg-white p-5 rounded-3xl border border-slate-150 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Fees Paid</span>
+                        <div className="mt-2">
+                          <p className="text-xl font-extrabold text-emerald-700 font-mono">₹{totalPaid.toLocaleString()}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Received in Bank Account</p>
+                        </div>
+                      </div>
+                      <div className="bg-white p-5 rounded-3xl border border-slate-150 shadow-sm flex flex-col justify-between col-span-2 lg:col-span-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Outstanding Balance</span>
+                        <div className="mt-2">
+                          <p className="text-xl font-extrabold text-rose-600 font-mono">₹{outstandingBalance.toLocaleString()}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Due Installments</p>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Two-Column Detail Grid */}
+              <div className="grid lg:grid-cols-3 gap-6">
+                {/* Left: Interactive Instalments Ledger */}
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="bg-white rounded-3xl border border-slate-150 shadow-sm overflow-hidden">
+                    <div className="p-5 border-b border-slate-150 bg-slate-50/50 flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-900">EMI Instalment & Ledger Statement</h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Detailed breakdown of principal, interest, and digital payments</p>
+                      </div>
+                      <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-bold">
+                        Invoice: {demoInvoice.id}
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] font-bold border-b border-slate-150">
+                          <tr>
+                            <th className="px-4 py-3">Instalment</th>
+                            <th className="px-4 py-3 border-l border-slate-100">Due Date</th>
+                            <th className="px-4 py-3 text-right border-l border-slate-100">Principal</th>
+                            <th className="px-4 py-3 text-right border-l border-slate-100">Interest (7%)</th>
+                            <th className="px-4 py-3 text-right border-l border-slate-100 bg-slate-50">Net Due</th>
+                            <th className="px-4 py-3 text-center border-l border-slate-100">Status</th>
+                            <th className="px-4 py-3 text-center border-l border-slate-100">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-150">
+                          {demoInvoice.emis.map((emi, index) => {
+                            // Calculate net payable for this EMI
+                            const netPayable = Math.max(0, emi.baseAmount + emi.interestAmount);
+
+                            return (
+                              <tr key={index} className="hover:bg-slate-50/50 transition-all">
+                                <td className="px-4 py-3.5 font-bold text-slate-900">EMI {emi.emiNumber}</td>
+                                <td className="px-4 py-3.5 text-slate-500 font-mono text-[10px] border-l border-slate-100">
+                                  {new Date(emi.dueDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </td>
+                                <td className="px-4 py-3.5 text-right font-semibold text-slate-700 border-l border-slate-100">₹{emi.baseAmount.toLocaleString()}</td>
+                                <td className="px-4 py-3.5 text-right text-indigo-600 font-mono border-l border-slate-100">₹{emi.interestAmount.toLocaleString()}</td>
+                                <td className="px-4 py-3.5 text-right font-extrabold text-slate-900 text-sm border-l border-slate-100 bg-slate-50/30">₹{netPayable.toLocaleString()}</td>
+                                <td className="px-4 py-3.5 text-center border-l border-slate-100">
+                                  <span className={cn(
+                                    "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider",
+                                    emi.status === 'paid' ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                                    emi.status === 'overdue' ? "bg-rose-50 text-rose-700 border border-rose-100 animate-pulse" :
+                                    "bg-amber-50 text-amber-700 border border-amber-100"
+                                  )}>
+                                    {emi.status}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3.5 text-center border-l border-slate-100">
+                                  {emi.status === 'paid' ? (
+                                    <button
+                                      onClick={() => alert(`Official Receipt for EMI #\${emi.emiNumber} (Transaction ID: TXN-\${Math.random().toString(36).substring(2,10).toUpperCase()}) downloaded!`)}
+                                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[10px] font-bold transition-colors inline-flex items-center gap-1"
+                                    >
+                                      <FileText className="w-3 h-3" /> Receipt
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        const updatedEmis = demoInvoice.emis.map((e, idx) => {
+                                          if (idx === index) {
+                                            return { ...e, status: 'paid' as 'paid', paidDate: new Date().toISOString().split('T')[0] };
+                                          }
+                                          return e;
+                                        });
+                                        setDemoInvoice({ ...demoInvoice, emis: updatedEmis });
+                                        alert(`Simulated payment of ₹\${netPayable.toLocaleString()} for EMI #\${emi.emiNumber} processed successfully via digital sandbox bank!`);
+                                      }}
+                                      className="px-2.5 py-1 bg-pink-600 hover:bg-pink-700 text-white rounded-md text-[10px] font-bold transition-colors shadow-sm inline-flex items-center gap-1"
+                                    >
+                                      <CreditCard className="w-3 h-3" /> Pay Now
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Referrals and Fee Receipt Vault */}
+                <div className="space-y-6">
+                  <div className="bg-white rounded-3xl p-5 border border-slate-150 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h4 className="font-bold text-sm text-slate-900">Referral Incentives & Cashback Tracker</h4>
+                      <span className="text-[10px] font-mono font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded border border-pink-100">
+                        Code: {demoInvoice.referralCode}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Earn standard commercial cashback payouts when students enroll using your unique referral code. Earn **5%** for external partners or **2%** for internal leads.
+                    </p>
+
+                    {/* Earnings Summary & Payout */}
+                    <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl flex items-center justify-between">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Eligible Unpaid Balance</span>
+                        {(() => {
+                          const totalEarned = demoInvoice.referrals.reduce((sum, r) => sum + r.rewardAmount, 0);
+                          const withdrawable = Math.max(0, totalEarned - demoInvoice.bonusWithdrawn);
+                          return (
+                            <>
+                              <p className="text-xl font-black text-slate-900 mt-1">₹{withdrawable.toLocaleString()}</p>
+                              <p className="text-[9px] text-slate-500">Total Accumulated: ₹{totalEarned.toLocaleString()}</p>
+                            </>
+                          );
+                        })()}
+                      </div>
+                      <button
+                        onClick={() => {
+                          const totalEarned = demoInvoice.referrals.reduce((sum, r) => sum + r.rewardAmount, 0);
+                          const withdrawable = Math.max(0, totalEarned - demoInvoice.bonusWithdrawn);
+                          if (withdrawable <= 0) {
+                            alert("You have no pending referral cashback to withdraw at this time!");
+                            return;
+                          }
+
+                          setIsWithdrawingBonus(true);
+                          setTimeout(() => {
+                            setIsWithdrawingBonus(false);
+                            setDemoInvoice(prev => ({
+                              ...prev,
+                              bonusWithdrawn: prev.bonusWithdrawn + withdrawable
+                            }));
+                            alert(`Cashback payout of ₹\${withdrawable.toLocaleString()} has been securely disbursed to your registered bank account via IMPS/NEFT! Check your bank statement.`);
+                          }, 1500);
+                        }}
+                        disabled={isWithdrawingBonus}
+                        className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl text-[10px] font-black transition-all flex items-center gap-1.5 shadow"
+                      >
+                        {isWithdrawingBonus ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Processing...
+                          </>
+                        ) : (
+                          <>
+                            <IndianRupee className="w-3.5 h-3.5" /> Disburse Cashback
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Referrals List */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Your Referral Leads Network:</span>
+                      {demoInvoice.referrals.map((ref) => (
+                        <div key={ref.id} className="p-3 bg-white border border-slate-150 rounded-xl hover:bg-slate-50 transition-colors flex items-center justify-between gap-3 text-[11px]">
+                          <div>
+                            <h5 className="font-bold text-slate-800">{ref.name}</h5>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Date: {ref.date} | Status: <span className="font-semibold text-indigo-600">{ref.status}</span></p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="font-bold text-slate-900 block font-mono">₹{ref.rewardAmount.toLocaleString()}</span>
+                            <span className={cn(
+                              "text-[8px] font-black uppercase tracking-widest",
+                              ref.paid || (ref.id === 'ref-2' && demoInvoice.bonusWithdrawn >= 2500) ? "text-emerald-600" : "text-amber-600"
+                            )}>
+                              {ref.paid || (ref.id === 'ref-2' && demoInvoice.bonusWithdrawn >= 2500) ? "Disbursed" : "Unpaid"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}

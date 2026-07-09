@@ -279,13 +279,14 @@ async function startServer() {
   // Google Drive Sharing API
   app.post("/api/share-drive-file", async (req: any, res: any) => {
     const driveUrl = req.body.driveUrl || req.body.fileUrl;
-    const studentEmail = req.body.studentEmail || req.body.email;
+    const rawStudentEmail = req.body.studentEmail || req.body.email;
     const role = req.body.role || "writer";
     
-    if (!driveUrl || !studentEmail) {
+    if (!driveUrl || !rawStudentEmail) {
       return res.status(400).json({ error: "driveUrl and studentEmail are required" });
     }
 
+    const studentEmail = rawStudentEmail.toLowerCase().trim();
     const clientEmail = getServiceAccountEmail();
 
     try {
@@ -321,6 +322,20 @@ async function startServer() {
         },
         sendNotificationEmail: false, // Silent sharing, no mail approval or spamming
       });
+
+      // Try to set "anyone with the link can edit" (role: writer, type: anyone) for seamless autopilot
+      try {
+        await drive.permissions.create({
+          fileId: fileId,
+          requestBody: {
+            role: "writer",
+            type: "anyone",
+          },
+        });
+        console.log(`Auto-pilot: File ${fileId} successfully set to "anyone with the link can edit".`);
+      } catch (anyoneErr: any) {
+        console.warn("Could not set file permission to anyone/writer:", anyoneErr.message);
+      }
 
       // Also automatically share with adminendlessspark@gmail.com as writer so admin always has access
       if (studentEmail !== "adminendlessspark@gmail.com") {

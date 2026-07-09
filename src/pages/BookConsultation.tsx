@@ -1,16 +1,43 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Award, Check, Clock, CreditCard, CheckCircle2, User, Mail, Phone, ChevronDown, MessageCircle, Sparkles, Calendar, ArrowLeft, LogIn, X } from 'lucide-react';
+import { Award, Check, Clock, CreditCard, CheckCircle2, User, Mail, Phone, ChevronDown, MessageCircle, Sparkles, Calendar, ArrowLeft, LogIn, X, Copy, ExternalLink, Users, Video, CircleCheck, ArrowRight } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 import { db } from '../firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import DigitalPaymentGateway from '../components/DigitalPaymentGateway';
 import { cn } from '../utils';
+
+function parseDateTime(dateStr: string, timeStr: string): string {
+  try {
+    const cleanTime = timeStr.split('-')[0].trim(); // e.g. "07:30 PM" or "10:00 AM"
+    const match = cleanTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const ampm = match[3].toUpperCase();
+      if (ampm === 'PM' && hours < 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+      
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const d = new Date(year, month - 1, day, hours, minutes, 0);
+      return d.toISOString();
+    }
+  } catch (err) {
+    console.error("Error parsing date/time:", err);
+  }
+  return new Date(`${dateStr}T12:00:00Z`).toISOString();
+}
 
 export default function BookConsultation() {
   const navigate = useNavigate();
   const { logoUrl, loading } = useSettings();
+  
+  const [scheduledRoomId, setScheduledRoomId] = useState('');
+  const [scheduledFacultyName, setScheduledFacultyName] = useState('');
+  const [scheduledFacultyEmail, setScheduledFacultyEmail] = useState('');
+  const [scheduledDateTime, setScheduledDateTime] = useState('');
+  const [copied, setCopied] = useState(false);
   
   // 1-on-1 Consultation & Demo Slots Booking State
   const [consultantForm, setConsultantForm] = useState({
@@ -78,6 +105,41 @@ export default function BookConsultation() {
     setShowBookingPayment(false);
     try {
       const fullPhone = `${consultantForm.countryCode} ${consultantForm.phone}`;
+      const roomId = `EndlessSpark-Demo-${Math.random().toString(36).substring(2, 10)}`;
+      setScheduledRoomId(roomId);
+
+      const parsedTime = parseDateTime(bookingDate, bookingTime);
+      const dateFormatted = new Date(parsedTime).toLocaleString(undefined, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      setScheduledDateTime(dateFormatted);
+
+      // Query for any available faculty member
+      let facultyId = 'unassigned';
+      let facultyName = 'Pending Assignment (Admin to review)';
+      let facultyEmail = '';
+      
+      try {
+        const facultyQuery = query(collection(db, 'users'), where('role', '==', 'faculty'));
+        const facultySnapshot = await getDocs(facultyQuery);
+        if (!facultySnapshot.empty) {
+          const firstFaculty = facultySnapshot.docs[0];
+          const facultyData = firstFaculty.data();
+          facultyId = firstFaculty.id;
+          facultyName = facultyData.name || 'Faculty Member';
+          facultyEmail = facultyData.email || '';
+        }
+      } catch (err) {
+        console.error("Error fetching faculty for auto-assign:", err);
+      }
+
+      setScheduledFacultyName(facultyName);
+      setScheduledFacultyEmail(facultyEmail);
       
       // Save to consultation_bookings
       const bookingRef = await addDoc(collection(db, 'consultation_bookings'), {
@@ -95,7 +157,7 @@ export default function BookConsultation() {
       });
 
       // Register student lead
-      await addDoc(collection(db, 'users'), {
+      const studentRef = await addDoc(collection(db, 'users'), {
         name: consultantForm.name,
         username: consultantForm.email.split('@')[0] + '_consultant',
         email: consultantForm.email,
@@ -112,10 +174,59 @@ export default function BookConsultation() {
           paymentId: paymentId,
           topic: consultantForm.topic,
           completed: false,
-          adjustableFeeReduced: false
+          adjustableFeeReduced: false,
+          roomId
         },
         createdAt: new Date().toISOString()
       });
+
+      const studentId = studentRef.id;
+
+      // Automatically schedule a virtual class session (Autopilot)
+      await addDoc(collection(db, 'live_sessions'), {
+        title: `Demo Class: ${consultantForm.name}`,
+        roomId,
+        facultyId,
+        facultyName,
+        students: [{ id: studentId, name: consultantForm.name, email: consultantForm.email }],
+        studentIds: [studentId],
+        studentId,
+        scheduledFor: parsedTime,
+        status: 'scheduled',
+        type: 'demo',
+        createdAt: new Date().toISOString()
+      });
+
+      // Auto-capture direct student inquiry and create a new lead in the telecaller database
+      try {
+        await addDoc(collection(db, 'leads'), {
+          name: consultantForm.name,
+          phone: fullPhone,
+          email: consultantForm.email,
+          companyName: '',
+          workExperience: 'Fresher',
+          currentRole: '',
+          source: 'direct', 
+          place: '',
+          status: 'demo_scheduled',
+          nextFollowUpDate: bookingDate,
+          studentId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          notes: [
+            {
+              id: `sys-${Date.now()}-${Math.random().toString(36).substring(2,6)}`,
+              date: new Date().toISOString(),
+              text: `Autopilot Demo Booking (Paid consultation ₹500, Payment: ${paymentId}) registered and scheduled. Room ID: ${roomId}. Assigned Faculty: ${facultyName}.`,
+              authorId: 'system',
+              authorName: 'System'
+            }
+          ]
+        });
+        console.log('Consultation lead auto-captured under direct category.');
+      } catch (leadError) {
+        console.error('Error auto-capturing direct lead:', leadError);
+      }
 
       setLastBookingId(bookingRef.id);
       setBookingSuccess(true);
@@ -181,53 +292,154 @@ export default function BookConsultation() {
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="max-w-2xl mx-auto bg-white rounded-[2.5rem] border border-emerald-100 shadow-2xl p-10 text-center relative overflow-hidden"
+              className="max-w-3xl mx-auto bg-white rounded-[2.5rem] border border-emerald-100 shadow-2xl p-10 relative overflow-hidden"
               id="booking-success-card"
             >
               <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
-              <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-100">
-                <CheckCircle2 className="w-10 h-10" />
-              </div>
               
-              <h3 className="text-3xl font-extrabold text-slate-900 mb-2">Slot Booked Successfully!</h3>
-              <p className="text-slate-500 text-sm mb-8 font-mono">Receipt/Booking ID: {lastBookingId}</p>
-
-              <div className="bg-slate-50 rounded-2xl p-6 mb-8 text-left space-y-4 border border-slate-100">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Student Name</span>
-                    <span className="text-sm font-bold text-slate-800">{consultantForm.name}</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Contact Phone</span>
-                    <span className="text-sm font-bold text-slate-800">{consultantForm.countryCode} {consultantForm.phone}</span>
-                  </div>
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md">
+                  <CheckCircle2 className="w-8 h-8" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-200/60">
-                  <div>
-                    <span className="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Date</span>
-                    <span className="text-sm font-bold text-indigo-600 flex items-center gap-1.5">
-                      <Calendar className="w-4 h-4" /> {(() => {
-                        const [year, month, dayNum] = bookingDate.split('-').map(Number);
-                        const date = new Date(year, month - 1, dayNum);
-                        return date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                      })()}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Time Slot</span>
-                    <span className="text-sm font-bold text-indigo-600 flex items-center gap-1.5">
-                      <Clock className="w-4 h-4" /> {bookingTime}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-slate-200/60">
-                  <span className="text-xs text-slate-400 block uppercase tracking-wider font-semibold">Topic</span>
-                  <span className="text-sm font-bold text-slate-800">{consultantForm.topic}</span>
-                </div>
+                <h3 className="text-3xl font-extrabold text-slate-900">Demo Scheduled Successfully!</h3>
+                <p className="text-slate-500 mt-2 text-sm">
+                  Our autopilot mode has created a dedicated virtual classroom and assigned an educational advisor.
+                </p>
+                <p className="text-xs text-slate-400 mt-1 font-mono">Receipt/Booking ID: {lastBookingId}</p>
               </div>
+
+              {/* Live Classroom Widget */}
+              {(() => {
+                const classroomUrl = `${window.location.origin}/classroom/${scheduledRoomId}`;
+                const handleCopy = () => {
+                  navigator.clipboard.writeText(classroomUrl);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                };
+
+                const studentWaMsg = `Hello ${consultantForm.name}! 🌟\n\nYour online Demo Class at Endless Spark is successfully scheduled!\n\n📅 Date/Time: ${scheduledDateTime}\n💻 Join Your Live Virtual Classroom directly:\n${classroomUrl}\n\n(No downloads or signups required. Just open on Google Chrome / Apple Safari to begin!).`;
+                
+                const adminWaMsg = `Hi Admin! 🚀\n\nNew Demo booked under Autopilot Mode!\n\nStudent: ${consultantForm.name}\nPhone: ${consultantForm.countryCode} ${consultantForm.phone}\nEmail: ${consultantForm.email}\n📅 Date/Time: ${scheduledDateTime}\n💻 Access Live Classroom: ${classroomUrl}\nFaculty Assigned: ${scheduledFacultyName}`;
+                
+                const facultyWaMsg = `Hello ${scheduledFacultyName}! 🎓\n\nYou have been auto-assigned to guide a Demo Class:\n\nStudent: ${consultantForm.name}\n📅 Date/Time: ${scheduledDateTime}\n💻 Start Virtual Classroom:\n${classroomUrl}\n\nThank you!`;
+
+                const mailSubject = encodeURIComponent(`Demo Class Scheduled: ${consultantForm.name} - ${scheduledDateTime}`);
+                const mailBody = encodeURIComponent(`Hello,
+
+A new online Demo Class has been successfully scheduled via Autopilot Mode:
+
+Student Name: ${consultantForm.name}
+Contact Email: ${consultantForm.email}
+Contact Phone: ${consultantForm.countryCode} ${consultantForm.phone}
+
+Assigned Faculty: ${scheduledFacultyName}
+Scheduled Date & Time: ${scheduledDateTime}
+
+💻 Live Virtual Classroom Link (Zero Install, direct joining):
+${classroomUrl}
+
+Best regards,
+Endless Spark School of Printing and Packaging Admissions Team`);
+
+                const adminEmail = "adminendlessspark@gmail.com";
+                const toEmails = [consultantForm.email, adminEmail, scheduledFacultyEmail].filter(Boolean).join(',');
+
+                return (
+                  <>
+                    <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-6 mb-8 border border-slate-800 shadow-xl relative overflow-hidden" id="live-classroom-info-box">
+                      <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <Video className="w-32 h-32" />
+                      </div>
+                      <span className="px-3 py-1 bg-pink-600/30 text-pink-300 border border-pink-500/20 rounded-full text-[10px] font-bold uppercase tracking-widest">
+                        Autopilot Live Classroom Reserved
+                      </span>
+                      <h3 className="text-xl font-bold mt-3 mb-2 flex items-center gap-2">
+                        <Video className="w-5 h-5 text-pink-400" /> Virtual Classroom Room
+                      </h3>
+                      <p className="text-xs text-slate-300 leading-relaxed max-w-xl mb-4">
+                        A high-definition Jitsi video session has been locked for this slot. All attendees can join instantly with zero application downloads.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-800/40 border border-slate-700/50 p-4 rounded-xl text-xs mb-4">
+                        <div className="space-y-1">
+                          <span className="text-slate-400 font-medium block">Date & Time Slot</span>
+                          <span className="font-bold flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-pink-400" /> {scheduledDateTime}</span>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-slate-400 font-medium block">Assigned Faculty</span>
+                          <span className="font-bold flex items-center gap-1"><Users className="w-3.5 h-3.5 text-pink-400" /> {scheduledFacultyName}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                        <div className="flex-1 bg-black/40 border border-slate-700 p-3 rounded-xl font-mono text-xs text-pink-300 truncate select-all flex items-center justify-between">
+                          <span className="truncate">{classroomUrl}</span>
+                          <button 
+                            onClick={handleCopy}
+                            className="ml-2 p-1.5 bg-slate-850 hover:bg-slate-750 text-white rounded-lg transition-colors border border-slate-700"
+                            title="Copy Classroom Link"
+                          >
+                            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                        <a 
+                          href={classroomUrl}
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="px-5 py-3 bg-pink-600 hover:bg-pink-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-pink-900/30 shrink-0"
+                        >
+                          Direct Join Room <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Autopilot Link Sharing Triggers */}
+                    <div className="border border-slate-100 rounded-2xl p-6 bg-slate-50 mb-8 text-left" id="sharing-autopilot-actions">
+                      <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                        <span className="w-1.5 h-4 bg-pink-600 rounded-full block"></span>
+                        Autopilot Communication Kit
+                      </h4>
+                      <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                        One-click triggers to broadcast this booking and virtual classroom link to Student, Admin, and assigned Faculty over active communication channels.
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <button
+                          onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(studentWaMsg)}`, '_blank')}
+                          className="flex items-center justify-center gap-2 py-3 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all shadow-sm"
+                        >
+                          <MessageCircle className="w-4 h-4" /> Share to Student
+                        </button>
+                        <button
+                          onClick={() => window.open(`https://wa.me/919042821999?text=${encodeURIComponent(adminWaMsg)}`, '_blank')}
+                          className="flex items-center justify-center gap-2 py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-all shadow-sm"
+                        >
+                          <MessageCircle className="w-4 h-4" /> Share to Admin
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (scheduledFacultyName.includes('Pending')) {
+                              alert("No specific faculty assigned yet. Booking is shared with Admin for review.");
+                            } else {
+                              window.open(`https://wa.me/?text=${encodeURIComponent(facultyWaMsg)}`, '_blank');
+                            }
+                          }}
+                          className="flex items-center justify-center gap-2 py-3 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-sm"
+                        >
+                          <MessageCircle className="w-4 h-4" /> Share to Faculty
+                        </button>
+                      </div>
+
+                      <a
+                        href={`mailto:${toEmails}?subject=${mailSubject}&body=${mailBody}`}
+                        className="mt-4 w-full flex items-center justify-center gap-2 py-3 px-4 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                      >
+                        <Mail className="w-4 h-4 text-pink-600" /> Send Email Invitation to All (Student, Admin & Faculty)
+                      </a>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="bg-pink-50 border border-pink-100 rounded-2xl p-5 mb-8 text-left flex gap-4 items-start">
                 <div className="w-8 h-8 bg-pink-100 text-pink-600 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
@@ -241,18 +453,25 @@ export default function BookConsultation() {
                 </div>
               </div>
 
-              <button
-                onClick={() => {
-                  setBookingSuccess(false);
-                  setBookingDate('');
-                  setBookingTime('');
-                  setConsultantForm({ name: '', email: '', phone: '', countryCode: '+91', topic: 'Student Dashboard & AI Features' });
-                }}
-                className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-slate-850 transition-colors shadow-lg"
-                id="book-another-slot-btn"
-              >
-                Book Another Slot
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => {
+                    setBookingSuccess(false);
+                    setBookingDate('');
+                    setBookingTime('');
+                    setConsultantForm({ name: '', email: '', phone: '', countryCode: '+91', topic: 'Student Dashboard & AI Features' });
+                  }}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-4 rounded-xl font-bold transition-all"
+                >
+                  Book Another Slot
+                </button>
+                <Link
+                  to="/login"
+                  className="flex-1 bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-slate-850 transition-colors shadow-lg flex items-center justify-center gap-2"
+                >
+                  Go to Login Portal <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
             </motion.div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">

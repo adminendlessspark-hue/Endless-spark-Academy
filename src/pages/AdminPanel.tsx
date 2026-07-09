@@ -11778,22 +11778,22 @@ export default function AdminPanel() {
                       
                       batch.set(newProjectRef, newProjectData);
 
-                      // Auto-pilot: Share Drive link with student email if it's a Google Drive link
-                      const driveUrl = newProjectData.fileUrl;
-                      if (driveUrl && driveUrl.includes('drive.google.com') && student.email) {
-                        try {
-                          fetch('/api/share-drive-file', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ driveUrl, studentEmail: student.email })
-                          }).then(res => res.json()).then(data => {
-                            if (data.error) console.error("Drive Auto-Pilot Error:", data.error);
-                            else console.log("Drive Auto-Pilot Success:", data.message);
-                          });
-                        } catch (err) {
-                          console.error("Drive shared fetch error:", err);
-                        }
-                      }
+                       // Auto-pilot: Share Drive link with student email if it's a Google Drive link
+                       const driveUrl = newProjectData.googleDriveLink || newProjectData.fileUrl;
+                       if (driveUrl && driveUrl.includes('drive.google.com') && student.email) {
+                         try {
+                           fetch('/api/share-drive-file', {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({ driveUrl, studentEmail: student.email, role: 'writer' })
+                           }).then(res => res.json()).then(data => {
+                             if (data.error) console.error("Drive Auto-Pilot Error:", data.error);
+                             else console.log("Drive Auto-Pilot Success:", data.message);
+                           });
+                         } catch (err) {
+                           console.error("Drive shared fetch error:", err);
+                         }
+                       }
                     }
                     await batch.commit();
                     setShowAssignModal(false);

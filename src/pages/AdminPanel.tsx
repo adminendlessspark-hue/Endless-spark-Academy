@@ -1327,6 +1327,36 @@ export default function AdminPanel() {
     }
   };
 
+  const getLastRegistrationNumber = () => {
+    if (!students || students.length === 0) return null;
+    const approvedWithId = students.filter(s => s.isApproved && s.studentId && s.studentId.trim() !== '' && s.studentId.toLowerCase() !== 'none' && !s.studentId.startsWith('student_'));
+    if (approvedWithId.length === 0) return null;
+
+    // Sort to find the latest based on admissionDate first, then studentId
+    const sorted = [...approvedWithId].sort((a, b) => {
+      const dateA = a.admissionDate ? new Date(a.admissionDate).getTime() : 0;
+      const dateB = b.admissionDate ? new Date(b.admissionDate).getTime() : 0;
+      if (dateA !== dateB) return dateB - dateA; // Newest first
+      return b.studentId.localeCompare(a.studentId);
+    });
+
+    return sorted[0].studentId;
+  };
+
+  const suggestNextRegistrationNumber = (lastId: string | null) => {
+    if (!lastId) return 'REG-2026-001';
+    // Try to find trailing digits
+    const match = lastId.match(/^(.*?)(\d+)$/);
+    if (match) {
+      const prefix = match[1];
+      const numberStr = match[2];
+      const nextNumber = parseInt(numberStr, 10) + 1;
+      const paddedNumber = String(nextNumber).padStart(numberStr.length, '0');
+      return prefix + paddedNumber;
+    }
+    return lastId + '-01';
+  };
+
   const handleApprove = (studentId: string) => {
     const student = students.find(s => s.id === studentId);
     if (!student?.assignedFacultyId) {
@@ -1334,10 +1364,19 @@ export default function AdminPanel() {
       return;
     }
     setApprovingStudentId(studentId);
-    setRegistrationNumber('');
+    
+    // Auto-suggest next registration number
+    const lastNum = getLastRegistrationNumber();
+    if (lastNum) {
+      setRegistrationNumber(suggestNextRegistrationNumber(lastNum));
+    } else {
+      setRegistrationNumber('');
+    }
+
     setReferredBy('');
     setReferrerContact('');
     setReferrerType('direct');
+    setCustomInterestRate('');
   };
 
   const handleApproveConfirm = async () => {
@@ -1423,6 +1462,8 @@ export default function AdminPanel() {
         emiCount = 1;
       } else if (emiPlan === '2') {
         emiCount = 2;
+      } else if (emiPlan === '5') {
+        emiCount = 5;
       } else if (emiPlan === 'custom') {
         emiCount = Math.max(1, customEmiCount);
       } else {
@@ -1435,11 +1476,15 @@ export default function AdminPanel() {
       }
 
       let totalInterest = 0;
+      const parsedRate = customInterestRate !== '' ? parseFloat(customInterestRate) : null;
+      const interestRate = parsedRate !== null ? parsedRate : (financialSettings?.interestRatePercentage ?? 7);
+
+      const isPromoApplied = finalAmount > 69000 && (emiCount === 2 || emiCount === 5) && parsedRate === null;
+
       if (emiCount > 1) {
-        if (finalAmount > 69000 && emiCount === 2) {
+        if (isPromoApplied) {
           totalInterest = 0;
         } else {
-          const interestRate = financialSettings?.interestRatePercentage || 7;
           totalInterest = finalAmount * (interestRate / 100);
         }
       }
@@ -1478,16 +1523,11 @@ export default function AdminPanel() {
         waivers: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        rulesSnapshot: financialSettings ? {
-          interestRatePercentage: financialSettings.interestRatePercentage || 7,
-          penaltyPercentage: financialSettings.penaltyPercentage || 0,
-          internalReferralPercentage: financialSettings.internalReferralPercentage || 2,
-          externalReferralPercentage: financialSettings.externalReferralPercentage || 5
-        } : {
-          interestRatePercentage: 7,
-          penaltyPercentage: 0,
-          internalReferralPercentage: 2,
-          externalReferralPercentage: 5
+        rulesSnapshot: {
+          interestRatePercentage: isPromoApplied ? 0 : (emiCount > 1 ? interestRate : 0),
+          penaltyPercentage: financialSettings?.penaltyPercentage || 0,
+          internalReferralPercentage: financialSettings?.internalReferralPercentage || 2,
+          externalReferralPercentage: financialSettings?.externalReferralPercentage || 5
         }
       };
 
@@ -1518,6 +1558,7 @@ export default function AdminPanel() {
       setManualBaseFee('');
       setConcessionApplied('none');
       setEmiPlan('standard');
+      setCustomInterestRate('');
       setReferredBy('');
       setReferrerContact('');
       setReferrerCountryCode('+91');
@@ -1696,6 +1737,7 @@ export default function AdminPanel() {
   const [concessionApplied, setConcessionApplied] = useState<'none' | 'single-parent' | 'transgender'>('none');
   const [emiPlan, setEmiPlan] = useState('standard');
   const [customEmiCount, setCustomEmiCount] = useState<number>(3);
+  const [customInterestRate, setCustomInterestRate] = useState<string>('');
   const [referredBy, setReferredBy] = useState('');
   const [referrerCountryCode, setReferrerCountryCode] = useState('+91');
   const [referrerContact, setReferrerContact] = useState('');
@@ -4523,6 +4565,31 @@ export default function AdminPanel() {
                                       } else {
                                         setReferrerType((student as any).referrerType || 'internal');
                                       }
+
+                                      const existingInvoice = invoices.find(i => i.studentId === student.id);
+                                      if (existingInvoice) {
+                                        setManualBaseFee(existingInvoice.totalFee ? String(existingInvoice.totalFee) : '');
+                                        setConcessionApplied(existingInvoice.concessionApplied || 'none');
+                                        const emiCountValue = existingInvoice.emis?.length || 1;
+                                        if (emiCountValue === 1) {
+                                          setEmiPlan('1');
+                                        } else if (emiCountValue === 2) {
+                                          setEmiPlan('2');
+                                        } else if (emiCountValue === 5) {
+                                          setEmiPlan('5');
+                                        } else {
+                                          setEmiPlan('custom');
+                                          setCustomEmiCount(emiCountValue);
+                                        }
+                                        const rate = existingInvoice.rulesSnapshot?.interestRatePercentage;
+                                        setCustomInterestRate(rate !== undefined && rate !== null ? String(rate) : '');
+                                      } else {
+                                        setManualBaseFee('');
+                                        setConcessionApplied('none');
+                                        setEmiPlan('standard');
+                                        setCustomInterestRate('');
+                                      }
+
                                       setActiveDropdownId(null); 
                                     }}
                                     className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center gap-2"
@@ -9479,18 +9546,43 @@ export default function AdminPanel() {
                 : 'Please enter the Registration Number (Biometric ID) for this student. Type "None" if strictly not available.'}
             </p>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Registration Number
-                </label>
+               <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Registration Number
+                  </label>
+                  {getLastRegistrationNumber() && (
+                    <span className="text-[10px] text-gray-500 font-medium bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200">
+                      Last ID: <strong className="font-mono text-pink-600">{getLastRegistrationNumber()}</strong>
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={registrationNumber}
                   onChange={(e) => setRegistrationNumber(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 font-mono text-sm"
                   placeholder="e.g., REG-2024-001"
                   autoFocus
                 />
+                {getLastRegistrationNumber() && (
+                  <div className="flex gap-2 mt-1.5 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setRegistrationNumber(suggestNextRegistrationNumber(getLastRegistrationNumber()))}
+                      className="text-[10px] text-pink-600 hover:text-pink-700 font-bold flex items-center gap-1 cursor-pointer bg-pink-50/70 hover:bg-pink-50 px-2.5 py-1 rounded-lg transition-all border border-pink-100"
+                    >
+                      💡 Suggest Next ({suggestNextRegistrationNumber(getLastRegistrationNumber())})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRegistrationNumber(getLastRegistrationNumber() || '')}
+                      className="text-[10px] text-gray-500 hover:text-gray-700 font-semibold flex items-center gap-1 cursor-pointer bg-gray-50 hover:bg-gray-100 px-2 py-1 rounded-lg transition-all border border-gray-200"
+                    >
+                      Use Last
+                    </button>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -9532,6 +9624,7 @@ export default function AdminPanel() {
                   <option value="standard">Standard (Based on Course Duration)</option>
                   <option value="1">Full Payment (1 Installment)</option>
                   <option value="2">2 Installments (0% Interest if Fee &gt; 69k)</option>
+                  <option value="5">5 Installments (0% Interest if Fee &gt; 69k)</option>
                   <option value="custom">Custom EMI Plan...</option>
                 </select>
                 {emiPlan === 'custom' && (
@@ -9547,6 +9640,22 @@ export default function AdminPanel() {
                     />
                   </div>
                 )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Interest Rate (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={customInterestRate}
+                  onChange={(e) => setCustomInterestRate(e.target.value)}
+                  placeholder={`Default (${financialSettings?.interestRatePercentage || 7}%)`}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                />
+                <p className="text-[10px] text-gray-400 mt-1 italic">
+                  Leave empty to use the dynamic global rate of {financialSettings?.interestRatePercentage || 7}%. For 2 and 5 EMI plans, 0% is automatically applied if the course fee is &gt; ₹69,000.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -9626,7 +9735,7 @@ export default function AdminPanel() {
               
               <div className="flex justify-end gap-3 pt-4">
                 <button
-                  onClick={() => setApprovingStudentId(null)}
+                  onClick={() => { setApprovingStudentId(null); setCustomInterestRate(''); }}
                   className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors"
                 >
                   Cancel

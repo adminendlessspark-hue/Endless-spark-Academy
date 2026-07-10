@@ -973,7 +973,7 @@ export default function AccountsPanel() {
                         onChange={(e) => setSettings({ ...settings, interestRatePercentage: parseFloat(e.target.value) || 0 })}
                         className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500"
                       />
-                      <p className="text-xs text-gray-500 mt-1">If a student takes 2+ courses (fees &gt; ₹69,000) and pays in 2 EMIs, 0% interest is applied. Otherwise, if EMI count &gt; 1, this interest rate is applied to the overall course fees.</p>
+                      <p className="text-xs text-gray-500 mt-1">If a student takes 2+ courses (fees &gt; ₹69,000) and pays in 2 or 5 EMIs, 0% interest is applied. Otherwise, if EMI count &gt; 1, this interest rate is applied to the overall course fees.</p>
                     </div>
                     <div>
                       <label className="block text-sm font-bold text-gray-700 mb-1">Penalty Percentage (%)</label>

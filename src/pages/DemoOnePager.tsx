@@ -48,16 +48,18 @@ import {
   Mic,
   Terminal,
   Type,
-  RefreshCw
+  RefreshCw,
+  Calculator
 } from 'lucide-react';
 import { cn } from '../utils';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { generateGeminiContent } from '../services/gemini';
-import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, doc, setDoc } from 'firebase/firestore';
 import { useSettings } from '../hooks/useSettings';
 import { useAuth } from '../AuthContext';
 import { getProjectsForCourse, getCapstoneProjectForCourse } from '../data/courseProjects';
 import StudentAIAgent from '../components/StudentAIAgent';
+import ProgramOutcomes from '../components/ProgramOutcomes';
 
 // Predefined Mock Projects for Showcase
 const DEMO_PROJECTS = [
@@ -162,7 +164,7 @@ interface DemoOnePagerProps {
 export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps = {}) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { financialSettings } = useSettings();
+  const { financialSettings, placementSettings } = useSettings();
   const [selectedDemoCourseId, setSelectedDemoCourseId] = useState<string>('production-art-engineer');
   const [selectedProjectIdx, setSelectedProjectIdx] = useState<number>(0);
   const [courseModules, setCourseModules] = useState<any[]>([]);
@@ -258,8 +260,18 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
     return () => unsub();
   }, [user]);
   
-  // Tabs: 'journey' (Student Dashboard), 'ai' (AI Tutor Playground), 'preflight' (Artwork Checker), 'projects' (Showcase), 'accounts' (Accounts Panel)
-  const [activeTab, setActiveTab] = useState<'journey' | 'ai' | 'preflight' | 'projects' | 'accounts'>('journey');
+  // Tabs: 'journey', 'ai', 'preflight', 'projects', 'accounts', 'outcomes'
+  const [activeTab, setActiveTab] = useState<'journey' | 'ai' | 'preflight' | 'projects' | 'accounts' | 'outcomes'>('journey');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'outcomes') {
+      setActiveTab('outcomes');
+    } else if (tabParam && ['journey', 'ai', 'preflight', 'projects', 'accounts', 'outcomes'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+  }, []);
 
   // Student Dashboard Simulator state
   const [dashboardStage, setDashboardStage] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12>(4);
@@ -315,7 +327,13 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
       { id: 'ref-2', name: 'Priya Sharma', status: 'Enrolled & Paid', date: '2026-06-25', rewardAmount: 1500, paid: true }
     ],
     referralCode: 'ES-STUDENT-99',
-    bonusWithdrawn: 1500
+    bonusWithdrawn: 1500,
+    rulesSnapshot: null as {
+      interestRatePercentage: number;
+      penaltyPercentage: number;
+      internalReferralPercentage: number;
+      externalReferralPercentage: number;
+    } | null
   };
 
   const [demoInvoice, setDemoInvoice] = useState(initialDemoInvoice);
@@ -325,6 +343,509 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
   const [newWaiverReason, setNewWaiverReason] = useState<string>('Academic performance attendance consistency waiver');
   const [couponCode, setCouponCode] = useState<string>('');
   const [isWithdrawingBonus, setIsWithdrawingBonus] = useState(false);
+
+  // Dynamic EMI Calculator Sandbox States
+  const [calcCourseId, setCalcCourseId] = useState<string>('production-art-engineer');
+  const [calcBaseFee, setCalcBaseFee] = useState<string>('');
+  const [calcConcession, setCalcConcession] = useState<'none' | 'single-parent' | 'transgender'>('none');
+  const [calcEmiPlan, setCalcEmiPlan] = useState<string>('2');
+  const [calcCustomEmiCount, setCalcCustomEmiCount] = useState<number>(3);
+  const [calcInterestRate, setCalcInterestRate] = useState<string>('');
+  const [hasInitializedCalc, setHasInitializedCalc] = useState(false);
+
+  // Prepayment & Pre-Closure Bank Rule Simulation States
+  const [prepayAmount, setPrepayAmount] = useState<string>('15000');
+  const [prepaySuccessMessage, setPrepaySuccessMessage] = useState<string | null>(null);
+
+  // Career Center & Placement Sandbox States
+  const [careerCenterTab, setCareerCenterTab] = useState<'dispatch' | 'alumni' | 'students'>('dispatch');
+  const [newAlumniYear, setNewAlumniYear] = useState('2025-2026');
+  const [newAlumniCompanyName, setNewAlumniCompanyName] = useState('');
+  const [newAlumniStudentsPlaced, setNewAlumniStudentsPlaced] = useState('1');
+  const [newAlumniHighestPackage, setNewAlumniHighestPackage] = useState('');
+  const [newAlumniLogoUrl, setNewAlumniLogoUrl] = useState('');
+  const [isSavingAlumni, setIsSavingAlumni] = useState(false);
+  const [alumniAddSuccess, setAlumniAddSuccess] = useState(false);
+
+  // Student Placement Console States
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [editingStudent, setEditingStudent] = useState<any | null>(null);
+  const [showAddNewStudentForm, setShowAddNewStudentForm] = useState(false);
+  const [students, setStudents] = useState<any[]>([]);
+  const [isUpdatingStudentPlacement, setIsUpdatingStudentPlacement] = useState(false);
+  const [studentPlacementForm, setStudentPlacementForm] = useState({
+    eligible: false,
+    status: 'Course Ongoing',
+    placedCompany: '',
+    packageAmount: '',
+    interviewCompany: '',
+    interviewDate: '',
+    notes: ''
+  });
+
+  const [newStudentForm, setNewStudentForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    assignedCourse: 'production-art-engineer',
+    eligible: true,
+    status: 'Pending' as 'Course Ongoing' | 'Pending' | 'Interview Scheduled' | 'Placed' | 'Not Placed',
+    placedCompany: '',
+    packageAmount: '',
+    notes: ''
+  });
+
+  // Fetch actual student users in real-time
+  useEffect(() => {
+    const q = query(collection(db, 'users'), where('role', '==', 'student'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const studentUsers = snapshot.docs.map(docSnap => ({
+        ...docSnap.data(),
+        id: docSnap.id
+      }));
+      setStudents(studentUsers);
+    }, (err) => {
+      console.error("Error fetching students for demo center placements:", err);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleAddAlumniRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAlumniCompanyName || !newAlumniStudentsPlaced || !newAlumniHighestPackage) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    setIsSavingAlumni(true);
+    setAlumniAddSuccess(false);
+    try {
+      const currentRecords = placementSettings?.yearlyRecords || [];
+      const newRecord = {
+        id: Date.now().toString(),
+        companyName: newAlumniCompanyName,
+        studentsPlaced: Number(newAlumniStudentsPlaced),
+        highestPackage: Number(newAlumniHighestPackage),
+        logoUrl: newAlumniLogoUrl || undefined
+      };
+      
+      let yearExists = false;
+      const updatedRecords = currentRecords.map((yr: any) => {
+        if (yr.year === newAlumniYear) {
+          yearExists = true;
+          return {
+            ...yr,
+            records: [...yr.records, newRecord]
+          };
+        }
+        return yr;
+      });
+
+      const finalRecords = yearExists 
+        ? updatedRecords 
+        : [...updatedRecords, { year: newAlumniYear, records: [newRecord] }];
+
+      await setDoc(doc(db, 'settings', 'placements'), {
+        id: 'placements',
+        yearlyRecords: finalRecords
+      }, { merge: true });
+
+      setNewAlumniCompanyName('');
+      setNewAlumniStudentsPlaced('1');
+      setNewAlumniHighestPackage('');
+      setNewAlumniLogoUrl('');
+      setAlumniAddSuccess(true);
+      setTimeout(() => setAlumniAddSuccess(false), 3000);
+      alert('New alumni placement record successfully added and synchronized with Career Center!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'settings/placements');
+    } finally {
+      setIsSavingAlumni(false);
+    }
+  };
+
+  const handleSaveStudentPlacement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    setIsUpdatingStudentPlacement(true);
+    try {
+      const placementInfo = {
+        eligible: studentPlacementForm.eligible,
+        status: studentPlacementForm.status,
+        placedCompany: studentPlacementForm.status === 'Placed' ? studentPlacementForm.placedCompany : '',
+        packageAmount: studentPlacementForm.status === 'Placed' ? studentPlacementForm.packageAmount : '',
+        interviewCompany: studentPlacementForm.status === 'Interview Scheduled' ? studentPlacementForm.interviewCompany : '',
+        interviewDate: studentPlacementForm.status === 'Interview Scheduled' ? studentPlacementForm.interviewDate : '',
+        notes: studentPlacementForm.notes
+      };
+
+      await setDoc(doc(db, 'users', editingStudent.id), {
+        placementInfo
+      }, { merge: true });
+
+      alert(`Placement status for ${editingStudent.name} successfully updated and synchronized!`);
+      setEditingStudent(null);
+    } catch (err) {
+      console.error("Error updating student placement:", err);
+      alert("Failed to update student placement.");
+    } finally {
+      setIsUpdatingStudentPlacement(false);
+    }
+  };
+
+  const handleCreateNewStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStudentForm.name || !newStudentForm.email) {
+      alert("Name and Email are required.");
+      return;
+    }
+    setIsUpdatingStudentPlacement(true);
+    try {
+      const studentId = 'ES-' + Math.floor(100000 + Math.random() * 900000);
+      const username = newStudentForm.email.split('@')[0] + Math.floor(10 + Math.random() * 90);
+      const newUserId = 'student_' + Date.now().toString();
+
+      const newStudentUser = {
+        id: newUserId,
+        studentId,
+        name: newStudentForm.name,
+        username,
+        email: newStudentForm.email,
+        phone: newStudentForm.phone || '',
+        role: 'student',
+        isApproved: true,
+        applicationStatus: 'approved',
+        registeredForDemo: false,
+        videoRecorded: false,
+        quizCompleted: false,
+        completedModules: [],
+        assignedCourse: newStudentForm.assignedCourse,
+        admissionDate: new Date().toISOString().split('T')[0],
+        placementInfo: {
+          eligible: newStudentForm.eligible,
+          status: newStudentForm.status,
+          placedCompany: newStudentForm.status === 'Placed' ? newStudentForm.placedCompany : '',
+          packageAmount: newStudentForm.status === 'Placed' ? newStudentForm.packageAmount : '',
+          notes: newStudentForm.notes
+        }
+      };
+
+      await setDoc(doc(db, 'users', newUserId), newStudentUser);
+
+      alert(`Successfully added and registered new student: ${newStudentForm.name}!`);
+      setShowAddNewStudentForm(false);
+      setNewStudentForm({
+        name: '',
+        email: '',
+        phone: '',
+        assignedCourse: 'production-art-engineer',
+        eligible: true,
+        status: 'Pending',
+        placedCompany: '',
+        packageAmount: '',
+        notes: ''
+      });
+    } catch (err) {
+      console.error("Error creating student:", err);
+      alert("Failed to add new student details.");
+    } finally {
+      setIsUpdatingStudentPlacement(false);
+    }
+  };
+
+  // Initialize dynamic calculator with the first course once courses are available
+  useEffect(() => {
+    if (coursesList && coursesList.length > 0 && !hasInitializedCalc) {
+      const firstCourse = coursesList[0];
+      if (firstCourse) {
+        setCalcCourseId(firstCourse.id);
+        setCalcBaseFee(String(firstCourse.fees));
+        setHasInitializedCalc(true);
+      }
+    }
+  }, [coursesList, hasInitializedCalc]);
+
+  // Dynamic Real-time Calculations for UI display
+  const currentBaseVal = calcBaseFee !== '' ? (parseFloat(calcBaseFee) || 0) : (coursesList.find(c => c.id === calcCourseId)?.fees || 50000);
+  
+  const currentConcessionPercent = calcConcession === 'single-parent' 
+    ? (financialSettings?.singleParentConcessionPercentage ?? 10)
+    : calcConcession === 'transgender'
+    ? (financialSettings?.transgenderConcessionPercentage ?? 75)
+    : 0;
+    
+  const currentDiscountAmount = Math.round(currentBaseVal * (currentConcessionPercent / 100));
+  const currentFinalAmount = Math.max(0, currentBaseVal - currentDiscountAmount);
+
+  const currentEmiCount = calcEmiPlan === '1'
+    ? 1
+    : calcEmiPlan === '2'
+    ? 2
+    : calcEmiPlan === '5'
+    ? 5
+    : calcEmiPlan === 'custom'
+    ? Math.max(1, calcCustomEmiCount)
+    : (coursesList.find(c => c.id === calcCourseId)?.durationMonths || 6);
+
+  const currentParsedRate = calcInterestRate !== '' ? (parseFloat(calcInterestRate) ?? null) : null;
+  const currentInterestRate = currentParsedRate !== null ? currentParsedRate : (financialSettings?.interestRatePercentage ?? 7);
+
+  // 0% interest if fee > 69,000 and EMI count is 2 or 5
+  const isPromoApplied = currentFinalAmount > 69000 && (currentEmiCount === 2 || currentEmiCount === 5) && currentParsedRate === null;
+  const currentTotalInterest = (currentEmiCount > 1 && !isPromoApplied)
+    ? Math.round(currentFinalAmount * (currentInterestRate / 100))
+    : 0;
+
+  const currentTotalPayable = currentFinalAmount + currentTotalInterest;
+  const currentEmiAmount = Math.round(currentTotalPayable / currentEmiCount);
+
+  const handleCourseChange = (id: string) => {
+    setCalcCourseId(id);
+    const course = coursesList.find(c => c.id === id);
+    if (course) {
+      setCalcBaseFee(String(course.fees));
+    }
+  };
+
+  const handleApplyCalculatedEmi = () => {
+    const baseVal = calcBaseFee !== '' ? parseFloat(calcBaseFee) : (coursesList.find(c => c.id === calcCourseId)?.fees || 50000);
+    
+    // Concession
+    let concessionPercent = 0;
+    if (calcConcession === 'single-parent') {
+      concessionPercent = financialSettings?.singleParentConcessionPercentage ?? 10;
+    } else if (calcConcession === 'transgender') {
+      concessionPercent = financialSettings?.transgenderConcessionPercentage ?? 75;
+    }
+    const discountAmount = Math.round(baseVal * (concessionPercent / 100));
+    const finalAmount = Math.max(0, baseVal - discountAmount);
+
+    // EMI count
+    let emiCount = 1;
+    if (calcEmiPlan === '1') {
+      emiCount = 1;
+    } else if (calcEmiPlan === '2') {
+      emiCount = 2;
+    } else if (calcEmiPlan === '5') {
+      emiCount = 5;
+    } else if (calcEmiPlan === 'custom') {
+      emiCount = Math.max(1, calcCustomEmiCount);
+    } else {
+      // 'standard' -> based on course duration
+      const duration = coursesList.find(c => c.id === calcCourseId)?.durationMonths || 6;
+      emiCount = duration;
+    }
+
+    // Interest rate
+    const parsedRate = calcInterestRate !== '' ? parseFloat(calcInterestRate) : null;
+    const interestRate = parsedRate !== null ? parsedRate : (financialSettings?.interestRatePercentage ?? 7);
+
+    const isPromoApplied = finalAmount > 69000 && (emiCount === 2 || emiCount === 5) && parsedRate === null;
+
+    let totalInterest = 0;
+    if (emiCount > 1) {
+      if (isPromoApplied) {
+        totalInterest = 0;
+      } else {
+        totalInterest = Math.round(finalAmount * (interestRate / 100));
+      }
+    }
+
+    const baseEmiAmount = Math.round(finalAmount / emiCount);
+    const interestPerEmi = Math.round(totalInterest / emiCount);
+
+    const generatedEmis = [];
+    const now = new Date();
+    for (let i = 1; i <= emiCount; i++) {
+      const dueDate = new Date(now.getFullYear(), now.getMonth() + i, 15);
+      generatedEmis.push({
+        emiNumber: i,
+        baseAmount: baseEmiAmount,
+        interestAmount: interestPerEmi,
+        penaltyAmount: 0,
+        waiverAmount: 0,
+        status: (i === 1 ? 'paid' : 'pending') as 'paid' | 'pending' | 'overdue',
+        dueDate: dueDate.toISOString().split('T')[0],
+        paidDate: i === 1 ? now.toISOString().split('T')[0] : null
+      });
+    }
+
+    const courseObj = coursesList.find(c => c.id === calcCourseId);
+    setDemoInvoice({
+      ...demoInvoice,
+      courseId: calcCourseId,
+      courseName: courseObj?.title || calcCourseId,
+      baseFee: baseVal,
+      concessionApplied: calcConcession,
+      customDiscount: discountAmount,
+      emis: generatedEmis,
+      rulesSnapshot: {
+        interestRatePercentage: isPromoApplied ? 0 : (emiCount > 1 ? interestRate : 0),
+        penaltyPercentage: financialSettings?.penaltyPercentage || 0,
+        internalReferralPercentage: financialSettings?.internalReferralPercentage || 2,
+        externalReferralPercentage: financialSettings?.externalReferralPercentage || 5
+      }
+    });
+
+    alert(`Dynamic EMI schedule calculated successfully:\n- Principal: ₹${finalAmount.toLocaleString()}\n- Interest: ₹${totalInterest.toLocaleString()} (${interestRate}% Rate)\n- EMIs: ${emiCount} instalments of ₹${(Math.round((finalAmount + totalInterest) / emiCount)).toLocaleString()} each.\n\nLedger sandbox updated below!`);
+  };
+
+  const calculatePrepaymentSimulation = (inputAmount: number) => {
+    if (isNaN(inputAmount) || inputAmount <= 0) {
+      return {
+        currentDuesPaid: 0,
+        excessPrepayment: 0,
+        emisFullyPaidCount: 0,
+        interestSaved: 0,
+        isFullyPreclosed: false,
+        newRemainingEmisCount: demoInvoice.emis.filter(e => e.status !== 'paid').length
+      };
+    }
+
+    const simulatedEmis = demoInvoice.emis.map(e => ({ ...e }));
+    simulatedEmis.sort((a, b) => a.emiNumber - b.emiNumber);
+
+    let funds = inputAmount;
+    let currentDuesPaid = 0;
+    let excessPrepayment = 0;
+    let interestSaved = 0;
+    let emisFullyPaidCount = 0;
+
+    // Pay current active dues
+    for (let i = 0; i < simulatedEmis.length; i++) {
+      if (simulatedEmis[i].status !== 'paid') {
+        const netDue = Math.max(0, simulatedEmis[i].baseAmount + simulatedEmis[i].interestAmount + simulatedEmis[i].penaltyAmount - simulatedEmis[i].waiverAmount);
+        if (funds >= netDue) {
+          funds -= netDue;
+          currentDuesPaid += netDue;
+          simulatedEmis[i].status = 'paid';
+        } else {
+          currentDuesPaid += funds;
+          funds = 0;
+          break;
+        }
+      }
+    }
+
+    // Excess prepayment applied to future principal
+    if (funds > 0) {
+      excessPrepayment = funds;
+      const futureUnpaid = simulatedEmis.filter(e => e.status !== 'paid');
+      for (let i = 0; i < futureUnpaid.length; i++) {
+        if (funds <= 0) break;
+        const emi = futureUnpaid[i];
+        const base = emi.baseAmount;
+        const interest = emi.interestAmount;
+
+        if (funds >= base) {
+          funds -= base;
+          interestSaved += interest;
+          emi.status = 'paid';
+          emisFullyPaidCount++;
+        } else {
+          const reduction = funds;
+          const interestReduction = Math.round(interest * (reduction / base));
+          interestSaved += interestReduction;
+          funds = 0;
+        }
+      }
+    }
+
+    const newRemainingEmisCount = simulatedEmis.filter(e => e.status !== 'paid').length;
+    const isFullyPreclosed = newRemainingEmisCount === 0;
+
+    return {
+      currentDuesPaid,
+      excessPrepayment,
+      emisFullyPaidCount,
+      interestSaved,
+      isFullyPreclosed,
+      newRemainingEmisCount
+    };
+  };
+
+  const handleProcessPrepayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountToPay = parseFloat(prepayAmount);
+    if (isNaN(amountToPay) || amountToPay <= 0) {
+      alert("Please enter a valid payment amount greater than ₹0.");
+      return;
+    }
+
+    const updatedEmis = demoInvoice.emis.map(e => ({ ...e }));
+    updatedEmis.sort((a, b) => a.emiNumber - b.emiNumber);
+
+    let remainingFunds = amountToPay;
+    let savedInterest = 0;
+    let emisFullyPrepaid = 0;
+    let emisPartiallyPrepaid = 0;
+
+    // Clear currently pending EMIs
+    for (let i = 0; i < updatedEmis.length; i++) {
+      if (updatedEmis[i].status !== 'paid') {
+        const netDue = Math.max(0, updatedEmis[i].baseAmount + updatedEmis[i].interestAmount + updatedEmis[i].penaltyAmount - updatedEmis[i].waiverAmount);
+        if (remainingFunds >= netDue) {
+          remainingFunds -= netDue;
+          updatedEmis[i].status = 'paid';
+          updatedEmis[i].paidDate = new Date().toISOString().split('T')[0];
+        } else if (remainingFunds > 0) {
+          const originalNetDue = netDue;
+          const fraction = remainingFunds / originalNetDue;
+          updatedEmis[i].baseAmount = Math.max(0, Math.round(updatedEmis[i].baseAmount * (1 - fraction)));
+          updatedEmis[i].interestAmount = Math.max(0, Math.round(updatedEmis[i].interestAmount * (1 - fraction)));
+          remainingFunds = 0;
+          break;
+        }
+      }
+    }
+
+    // Apply remaining funds as future principal prepayment
+    if (remainingFunds > 0) {
+      const futureUnpaidEmis = updatedEmis.filter(e => e.status !== 'paid');
+      for (let i = 0; i < futureUnpaidEmis.length; i++) {
+        if (remainingFunds <= 0) break;
+        const currentEmi = futureUnpaidEmis[i];
+        const oldBase = currentEmi.baseAmount;
+        const oldInterest = currentEmi.interestAmount;
+
+        if (remainingFunds >= oldBase) {
+          remainingFunds -= oldBase;
+          savedInterest += oldInterest;
+          currentEmi.baseAmount = 0;
+          currentEmi.interestAmount = 0;
+          currentEmi.status = 'paid';
+          currentEmi.paidDate = new Date().toISOString().split('T')[0];
+          emisFullyPrepaid++;
+        } else {
+          const reduction = remainingFunds;
+          currentEmi.baseAmount = oldBase - reduction;
+          const interestReduction = Math.round(oldInterest * (reduction / oldBase));
+          currentEmi.interestAmount = Math.max(0, oldInterest - interestReduction);
+          savedInterest += interestReduction;
+          emisPartiallyPrepaid++;
+          remainingFunds = 0;
+        }
+      }
+    }
+
+    setDemoInvoice({
+      ...demoInvoice,
+      emis: updatedEmis
+    });
+
+    const isFullyClosed = updatedEmis.every(e => e.status === 'paid');
+    const summaryMsg = `Prepayment of ₹${amountToPay.toLocaleString()} applied under standard Bank Pre-closure Rules!\n\n` +
+      `- Future EMIs fully settled: ${emisFullyPrepaid}\n` +
+      `- Future EMIs principal reduced: ${emisPartiallyPrepaid}\n` +
+      `- Total future interest saved/waived: ₹${savedInterest.toLocaleString()}\n\n` +
+      (isFullyClosed ? "🎉 CONGRATULATIONS! Your student loan account is now FULLY PRE-CLOSED!" : "Your updated payment ledger is reflected below.");
+
+    setPrepaySuccessMessage(summaryMsg);
+    setTimeout(() => {
+      setPrepaySuccessMessage(null);
+    }, 15000);
+
+    alert(`Bank Pre-Closure / Prepayment processed successfully!\nInterest saved: ₹${savedInterest.toLocaleString()}`);
+  };
 
   // MCQs for Stage 3 Demo
   const MOCK_MCQS = [
@@ -739,6 +1260,19 @@ Question: ${text}`
             >
               <CreditCard className="w-4 h-4" />
               Accounts & Fees Panel
+            </button>
+            <button
+              onClick={() => setActiveTab('outcomes')}
+              className={cn(
+                "px-5 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2.5",
+                activeTab === 'outcomes' 
+                  ? "border-pink-500 text-white bg-slate-800/40" 
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              )}
+              id="demo-tab-outcomes"
+            >
+              <Award className="w-4 h-4" />
+              Outcome of Program
             </button>
           </div>
         </div>
@@ -1511,43 +2045,589 @@ Question: ${text}`
                     {dashboardStage === 10 && (
                       <div className="flex-grow flex flex-col justify-between">
                         <div>
-                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+                          {/* Main Section Header */}
+                          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
                             <div>
                               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                <Briefcase className="w-5 h-5 text-pink-600" /> Industrial Job Placement Assistance
+                                <Briefcase className="w-5 h-5 text-pink-600" /> Career Center & Placements Sandbox
                               </h3>
-                              <p className="text-xs text-slate-500">Active resume dispatch tracker and coordinated recruitment events</p>
+                              <p className="text-xs text-slate-500">Track mock interviews, register new students, and manage official historical corporate placements</p>
                             </div>
                             <span className="px-3 py-1 bg-pink-500/10 text-pink-700 rounded-full text-[10px] font-bold">
-                              4 Open Interviews
+                              {careerCenterTab === 'dispatch' ? '4 Open Interviews' : careerCenterTab === 'alumni' ? 'Corporate Records' : `${students.length} Registered Students`}
                             </span>
                           </div>
 
-                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-150 mb-5 text-xs text-slate-700 leading-relaxed">
-                            💡 <strong>Direct Placement Pipeline:</strong> We share student profiles and certified project briefs with premium print and packaging industries directly. Here is your application dispatch log:
+                          {/* Sub Tabs */}
+                          <div className="flex flex-wrap sm:flex-nowrap gap-1.5 mb-4 bg-slate-100/85 p-1 rounded-xl">
+                            <button
+                              onClick={() => setCareerCenterTab('dispatch')}
+                              className={cn(
+                                "flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap",
+                                careerCenterTab === 'dispatch' 
+                                  ? "bg-white text-slate-800 shadow-sm" 
+                                  : "text-slate-500 hover:text-slate-800"
+                              )}
+                            >
+                              <Clock className="w-3.5 h-3.5" /> Dispatch Log
+                            </button>
+                            <button
+                              onClick={() => setCareerCenterTab('alumni')}
+                              className={cn(
+                                "flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap",
+                                careerCenterTab === 'alumni' 
+                                  ? "bg-white text-slate-800 shadow-sm" 
+                                  : "text-slate-500 hover:text-slate-800"
+                              )}
+                            >
+                              <Award className="w-3.5 h-3.5" /> Corporate Records
+                            </button>
+                            <button
+                              onClick={() => {
+                                setCareerCenterTab('students');
+                                setEditingStudent(null);
+                                setShowAddNewStudentForm(false);
+                              }}
+                              className={cn(
+                                "flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap",
+                                careerCenterTab === 'students' 
+                                  ? "bg-white text-slate-800 shadow-sm" 
+                                  : "text-slate-500 hover:text-slate-800"
+                              )}
+                            >
+                              <Users className="w-3.5 h-3.5 text-indigo-500" /> Student Placements
+                            </button>
                           </div>
 
-                          <div className="space-y-3">
-                            {[
-                              { company: 'Vanguard Carton Packaging Ltd', role: 'Junior Pre-Press Engineer', status: 'Interview Scheduled', date: 'July 15, 2026', type: 'Off-Campus', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-                              { company: 'Galaxy Flexibles Private Ltd', role: 'Plate-Ready Engineer', status: 'Shortlisted', date: 'Under Review', type: 'Direct Placement', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-                              { company: 'Trident Print Media Group', role: 'Color Specialist', status: 'Application Dispatched', date: 'Dispatched July 05', type: 'Partner Pool', color: 'bg-slate-100 text-slate-700 border-slate-200' },
-                              { company: 'Alpha Corrugated Box Labs', role: 'Structural Packaging Draftsman', status: 'Screening Passed', date: 'July 18, 2026', type: 'Off-Campus', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
-                            ].map((job, idx) => (
-                              <div key={idx} className="p-3.5 bg-white border border-slate-150 rounded-xl hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div>
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <h4 className="font-bold text-xs text-slate-800">{job.company}</h4>
-                                    <span className="text-[9px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">{job.type}</span>
-                                  </div>
-                                  <p className="text-[11px] text-slate-500">{job.role} • <span className="font-mono text-[10px] text-indigo-500 font-semibold">{job.date}</span></p>
-                                </div>
-                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border text-center shrink-0 ${job.color}`}>
-                                  {job.status}
-                                </span>
+                          {careerCenterTab === 'dispatch' ? (
+                            <div className="space-y-4">
+                              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-150 text-xs text-slate-700 leading-relaxed">
+                                💡 <strong>Direct Placement Pipeline:</strong> We share student profiles and certified project briefs with premium print and packaging industries directly. Here is your application dispatch log:
                               </div>
-                            ))}
-                          </div>
+
+                              <div className="space-y-3">
+                                {[
+                                  { company: 'Vanguard Carton Packaging Ltd', role: 'Junior Pre-Press Engineer', status: 'Interview Scheduled', date: 'July 15, 2026', type: 'Off-Campus', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                                  { company: 'Galaxy Flexibles Private Ltd', role: 'Plate-Ready Engineer', status: 'Shortlisted', date: 'Under Review', type: 'Direct Placement', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+                                  { company: 'Trident Print Media Group', role: 'Color Specialist', status: 'Application Dispatched', date: 'Dispatched July 05', type: 'Partner Pool', color: 'bg-slate-100 text-slate-700 border-slate-200' },
+                                  { company: 'Alpha Corrugated Box Labs', role: 'Structural Packaging Draftsman', status: 'Screening Passed', date: 'July 18, 2026', type: 'Off-Campus', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+                                ].map((job, idx) => (
+                                  <div key={idx} className="p-3.5 bg-white border border-slate-150 rounded-xl hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="font-bold text-xs text-slate-800">{job.company}</h4>
+                                        <span className="text-[9px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">{job.type}</span>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500">{job.role} • <span className="font-mono text-[10px] text-indigo-500 font-semibold">{job.date}</span></p>
+                                    </div>
+                                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border text-center shrink-0 ${job.color}`}>
+                                      {job.status}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : careerCenterTab === 'alumni' ? (
+                            <div className="space-y-4">
+                              {/* Alumni Placements List */}
+                              <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                                {(!placementSettings || !placementSettings.yearlyRecords || placementSettings.yearlyRecords.length === 0) ? (
+                                  <div className="p-4 text-center text-slate-400 italic text-xs bg-slate-50 border border-slate-150 rounded-2xl">
+                                    No custom corporate placement records found in database. Showing default alumni records:
+                                    <div className="mt-3 text-left space-y-2 not-italic">
+                                      <div className="p-3 bg-white border border-slate-100 rounded-xl flex justify-between items-center text-xs">
+                                        <div>
+                                          <div className="font-bold text-slate-800">Endless Spark Print Systems (2024-2025)</div>
+                                          <div className="text-slate-500 text-[10px]">12 Students Placed successfully</div>
+                                        </div>
+                                        <span className="font-bold text-indigo-600">₹ 4,50,000 max</span>
+                                      </div>
+                                      <div className="p-3 bg-white border border-slate-100 rounded-xl flex justify-between items-center text-xs">
+                                        <div>
+                                          <div className="font-bold text-slate-800">Spectrum Flexo Graphics (2023-2024)</div>
+                                          <div className="text-slate-500 text-[10px]">8 Students Placed successfully</div>
+                                        </div>
+                                        <span className="font-bold text-indigo-600">₹ 3,80,000 max</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  [...placementSettings.yearlyRecords]
+                                    .sort((a, b) => b.year.localeCompare(a.year))
+                                    .map(yr => (
+                                      <div key={yr.year} className="bg-slate-50 rounded-2xl p-3 border border-slate-150">
+                                        <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-1.5">
+                                          <span className="text-xs font-black text-slate-800">Academic Year {yr.year}</span>
+                                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                                            Total: {yr.records.reduce((acc: number, r: any) => acc + r.studentsPlaced, 0)} Placed
+                                          </span>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                          {yr.records.map((rec: any) => (
+                                            <div key={rec.id} className="p-2 bg-white border border-slate-100 rounded-xl flex justify-between items-center text-xs shadow-sm">
+                                              <div>
+                                                <div className="font-semibold text-slate-800 flex items-center gap-2">
+                                                  {rec.logoUrl && <img src={rec.logoUrl} className="w-4 h-4 object-contain" alt="" />}
+                                                  {rec.companyName}
+                                                </div>
+                                                <div className="text-slate-500 text-[10px]">{rec.studentsPlaced} Students placed</div>
+                                              </div>
+                                              <span className="font-bold text-indigo-600 font-mono">₹{rec.highestPackage.toLocaleString('en-IN')}</span>
+                                            </div>
+                                          ))}
+                                          {yr.records.length === 0 && (
+                                            <div className="text-center text-slate-400 italic text-[10px]">No records for this year.</div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))
+                                )}
+                              </div>
+
+                              {/* Form to Add New Record */}
+                              <form onSubmit={handleAddAlumniRecord} className="bg-slate-50 p-4 rounded-2xl border border-slate-150 space-y-3">
+                                <h4 className="text-xs font-black text-slate-800 flex items-center gap-1">
+                                  <Plus className="w-4 h-4 text-pink-600" /> Add New Alumni Placement Record
+                                </h4>
+                                <p className="text-[10px] text-slate-500">Submit new student placements. This automatically updates the official Placements & Career dataset.</p>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Academic Year</label>
+                                    <select
+                                      value={newAlumniYear}
+                                      onChange={(e) => setNewAlumniYear(e.target.value)}
+                                      className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 transition-all"
+                                    >
+                                      <option value="2025-2026">2025-2026</option>
+                                      <option value="2024-2025">2024-2025</option>
+                                      <option value="2023-2024">2023-2024</option>
+                                      <option value="2022-2023">2022-2023</option>
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Company Name</label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. Tetra Pak India"
+                                      value={newAlumniCompanyName}
+                                      onChange={(e) => setNewAlumniCompanyName(e.target.value)}
+                                      required
+                                      className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 transition-all font-medium"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Students Placed</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={newAlumniStudentsPlaced}
+                                      onChange={(e) => setNewAlumniStudentsPlaced(e.target.value)}
+                                      required
+                                      className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 transition-all font-semibold"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Highest Package (₹ per annum)</label>
+                                    <input
+                                      type="number"
+                                      placeholder="e.g. 550000"
+                                      value={newAlumniHighestPackage}
+                                      onChange={(e) => setNewAlumniHighestPackage(e.target.value)}
+                                      required
+                                      className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 transition-all font-semibold"
+                                    />
+                                  </div>
+
+                                  <div className="sm:col-span-2">
+                                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Company Logo URL (optional)</label>
+                                    <input
+                                      type="url"
+                                      placeholder="e.g. https://logo.clearbit.com/tetrapak.com"
+                                      value={newAlumniLogoUrl}
+                                      onChange={(e) => setNewAlumniLogoUrl(e.target.value)}
+                                      className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 transition-all font-medium"
+                                    />
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="submit"
+                                  disabled={isSavingAlumni}
+                                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white rounded-xl text-[11px] font-black tracking-wider shadow-md transition-all flex items-center justify-center gap-2 mt-2"
+                                >
+                                  {isSavingAlumni ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving Corporate Record...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Save Record & Sync with Career Center
+                                    </>
+                                  )}
+                                </button>
+                              </form>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <div className="flex flex-wrap sm:flex-nowrap justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-150 gap-2">
+                                <span className="text-[11px] font-semibold text-slate-600">
+                                  Manage individual student placement tracking, updates, and eligibility profiles.
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowAddNewStudentForm(!showAddNewStudentForm);
+                                    setEditingStudent(null);
+                                  }}
+                                  className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all shrink-0"
+                                >
+                                  <Plus className="w-3 h-3" /> Add New Student Record
+                                </button>
+                              </div>
+
+                              {showAddNewStudentForm ? (
+                                <form onSubmit={handleCreateNewStudent} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                                  <div className="flex justify-between items-center border-b pb-2 mb-2">
+                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                                      <Users className="w-4 h-4 text-indigo-600" /> Register New Student & Placement Profile
+                                    </h4>
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowAddNewStudentForm(false)}
+                                      className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Student Name *</label>
+                                      <input
+                                        type="text"
+                                        required
+                                        placeholder="e.g. Anand Sharma"
+                                        value={newStudentForm.name}
+                                        onChange={e => setNewStudentForm({ ...newStudentForm, name: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Email Address *</label>
+                                      <input
+                                        type="email"
+                                        required
+                                        placeholder="anand@example.com"
+                                        value={newStudentForm.email}
+                                        onChange={e => setNewStudentForm({ ...newStudentForm, email: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Phone Number</label>
+                                      <input
+                                        type="tel"
+                                        placeholder="9876543210"
+                                        value={newStudentForm.phone}
+                                        onChange={e => setNewStudentForm({ ...newStudentForm, phone: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Assigned Course</label>
+                                      <select
+                                        value={newStudentForm.assignedCourse}
+                                        onChange={e => setNewStudentForm({ ...newStudentForm, assignedCourse: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs"
+                                      >
+                                        <option value="production-art-engineer">Diploma in Production Art Engineer</option>
+                                        <option value="packaging-engineer">Diploma in Packaging Engineer</option>
+                                        <option value="print-ready-engineer">Diploma in Print Ready Engineer</option>
+                                        <option value="plate-ready-engineer">Diploma in Plate Ready Engineer</option>
+                                        <option value="colour-retouching-engineer">Diploma in Colour Retouching Engineer</option>
+                                        <option value="quality-control-engineer">Diploma in Quality Control Engineer</option>
+                                        <option value="printing-and-packaging-cross-courses">Printing and Packaging Cross Courses</option>
+                                      </select>
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Placement Eligibility</label>
+                                      <div className="flex items-center gap-2 mt-1.5">
+                                        <input
+                                          type="checkbox"
+                                          id="newStudentEligible"
+                                          checked={newStudentForm.eligible}
+                                          onChange={e => setNewStudentForm({ ...newStudentForm, eligible: e.target.checked })}
+                                          className="accent-pink-600 w-4 h-4 cursor-pointer"
+                                        />
+                                        <label htmlFor="newStudentEligible" className="text-xs text-slate-700 font-semibold cursor-pointer">Approved Eligible</label>
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Current Placement Status</label>
+                                      <select
+                                        value={newStudentForm.status}
+                                        onChange={e => setNewStudentForm({ ...newStudentForm, status: e.target.value as any })}
+                                        className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs"
+                                      >
+                                        <option value="Course Ongoing">Course Ongoing</option>
+                                        <option value="Pending">Pending (Searching)</option>
+                                        <option value="Interview Scheduled">Interview Scheduled</option>
+                                        <option value="Not Placed">Not Placed</option>
+                                        <option value="Placed">Placed successfully</option>
+                                      </select>
+                                    </div>
+
+                                    {newStudentForm.status === 'Placed' && (
+                                      <>
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Placed Company Name</label>
+                                          <input
+                                            type="text"
+                                            required
+                                            placeholder="e.g. Amcor India"
+                                            value={newStudentForm.placedCompany}
+                                            onChange={e => setNewStudentForm({ ...newStudentForm, placedCompany: e.target.value })}
+                                            className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Annual Package (₹ per annum)</label>
+                                          <input
+                                            type="text"
+                                            required
+                                            placeholder="e.g. 5,20,000"
+                                            value={newStudentForm.packageAmount}
+                                            onChange={e => setNewStudentForm({ ...newStudentForm, packageAmount: e.target.value })}
+                                            className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs"
+                                          />
+                                        </div>
+                                      </>
+                                    )}
+
+                                    <div className="sm:col-span-2">
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Coordinator / Board Placement Notes</label>
+                                      <textarea
+                                        placeholder="e.g. Shortlisted for final interview round at Amcor..."
+                                        value={newStudentForm.notes}
+                                        onChange={e => setNewStudentForm({ ...newStudentForm, notes: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs min-h-[60px]"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    type="submit"
+                                    disabled={isUpdatingStudentPlacement}
+                                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-xl text-xs font-black tracking-wider transition-all flex items-center justify-center gap-1.5 shadow"
+                                  >
+                                    {isUpdatingStudentPlacement ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />} Register Student Details
+                                  </button>
+                                </form>
+                              ) : editingStudent ? (
+                                <form onSubmit={handleSaveStudentPlacement} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                                  <div className="flex justify-between items-center border-b pb-2 mb-2">
+                                    <div>
+                                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                        Update {editingStudent.name}
+                                      </h4>
+                                      <p className="text-[10px] text-slate-500">{editingStudent.email}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingStudent(null)}
+                                      className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                                    >
+                                      Back to List
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Placement Eligibility</label>
+                                      <div className="flex items-center gap-2 mt-1.5">
+                                        <input
+                                          type="checkbox"
+                                          id="editEligible"
+                                          checked={studentPlacementForm.eligible}
+                                          onChange={e => setStudentPlacementForm({ ...studentPlacementForm, eligible: e.target.checked })}
+                                          className="accent-pink-600 w-4 h-4 cursor-pointer"
+                                        />
+                                        <label htmlFor="editEligible" className="text-xs text-slate-700 font-semibold cursor-pointer">Eligible for Placements</label>
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Placement Status</label>
+                                      <select
+                                        value={studentPlacementForm.status}
+                                        onChange={e => setStudentPlacementForm({ ...studentPlacementForm, status: e.target.value as any })}
+                                        className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs"
+                                      >
+                                        <option value="Course Ongoing">Course Ongoing</option>
+                                        <option value="Pending">Pending (Searching)</option>
+                                        <option value="Interview Scheduled">Interview Scheduled</option>
+                                        <option value="Not Placed">Not Placed</option>
+                                        <option value="Placed">Placed successfully</option>
+                                      </select>
+                                    </div>
+
+                                    {studentPlacementForm.status === 'Interview Scheduled' && (
+                                      <>
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Interview Company Name</label>
+                                          <input
+                                            type="text"
+                                            required
+                                            placeholder="e.g. Vanguard Carton"
+                                            value={studentPlacementForm.interviewCompany}
+                                            onChange={e => setStudentPlacementForm({ ...studentPlacementForm, interviewCompany: e.target.value })}
+                                            className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Interview Date & Time</label>
+                                          <input
+                                            type="datetime-local"
+                                            required
+                                            value={studentPlacementForm.interviewDate}
+                                            onChange={e => setStudentPlacementForm({ ...studentPlacementForm, interviewDate: e.target.value })}
+                                            className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs font-mono"
+                                          />
+                                        </div>
+                                      </>
+                                    )}
+
+                                    {studentPlacementForm.status === 'Placed' && (
+                                      <>
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Placed Company Name</label>
+                                          <input
+                                            type="text"
+                                            required
+                                            placeholder="e.g. Vanguard Carton"
+                                            value={studentPlacementForm.placedCompany}
+                                            onChange={e => setStudentPlacementForm({ ...studentPlacementForm, placedCompany: e.target.value })}
+                                            className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs font-semibold"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Annual Package (₹ per annum)</label>
+                                          <input
+                                            type="text"
+                                            required
+                                            placeholder="e.g. 4,50,000"
+                                            value={studentPlacementForm.packageAmount}
+                                            onChange={e => setStudentPlacementForm({ ...studentPlacementForm, packageAmount: e.target.value })}
+                                            className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs font-semibold"
+                                          />
+                                        </div>
+                                      </>
+                                    )}
+
+                                    <div className="sm:col-span-2">
+                                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Coordinator / Board Placement Notes</label>
+                                      <textarea
+                                        placeholder="e.g. Profile forwarded to Vanguard Carton. Shortlisted."
+                                        value={studentPlacementForm.notes}
+                                        onChange={e => setStudentPlacementForm({ ...studentPlacementForm, notes: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 bg-white border border-slate-150 rounded-xl text-xs min-h-[60px]"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    type="submit"
+                                    disabled={isUpdatingStudentPlacement}
+                                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-xl text-xs font-black tracking-wider transition-all flex items-center justify-center gap-1.5 shadow"
+                                  >
+                                    {isUpdatingStudentPlacement ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />} Save Placement Details
+                                  </button>
+                                </form>
+                              ) : (
+                                <div className="space-y-3">
+                                  {/* Search */}
+                                  <div className="relative">
+                                    <input
+                                      type="text"
+                                      placeholder="Search students by name or email..."
+                                      value={studentSearchTerm}
+                                      onChange={e => setStudentSearchTerm(e.target.value)}
+                                      className="w-full px-3 py-2 bg-white border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 transition-all font-medium pl-8"
+                                    />
+                                    <span className="absolute left-2.5 top-2.5 text-slate-400">
+                                      <Users className="w-4 h-4" />
+                                    </span>
+                                  </div>
+
+                                  {/* Student Grid list */}
+                                  <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                                    {students.length === 0 ? (
+                                      <div className="p-8 text-center text-slate-400 italic text-xs bg-slate-50 border border-slate-150 rounded-2xl">
+                                        No registered students found in database. Use the "Add New Student Record" button to register one.
+                                      </div>
+                                    ) : (
+                                      students
+                                        .filter(s => 
+                                          s.name.toLowerCase().includes(studentSearchTerm.toLowerCase()) || 
+                                          s.email.toLowerCase().includes(studentSearchTerm.toLowerCase())
+                                        )
+                                        .map((student, idx) => {
+                                          const info = student.placementInfo || { eligible: false, status: 'Course Ongoing' };
+                                          return (
+                                            <div 
+                                              key={student.id || idx} 
+                                              onClick={() => {
+                                                setEditingStudent(student);
+                                                setStudentPlacementForm({
+                                                  eligible: info.eligible ?? false,
+                                                  status: info.status || 'Course Ongoing',
+                                                  placedCompany: info.placedCompany || '',
+                                                  packageAmount: info.packageAmount || '',
+                                                  interviewCompany: info.interviewCompany || '',
+                                                  interviewDate: info.interviewDate || '',
+                                                  notes: info.notes || ''
+                                                });
+                                              }}
+                                              className="p-3 bg-white border border-slate-150 rounded-xl hover:bg-slate-50 transition-all cursor-pointer flex justify-between items-center group"
+                                            >
+                                              <div>
+                                                <div className="font-bold text-xs text-slate-800 group-hover:text-indigo-600 transition-colors">
+                                                  {student.name}
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 mt-0.5">
+                                                  {student.email} • <span className="font-medium text-slate-400">{student.assignedCourse?.replace(/-/g, ' ')}</span>
+                                                </div>
+                                              </div>
+
+                                              <div className="flex items-center gap-2">
+                                                <span className={cn(
+                                                  "text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0",
+                                                  info.status === 'Placed' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                                                  info.status === 'Interview Scheduled' ? "bg-amber-50 text-amber-700 border-amber-100" :
+                                                  "bg-slate-50 text-slate-600 border-slate-150"
+                                                )}>
+                                                  {info.status || 'Ongoing'}
+                                                </span>
+                                                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600" />
+                                              </div>
+                                            </div>
+                                          );
+                                        })
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         <div className="border-t border-slate-100 pt-4 flex items-center justify-between gap-4 mt-5">
@@ -2851,7 +3931,8 @@ Question: ${text}`
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {(() => {
                   const base = demoInvoice.baseFee;
-                  const finalBillable = base;
+                  const discount = demoInvoice.customDiscount || 0;
+                  const finalBillable = base - discount;
 
                   const totalInterest = demoInvoice.emis.reduce((sum, e) => sum + e.interestAmount, 0);
                   const finalPayableNet = finalBillable + totalInterest;
@@ -2859,6 +3940,7 @@ Question: ${text}`
                     return sum + e.baseAmount + e.interestAmount;
                   }, 0);
                   const outstandingBalance = Math.max(0, finalPayableNet - totalPaid);
+                  const activeInterestRate = demoInvoice.rulesSnapshot?.interestRatePercentage ?? (financialSettings?.interestRatePercentage ?? 7);
 
                   return (
                     <>
@@ -2873,7 +3955,9 @@ Question: ${text}`
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Net Billable Amount</span>
                         <div className="mt-2">
                           <p className="text-xl font-extrabold text-indigo-600 font-mono">₹{finalPayableNet.toLocaleString()}</p>
-                          <p className="text-[10px] text-slate-500 mt-0.5">Inc. Interest (7%)</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            {discount > 0 ? `Concessions: -₹${discount.toLocaleString()}` : `Inc. Interest (${activeInterestRate}%)`}
+                          </p>
                         </div>
                       </div>
                       <div className="bg-white p-5 rounded-3xl border border-slate-150 shadow-sm flex flex-col justify-between">
@@ -2899,6 +3983,171 @@ Question: ${text}`
               <div className="grid lg:grid-cols-3 gap-6">
                 {/* Left: Interactive Instalments Ledger */}
                 <div className="lg:col-span-2 space-y-6">
+                  {/* LIVE EMI CALCULATOR & SIMULATOR */}
+                  <div className="bg-white rounded-3xl border border-slate-150 shadow-sm p-6 space-y-5">
+                    <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                      <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                        <Calculator className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-900">Dynamic Course EMI Calculator & Sandbox</h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Simulate different pricing packages, concessions, and dynamic interest rules in real-time</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Left Side: Inputs */}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Select Course</label>
+                          <select
+                            value={calcCourseId}
+                            onChange={(e) => handleCourseChange(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-150 rounded-xl text-xs font-medium focus:ring-2 focus:ring-pink-500 focus:bg-white transition-all"
+                          >
+                            {coursesList.map((course) => (
+                              <option key={course.id} value={course.id}>
+                                {course.title} (₹{course.fees.toLocaleString()})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Base Course Fee (₹)</label>
+                          <input
+                            type="number"
+                            value={calcBaseFee}
+                            onChange={(e) => setCalcBaseFee(e.target.value)}
+                            placeholder="Enter custom base fee..."
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-150 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-pink-500 focus:bg-white transition-all"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Concession</label>
+                            <select
+                              value={calcConcession}
+                              onChange={(e) => setCalcConcession(e.target.value as any)}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 focus:bg-white transition-all"
+                            >
+                              <option value="none">None (0% Off)</option>
+                              <option value="single-parent">Single Parent ({financialSettings?.singleParentConcessionPercentage ?? 10}% Off)</option>
+                              <option value="transgender">Transgender ({financialSettings?.transgenderConcessionPercentage ?? 75}% Off)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Interest Rate (%)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={calcInterestRate}
+                              onChange={(e) => setCalcInterestRate(e.target.value)}
+                              placeholder={`Default (${financialSettings?.interestRatePercentage || 7}%)`}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 focus:bg-white transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">EMI Installments Plan</label>
+                          <select
+                            value={calcEmiPlan}
+                            onChange={(e) => setCalcEmiPlan(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 focus:bg-white transition-all"
+                          >
+                            <option value="standard">Standard (Based on Course Duration)</option>
+                            <option value="1">Full Payment (1 Installment)</option>
+                            <option value="2">2 Installments (0% Interest if Fee &gt; 69k)</option>
+                            <option value="5">5 Installments (0% Interest if Fee &gt; 69k)</option>
+                            <option value="custom">Custom EMI Plan...</option>
+                          </select>
+                        </div>
+
+                        {calcEmiPlan === 'custom' && (
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Custom Installments Count</label>
+                            <input
+                              type="number"
+                              min="2"
+                              max="24"
+                              value={calcCustomEmiCount}
+                              onChange={(e) => setCalcCustomEmiCount(Math.max(2, parseInt(e.target.value) || 2))}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-150 rounded-xl text-xs focus:ring-2 focus:ring-pink-500 focus:bg-white transition-all"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Side: Real-time Output & Action */}
+                      <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-150 flex flex-col justify-between space-y-4">
+                        <div className="space-y-2.5 text-xs">
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Live Calculation Estimate</span>
+                          
+                          <div className="flex justify-between pb-1 border-b border-slate-100">
+                            <span className="text-slate-500">Base Price:</span>
+                            <span className="font-bold text-slate-800">₹{currentBaseVal.toLocaleString()}</span>
+                          </div>
+
+                          {currentDiscountAmount > 0 && (
+                            <div className="flex justify-between pb-1 border-b border-slate-100 text-rose-600">
+                              <span>Discount Applied ({calcConcession === 'single-parent' ? 'Single Parent' : 'Transgender'}):</span>
+                              <span className="font-bold">-₹{currentDiscountAmount.toLocaleString()}</span>
+                            </div>
+                          )}
+
+                          <div className="flex justify-between pb-1 border-b border-slate-100">
+                            <span className="text-slate-500">Net Principal Course Fee:</span>
+                            <span className="font-bold text-slate-900">₹{currentFinalAmount.toLocaleString()}</span>
+                          </div>
+
+                          <div className="flex justify-between pb-1 border-b border-slate-100">
+                            <span className="text-slate-500">Interest Rate:</span>
+                            <span className={cn("font-bold", isPromoApplied ? "text-emerald-600" : "text-slate-800")}>
+                              {isPromoApplied ? "0% Promo Active" : `${currentInterestRate}% per annum`}
+                            </span>
+                          </div>
+
+                          {currentTotalInterest > 0 ? (
+                            <div className="flex justify-between pb-1 border-b border-slate-100 text-indigo-600 font-mono">
+                              <span>Total Calculated Interest:</span>
+                              <span>₹{currentTotalInterest.toLocaleString()}</span>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between pb-1 border-b border-slate-100 text-emerald-600 font-mono">
+                              <span>Total Calculated Interest:</span>
+                              <span className="font-semibold">₹0 (No Interest)</span>
+                            </div>
+                          )}
+
+                          <div className="flex justify-between pt-1 font-bold text-slate-900 text-sm">
+                            <span>Total Net Billable:</span>
+                            <span className="text-indigo-600">₹{currentTotalPayable.toLocaleString()}</span>
+                          </div>
+
+                          <div className="p-2.5 bg-indigo-50/50 border border-indigo-100/50 rounded-xl mt-2 flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-1.5 text-indigo-800">
+                              <Clock className="w-3.5 h-3.5 shrink-0" />
+                              <span className="font-semibold">Monthly EMI Instalment</span>
+                            </div>
+                            <span className="text-indigo-700 font-extrabold font-mono text-sm">
+                              ₹{currentEmiAmount.toLocaleString()} <span className="text-[10px] text-indigo-500 font-normal">/ {currentEmiCount} EMIs</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleApplyCalculatedEmi}
+                          className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[11px] font-black tracking-wide shadow-md transition-colors flex items-center justify-center gap-2 mt-auto"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Apply & Load Schedule to Ledger Sandbox
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="bg-white rounded-3xl border border-slate-150 shadow-sm overflow-hidden">
                     <div className="p-5 border-b border-slate-150 bg-slate-50/50 flex items-center justify-between">
                       <div>
@@ -2917,7 +4166,7 @@ Question: ${text}`
                             <th className="px-4 py-3">Instalment</th>
                             <th className="px-4 py-3 border-l border-slate-100">Due Date</th>
                             <th className="px-4 py-3 text-right border-l border-slate-100">Principal</th>
-                            <th className="px-4 py-3 text-right border-l border-slate-100">Interest (7%)</th>
+                            <th className="px-4 py-3 text-right border-l border-slate-100">Interest ({demoInvoice.rulesSnapshot?.interestRatePercentage ?? (financialSettings?.interestRatePercentage ?? 7)}%)</th>
                             <th className="px-4 py-3 text-right border-l border-slate-100 bg-slate-50">Net Due</th>
                             <th className="px-4 py-3 text-center border-l border-slate-100">Status</th>
                             <th className="px-4 py-3 text-center border-l border-slate-100">Actions</th>
@@ -2979,6 +4228,114 @@ Question: ${text}`
                         </tbody>
                       </table>
                     </div>
+                  </div>
+
+                  {/* BANK PRE-CLOSURE & OVERPAYMENT SIMULATOR */}
+                  <div className="bg-white rounded-3xl border border-slate-150 shadow-sm p-6 space-y-4">
+                    <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                      <div className="p-2 bg-pink-50 text-pink-600 rounded-xl">
+                        <IndianRupee className="w-5 h-5 text-pink-500" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                          Bank-Format Prepayment & Pre-Closure Sandbox
+                          <span className="px-1.5 py-0.5 bg-pink-500/10 text-pink-700 text-[8px] font-black uppercase rounded-md tracking-wider">
+                            Prepayment Option
+                          </span>
+                        </h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          Enter any custom payment amount (e.g. ₹15,000 against a ₹1,000 EMI) to simulate tenure reduction and interest savings.
+                        </p>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleProcessPrepayment} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                          Enter Payment Amount (₹)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="1"
+                            value={prepayAmount}
+                            onChange={(e) => setPrepayAmount(e.target.value)}
+                            placeholder="e.g. 15000"
+                            className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-150 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-pink-500 focus:bg-white transition-all text-slate-800"
+                          />
+                          <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-xs">₹</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2 px-4 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-black tracking-wide shadow transition-colors flex items-center justify-center gap-1.5 h-[34px] cursor-pointer"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" /> Submit Prepayment
+                      </button>
+                    </form>
+
+                    {/* Prepayment success or info message */}
+                    {prepaySuccessMessage && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-2xl text-xs text-emerald-800 whitespace-pre-wrap leading-relaxed animate-fade-in font-medium">
+                        {prepaySuccessMessage}
+                      </div>
+                    )}
+
+                    {/* Live Simulation Calculator Box */}
+                    {(() => {
+                      const amount = parseFloat(prepayAmount);
+                      const sim = calculatePrepaymentSimulation(amount);
+
+                      return (
+                        <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-150 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">
+                              Prepayment Impact Summary
+                            </span>
+                            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[8px] font-bold rounded-md border border-indigo-100 font-mono">
+                              Bank Rule Engine Active
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[8px] font-bold text-slate-400 uppercase block mb-1">Current Dues Met</span>
+                              <span className="text-xs font-extrabold text-slate-700">₹{sim.currentDuesPaid.toLocaleString()}</span>
+                            </div>
+                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[8px] font-bold text-slate-400 uppercase block mb-1">Excess Principal Pay</span>
+                              <span className="text-xs font-extrabold text-indigo-600">₹{sim.excessPrepayment.toLocaleString()}</span>
+                            </div>
+                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[8px] font-bold text-slate-400 uppercase block mb-1">EMIs Fully Paid</span>
+                              <span className="text-xs font-extrabold text-emerald-600">-{sim.emisFullyPaidCount} instalments</span>
+                            </div>
+                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                              <span className="text-[8px] font-bold text-slate-400 uppercase block mb-1">Interest Saved</span>
+                              <span className="text-xs font-extrabold text-pink-600">₹{sim.interestSaved.toLocaleString()}</span>
+                            </div>
+                          </div>
+
+                          <div className="text-[11px] text-slate-500 leading-relaxed pt-2.5 flex items-start gap-1.5 border-t border-slate-150">
+                            <div className="p-0.5 bg-indigo-50 text-indigo-600 rounded-md mt-0.5 shrink-0">
+                              <Clock className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              {sim.isFullyPreclosed ? (
+                                <span className="font-extrabold text-emerald-700 block">
+                                  🎉 This amount will FULLY PRE-CLOSE the loan! All future interest is completely waived.
+                                </span>
+                              ) : (
+                                <span>
+                                  By paying ₹{(amount || 0).toLocaleString()}, your remaining unpaid tenure is reduced to <strong>{sim.newRemainingEmisCount} instalments</strong>, and you save <strong>₹{sim.interestSaved.toLocaleString()}</strong> in future interest charges.
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -3069,6 +4426,19 @@ Question: ${text}`
                   </div>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {/* TAB 6: Outcome of Program (from snap) */}
+          {activeTab === 'outcomes' && (
+            <motion.div
+              key="outcomes"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-8"
+            >
+              <ProgramOutcomes />
             </motion.div>
           )}
 

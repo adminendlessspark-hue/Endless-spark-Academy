@@ -322,8 +322,8 @@ export interface EMI {
 
 export interface Waiver {
   emiNumber: number;
-  type: 'interest' | 'penalty';
-  percentage: number;
+  type: 'fee' | 'interest' | 'penalty';
+  percentage: number | '';
   amount: number;
   reason: string;
   approvedBy: string;

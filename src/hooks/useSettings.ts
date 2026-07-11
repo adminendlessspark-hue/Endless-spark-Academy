@@ -198,7 +198,7 @@ export function useSettings() {
           externalReferralPercentage: 5,
           emiRules: [
             { durationMonths: 3, emiCount: 2 },
-            { durationMonths: 6, emiCount: 5 }
+            { durationMonths: 6, emiCount: 6 }
           ],
           razorpayDetails: {
             enabled: true,

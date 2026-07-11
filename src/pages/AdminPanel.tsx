@@ -798,7 +798,7 @@ export default function AdminPanel() {
           id: 'financial',
           emiRules: [
             { durationMonths: 3, emiCount: 2 },
-            { durationMonths: 6, emiCount: 5 }
+            { durationMonths: 6, emiCount: 6 }
           ],
           interestRatePercentage: 7,
           penaltyPercentage: 0,
@@ -1329,14 +1329,14 @@ export default function AdminPanel() {
 
   const getLastRegistrationNumber = () => {
     if (!students || students.length === 0) return null;
-    const approvedWithId = students.filter(s => s.isApproved && s.studentId && s.studentId.trim() !== '' && s.studentId.toLowerCase() !== 'none' && !s.studentId.startsWith('student_'));
+    const approvedWithId = students.filter(s => s.studentId && s.studentId.trim() !== '' && s.studentId.toLowerCase() !== 'none' && !s.studentId.startsWith('student_'));
     if (approvedWithId.length === 0) return null;
 
-    // Sort to find the latest based on admissionDate first, then studentId
+    // Extract numbers to sort numerically so REG-2026-045 is correctly treated as newer than REG-2026-002
     const sorted = [...approvedWithId].sort((a, b) => {
-      const dateA = a.admissionDate ? new Date(a.admissionDate).getTime() : 0;
-      const dateB = b.admissionDate ? new Date(b.admissionDate).getTime() : 0;
-      if (dateA !== dateB) return dateB - dateA; // Newest first
+      const numA = parseInt(a.studentId.replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(b.studentId.replace(/\D/g, ''), 10) || 0;
+      if (numA !== numB) return numB - numA; // Largest number first
       return b.studentId.localeCompare(a.studentId);
     });
 
@@ -1471,7 +1471,14 @@ export default function AdminPanel() {
           const rule = financialSettings.emiRules.find((r: any) => r.durationMonths === courseDurationMonths);
           if (rule) {
             emiCount = rule.emiCount;
+            if (courseDurationMonths === 6 && (emiCount === 5 || emiCount === 6)) {
+              emiCount = 6;
+            }
+          } else if (courseDurationMonths === 6) {
+            emiCount = 6;
           }
+        } else if (courseDurationMonths === 6) {
+          emiCount = 6;
         }
       }
 
@@ -1479,7 +1486,7 @@ export default function AdminPanel() {
       const parsedRate = customInterestRate !== '' ? parseFloat(customInterestRate) : null;
       const interestRate = parsedRate !== null ? parsedRate : (financialSettings?.interestRatePercentage ?? 7);
 
-      const isPromoApplied = finalAmount > 69000 && (emiCount === 2 || emiCount === 5) && parsedRate === null;
+      const isPromoApplied = finalAmount > 69000 && (emiCount === 2 || emiCount === 5) && parsedRate === null && !(courseDurationMonths === 6 && emiCount > 2);
 
       if (emiCount > 1) {
         if (isPromoApplied) {

@@ -37,7 +37,7 @@ export default function AccountsPanel() {
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'invoices'));
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      setStudents(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User)).filter(u => u.role === 'student'));
+      setStudents(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
     const unsubSettings = onSnapshot(doc(db, 'settings', 'financial'), (docSnap) => {
@@ -72,7 +72,7 @@ export default function AccountsPanel() {
           coursesConfig: defaultCoursesConfig as any,
           emiRules: [
             { durationMonths: 3, emiCount: 2 },
-            { durationMonths: 6, emiCount: 5 }
+            { durationMonths: 6, emiCount: 6 }
           ],
           interestRatePercentage: 7,
           penaltyPercentage: 0,
@@ -99,12 +99,30 @@ export default function AccountsPanel() {
   const [waiverModal, setWaiverModal] = useState<{ 
     invoiceId: string, 
     emiNumber: number | '', 
-    type: 'interest' | 'penalty' | '', 
+    type: 'fee' | 'interest' | 'penalty' | '', 
     percentage: number | '', 
     amount: number, 
     reason: string, 
     editIndex?: number 
   } | null>(null);
+  const [emiModal, setEmiModal] = useState<{
+    invoiceId: string;
+    emiNumber: number;
+    dueDate: string;
+    baseAmount: number;
+    interestAmount: number;
+    penaltyAmount: number;
+    status: 'paid' | 'pending';
+  } | null>(null);
+  const [restructureModal, setRestructureModal] = useState<{
+    invoiceId: string;
+    currentCount: number;
+    finalAmount: number;
+    createdAt: string;
+    preservePaid: boolean;
+  } | null>(null);
+  const [newEmiCount, setNewEmiCount] = useState<number>(1);
+  const [restructureInterestRate, setRestructureInterestRate] = useState<number>(7);
   const [payoutModal, setPayoutModal] = useState<{ invoiceId: string, amount: number } | null>(null);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
   const [invoiceModal, setInvoiceModal] = useState<{
@@ -115,6 +133,43 @@ export default function AccountsPanel() {
     concessionType: 'none' | 'single-parent' | 'transgender';
     customFeeDiscount: number;
   } | null>(null);
+
+  const is6MonthCourseStudent = (student: User | undefined) => {
+    if (!student) return false;
+    const courses: string[] = [];
+    if (student.assignedCourse) courses.push(student.assignedCourse);
+    if (student.assignedCourses && Array.isArray(student.assignedCourses)) {
+      student.assignedCourses.forEach((c: any) => {
+        if (typeof c === 'string') courses.push(c);
+        else if (c && c.id) courses.push(c.id);
+      });
+    }
+    if (student.requestedCourse) courses.push(student.requestedCourse);
+    if (student.requestedCourses && Array.isArray(student.requestedCourses)) {
+      student.requestedCourses.forEach((c: any) => {
+        if (typeof c === 'string') courses.push(c);
+        else if (c && c.id) courses.push(c.id);
+      });
+    }
+
+    const coursesConfig = settings?.coursesConfig || [];
+    return courses.some(courseId => {
+      const matched = coursesConfig.find((c: any) => c.courseId === courseId);
+      if (matched) {
+        return matched.durationMonths === 6;
+      }
+      // Check fallback for known 6-month courses if not customized:
+      const known6MonthCourses = [
+        'packaging-engineer',
+        'production-art-engineer',
+        'print-ready-engineer',
+        'plate-ready-engineer',
+        'colour-retouching-engineer',
+        'quality-control-engineer'
+      ];
+      return known6MonthCourses.includes(courseId);
+    });
+  };
 
   const handleApplyInvoice = async () => {
     if (checkPreview()) return;
@@ -222,7 +277,7 @@ export default function AccountsPanel() {
 
   const handleSaveWaiver = async () => {
     if (checkPreview()) return;
-    if (!waiverModal || !waiverModal.emiNumber || !waiverModal.type || !waiverModal.percentage || waiverModal.amount <= 0 || !waiverModal.reason.trim()) {
+    if (!waiverModal || !waiverModal.emiNumber || !waiverModal.type || waiverModal.amount <= 0 || !waiverModal.reason.trim()) {
       alert('Please fill all fields and ensure amount is greater than 0.');
       return;
     }
@@ -315,6 +370,158 @@ export default function AccountsPanel() {
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `invoices/${invoiceId}`);
+    }
+  };
+
+  const handleSaveEmi = async () => {
+    if (checkPreview()) return;
+    if (!emiModal) return;
+
+    const invoice = invoices.find(i => i.id === emiModal.invoiceId);
+    if (!invoice) {
+      alert('Invoice not found.');
+      return;
+    }
+
+    const updatedEmis = invoice.emis.map((emi: any) => {
+      if (emi.emiNumber === emiModal.emiNumber) {
+        let dateObj = new Date(emiModal.dueDate);
+        if (isNaN(dateObj.getTime())) {
+          dateObj = new Date();
+        }
+        return {
+          ...emi,
+          dueDate: dateObj.toISOString(),
+          baseAmount: emiModal.baseAmount,
+          interestAmount: emiModal.interestAmount,
+          penaltyAmount: emiModal.penaltyAmount,
+          status: emiModal.status,
+          paidDate: emiModal.status === 'paid' ? (emi.paidDate || new Date().toISOString()) : null
+        };
+      }
+      return emi;
+    });
+
+    const newFinalAmount = updatedEmis.reduce((sum: number, e: any) => sum + e.baseAmount, 0);
+
+    try {
+      await updateDoc(doc(db, 'invoices', emiModal.invoiceId), {
+        emis: updatedEmis,
+        finalAmount: newFinalAmount,
+        updatedAt: new Date().toISOString()
+      });
+      setEmiModal(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `invoices/${emiModal.invoiceId}`);
+    }
+  };
+
+  const handleRestructureEmis = async () => {
+    if (checkPreview()) return;
+    if (!restructureModal) return;
+
+    if (newEmiCount < 1 || newEmiCount > 24) {
+      alert('Please enter an EMI count between 1 and 24.');
+      return;
+    }
+
+    const invoice = invoices.find(i => i.id === restructureModal.invoiceId);
+    if (!invoice) {
+      alert('Invoice not found.');
+      return;
+    }
+
+    const student = students.find(s => s.id === invoice.studentId);
+    const is6Month = is6MonthCourseStudent(student);
+    const isInterestEligible = is6Month && newEmiCount > 2;
+
+    let updatedEmis: any[] = [];
+
+    if (restructureModal.preservePaid) {
+      const paidEmis = (invoice.emis || []).filter((e: any) => e.status === 'paid');
+      const paidCount = paidEmis.length;
+
+      if (newEmiCount <= paidCount) {
+        alert(`The invoice has ${paidCount} paid EMIs. You cannot set the total EMI count to be less than or equal to ${paidCount} while preserving paid EMIs.`);
+        return;
+      }
+
+      // Preserve paid EMIs but make sure they keep their exact fields
+      updatedEmis = [...paidEmis].map((e, idx) => ({
+        ...e,
+        emiNumber: idx + 1
+      }));
+
+      const totalPaidBase = paidEmis.reduce((sum: number, e: any) => sum + (e.baseAmount || 0), 0);
+      const remainingAmount = Math.max(0, invoice.finalAmount - totalPaidBase);
+      const remainingCount = newEmiCount - paidCount;
+
+      const remainingBaseEmiAmount = Math.round(remainingAmount / remainingCount);
+      
+      const totalInterestForRemaining = isInterestEligible ? Math.round(remainingAmount * (restructureInterestRate / 100)) : 0;
+      const interestPerRemainingEmi = isInterestEligible ? Math.round(totalInterestForRemaining / remainingCount) : 0;
+
+      const now = new Date();
+
+      for (let i = 1; i <= remainingCount; i++) {
+        const dueDate = new Date();
+        dueDate.setDate(now.getDate() + (i - 1) * 30);
+        
+        const isLast = (i === remainingCount);
+        const emiInterest = isLast 
+          ? (totalInterestForRemaining - interestPerRemainingEmi * (remainingCount - 1))
+          : interestPerRemainingEmi;
+
+        updatedEmis.push({
+          emiNumber: paidCount + i,
+          baseAmount: isLast ? (remainingAmount - remainingBaseEmiAmount * (remainingCount - 1)) : remainingBaseEmiAmount,
+          interestAmount: emiInterest,
+          penaltyAmount: 0,
+          dueDate: dueDate.toISOString(),
+          status: 'pending'
+        });
+      }
+    } else {
+      // Complete redistribution
+      const baseEmiAmount = Math.round(invoice.finalAmount / newEmiCount);
+      const totalInterest = isInterestEligible ? Math.round(invoice.finalAmount * (restructureInterestRate / 100)) : 0;
+      const interestPerEmi = isInterestEligible ? Math.round(totalInterest / newEmiCount) : 0;
+
+      const startDay = new Date(invoice.createdAt || new Date().toISOString());
+
+      for (let i = 1; i <= newEmiCount; i++) {
+        const dueDate = new Date(startDay);
+        dueDate.setDate(startDay.getDate() + (i - 1) * 30);
+
+        const isLast = (i === newEmiCount);
+        const emiInterest = isLast
+          ? (totalInterest - interestPerEmi * (newEmiCount - 1))
+          : interestPerEmi;
+
+        updatedEmis.push({
+          emiNumber: i,
+          baseAmount: isLast ? (invoice.finalAmount - baseEmiAmount * (newEmiCount - 1)) : baseEmiAmount,
+          interestAmount: emiInterest,
+          penaltyAmount: 0,
+          dueDate: dueDate.toISOString(),
+          status: 'pending'
+        });
+      }
+    }
+
+    try {
+      const updateData: any = {
+        emis: updatedEmis,
+        updatedAt: new Date().toISOString()
+      };
+      if (isInterestEligible) {
+        updateData['rulesSnapshot.interestRatePercentage'] = restructureInterestRate;
+      }
+      await updateDoc(doc(db, 'invoices', restructureModal.invoiceId), updateData);
+      alert('EMI schedule restructured successfully with 6-month dynamic interest!');
+      setRestructureModal(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `invoices/${restructureModal.invoiceId}`);
     }
   };
 
@@ -574,7 +781,7 @@ export default function AccountsPanel() {
                                             <div key={index} className="flex justify-between items-center p-3 bg-green-50 rounded-xl border border-green-100 shadow-sm">
                                               <div className="min-w-0 flex-1 pr-2">
                                                 <p className="text-sm font-bold text-green-800 break-words">
-                                                  {waiver.percentage}% {waiver.type === 'interest' ? 'Interest' : 'Penalty'} Waiver (EMI {waiver.emiNumber})
+                                                  {waiver.percentage ? `${waiver.percentage}% ` : ''}{waiver.type === 'fee' ? 'Base Fee' : waiver.type === 'interest' ? 'Interest' : 'Penalty'} Waiver (EMI {waiver.emiNumber})
                                                 </p>
                                                 <p className="text-xs text-green-600 mt-1 break-words"><span className="font-semibold">Reason:</span> {waiver.reason}</p>
                                                 <p className="text-xs text-green-600 mt-0.5"><span className="font-semibold">Approved by:</span> {waiver.approvedBy}</p>
@@ -638,9 +845,31 @@ export default function AccountsPanel() {
                                         </span>
                                       </h5>
                                     </div>
-                                    <span className="text-[11px] font-bold text-pink-600 hover:text-pink-700 tracking-wide uppercase">
-                                      {isEmisCollapsed ? "View Schedule" : "Hide Schedule"}
-                                    </span>
+                                    <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                                      <button
+                                        onClick={() => {
+                                          setRestructureModal({
+                                            invoiceId: invoice.id,
+                                            currentCount: invoice.emis.length,
+                                            finalAmount: invoice.finalAmount,
+                                            createdAt: invoice.createdAt || new Date().toISOString(),
+                                            preservePaid: true
+                                          });
+                                          setNewEmiCount(invoice.emis.length);
+                                          setRestructureInterestRate(invoice.rulesSnapshot?.interestRatePercentage ?? (settings?.interestRatePercentage ?? 7));
+                                        }}
+                                        className="text-[11px] font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-lg border border-pink-100 shadow-sm transition-all hover:scale-[1.02]"
+                                        title="Change the number of EMIs for this student"
+                                      >
+                                        <Edit2 className="w-3 h-3" /> Change EMI Count
+                                      </button>
+                                      <span 
+                                        onClick={() => setCollapsedEmis(prev => ({ ...prev, [invoice.id]: !isEmisCollapsed }))}
+                                        className="text-[11px] font-bold text-pink-600 hover:text-pink-700 tracking-wide uppercase cursor-pointer select-none"
+                                      >
+                                        {isEmisCollapsed ? "View Schedule" : "Hide Schedule"}
+                                      </span>
+                                    </div>
                                   </div>
 
                                   {!isEmisCollapsed && (
@@ -676,18 +905,35 @@ export default function AccountsPanel() {
                                                 <td className="px-4 py-3.5 text-green-600 font-semibold">-₹{emiWaiverAmount.toLocaleString()}</td>
                                                 <td className="px-4 py-3.5 font-bold text-gray-900 text-base">₹{emiPayable.toLocaleString()}</td>
                                                 <td className="px-4 py-3.5">
-                                                  {emi.status === 'paid' ? (
-                                                    <span className="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-50 px-2.5 py-1.5 rounded-full w-fit border border-green-100 shadow-sm">
-                                                      <CheckCircle className="w-3.5 h-3.5" /> Paid
-                                                    </span>
-                                                  ) : (
+                                                  <div className="flex items-center gap-2">
+                                                    {emi.status === 'paid' ? (
+                                                      <span className="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-50 px-2.5 py-1.5 rounded-full w-fit border border-green-100 shadow-sm">
+                                                        <CheckCircle className="w-3.5 h-3.5" /> Paid
+                                                      </span>
+                                                    ) : (
+                                                      <button
+                                                        onClick={() => handleMarkEmiPaid(invoice.id, emi.emiNumber)}
+                                                        className="bg-pink-50 text-pink-600 hover:bg-pink-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm hover:scale-[1.02]"
+                                                      >
+                                                        Mark Paid
+                                                      </button>
+                                                    )}
                                                     <button
-                                                      onClick={() => handleMarkEmiPaid(invoice.id, emi.emiNumber)}
-                                                      className="bg-pink-50 text-pink-600 hover:bg-pink-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm hover:scale-[1.02]"
+                                                      onClick={() => setEmiModal({
+                                                        invoiceId: invoice.id,
+                                                        emiNumber: emi.emiNumber,
+                                                        dueDate: emi.dueDate ? emi.dueDate.substring(0, 10) : new Date().toISOString().substring(0, 10),
+                                                        baseAmount: emi.baseAmount || 0,
+                                                        interestAmount: emi.interestAmount || 0,
+                                                        penaltyAmount: emi.penaltyAmount || 0,
+                                                        status: emi.status || 'pending'
+                                                      })}
+                                                      className="p-1.5 bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 rounded-lg transition-colors shadow-sm"
+                                                      title="Edit EMI Details"
                                                     >
-                                                      Mark Paid
+                                                      <Edit2 className="w-3.5 h-3.5" />
                                                     </button>
-                                                  )}
+                                                  </div>
                                                 </td>
                                               </tr>
                                             );
@@ -1435,17 +1681,17 @@ export default function AccountsPanel() {
                     const emi = invoice?.emis.find((e: any) => e.emiNumber === emiNumber);
                     let amount = 0;
                     if (emi && waiverModal.type && waiverModal.percentage) {
-                      const base = waiverModal.type === 'interest' ? (emi.interestAmount || 0) : (emi.penaltyAmount || 0);
+                      const base = waiverModal.type === 'fee' ? (emi.baseAmount || 0) : waiverModal.type === 'interest' ? (emi.interestAmount || 0) : (emi.penaltyAmount || 0);
                       amount = base * (waiverModal.percentage / 100);
                     }
                     setWaiverModal({ ...waiverModal, emiNumber, amount });
                   }}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
                 >
                   <option value="">Select EMI</option>
                   {invoices.find(i => i.id === waiverModal.invoiceId)?.emis.map((emi: any) => (
                     <option key={emi.emiNumber} value={emi.emiNumber}>
-                      EMI {emi.emiNumber} (Interest: ₹{emi.interestAmount || 0}, Penalty: ₹{emi.penaltyAmount || 0})
+                      EMI {emi.emiNumber} (Base Fee: ₹{emi.baseAmount || 0}, Interest: ₹{emi.interestAmount || 0}, Penalty: ₹{emi.penaltyAmount || 0})
                     </option>
                   ))}
                 </select>
@@ -1456,21 +1702,22 @@ export default function AccountsPanel() {
                 <select
                   value={waiverModal.type}
                   onChange={(e) => {
-                    const type = e.target.value as 'interest' | 'penalty';
+                    const type = e.target.value as 'fee' | 'interest' | 'penalty';
                     const invoice = invoices.find(i => i.id === waiverModal.invoiceId);
                     const emi = invoice?.emis.find((e: any) => e.emiNumber === waiverModal.emiNumber);
                     let amount = 0;
                     if (emi && type && waiverModal.percentage) {
-                      const base = type === 'interest' ? (emi.interestAmount || 0) : (emi.penaltyAmount || 0);
+                      const base = type === 'fee' ? (emi.baseAmount || 0) : type === 'interest' ? (emi.interestAmount || 0) : (emi.penaltyAmount || 0);
                       amount = base * (waiverModal.percentage / 100);
                     }
                     setWaiverModal({ ...waiverModal, type, amount });
                   }}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
                 >
                   <option value="">Select Type</option>
-                  <option value="interest">Interest</option>
-                  <option value="penalty">Penalty</option>
+                  <option value="fee">Base Fee Waiver</option>
+                  <option value="interest">Interest Waiver</option>
+                  <option value="penalty">Penalty Waiver</option>
                 </select>
               </div>
 
@@ -1484,12 +1731,12 @@ export default function AccountsPanel() {
                     const emi = invoice?.emis.find((e: any) => e.emiNumber === waiverModal.emiNumber);
                     let amount = 0;
                     if (emi && waiverModal.type && percentage) {
-                      const base = waiverModal.type === 'interest' ? (emi.interestAmount || 0) : (emi.penaltyAmount || 0);
+                      const base = waiverModal.type === 'fee' ? (emi.baseAmount || 0) : waiverModal.type === 'interest' ? (emi.interestAmount || 0) : (emi.penaltyAmount || 0);
                       amount = base * (percentage / 100);
                     }
                     setWaiverModal({ ...waiverModal, percentage, amount });
                   }}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
                 >
                   <option value="">Select Percentage</option>
                   <option value="100">100%</option>
@@ -1499,13 +1746,20 @@ export default function AccountsPanel() {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Calculated Amount (₹)</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Calculated / Custom Amount (₹)</label>
                 <input
                   type="number"
+                  min={0}
                   value={waiverModal.amount || 0}
-                  readOnly
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-500"
+                  onChange={(e) => {
+                    const amount = Math.max(0, parseFloat(e.target.value) || 0);
+                    setWaiverModal({ ...waiverModal, amount });
+                  }}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
                 />
+                <p className="text-[10px] text-gray-400 mt-1 italic">
+                  You can modify the amount directly or select a percentage option above.
+                </p>
               </div>
 
               <div>
@@ -1513,7 +1767,7 @@ export default function AccountsPanel() {
                 <textarea
                   value={waiverModal.reason}
                   onChange={(e) => setWaiverModal({ ...waiverModal, reason: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
                   placeholder="Enter reason for waiver (e.g., Good attitude)"
                   rows={3}
                 />
@@ -1536,6 +1790,234 @@ export default function AccountsPanel() {
           </div>
         </div>
       )}
+
+      {/* Edit EMI Modal */}
+      {emiModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">
+              Edit EMI {emiModal.emiNumber} Details
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Due Date</label>
+                <input
+                  type="date"
+                  value={emiModal.dueDate}
+                  onChange={(e) => setEmiModal({ ...emiModal, dueDate: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
+                />
+                <p className="text-[10px] text-gray-400 mt-1 italic">
+                  Change the EMI due date (supports setting old/past or future dates).
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Base Amount (₹)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={emiModal.baseAmount}
+                  onChange={(e) => setEmiModal({ ...emiModal, baseAmount: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Interest Amount (₹)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={emiModal.interestAmount}
+                  onChange={(e) => setEmiModal({ ...emiModal, interestAmount: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
+                />
+                {(() => {
+                  const invoice = invoices.find(i => i.id === emiModal.invoiceId);
+                  const student = invoice ? students.find(s => s.id === invoice.studentId) : undefined;
+                  const is6Month = is6MonthCourseStudent(student);
+                  const hasMoreThan2Emis = invoice ? invoice.emis.length > 2 : false;
+                  
+                  if (is6Month && hasMoreThan2Emis) {
+                    const rate = invoice?.rulesSnapshot?.interestRatePercentage ?? (settings?.interestRatePercentage ?? 7);
+                    const suggestedInterest = Math.round(emiModal.baseAmount * (rate / 100));
+                    return (
+                      <div className="mt-2 p-2 bg-pink-50 border border-pink-100 rounded-lg text-[11px] text-pink-850">
+                        <p className="font-bold mb-0.5">6-Month Course Interest Match:</p>
+                        <p className="mb-1.5">This student has a 6-month course with more than 2 EMIs. Standard dynamic rate is {rate}%.</p>
+                        {emiModal.status === 'pending' && (
+                          <button
+                            type="button"
+                            onClick={() => setEmiModal({ ...emiModal, interestAmount: suggestedInterest })}
+                            className="px-2 py-0.5 bg-pink-600 text-white rounded font-bold hover:bg-pink-700 transition-colors"
+                          >
+                            Apply Suggested: ₹{suggestedInterest.toLocaleString()}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Penalty Amount (₹)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={emiModal.penaltyAmount}
+                  onChange={(e) => setEmiModal({ ...emiModal, penaltyAmount: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Status</label>
+                <select
+                  value={emiModal.status}
+                  onChange={(e) => setEmiModal({ ...emiModal, status: e.target.value as 'paid' | 'pending' })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
+                >
+                  <option value="pending">Pending / Unpaid</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setEmiModal(null)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEmi}
+                  className="flex-1 px-4 py-2 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restructure EMI Modal */}
+      {restructureModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">
+              Change EMI Count
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Redistribute the total final payable amount (₹{restructureModal.finalAmount.toLocaleString()}) into a new number of installments.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">New Number of EMIs</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={newEmiCount}
+                  onChange={(e) => setNewEmiCount(parseInt(e.target.value) || 1)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
+                />
+                <p className="text-[10px] text-gray-400 mt-1 italic">
+                  Enter a value between 1 and 24.
+                </p>
+              </div>
+
+              {(() => {
+                const invoice = invoices.find(i => i.id === restructureModal.invoiceId);
+                const student = invoice ? students.find(s => s.id === invoice.studentId) : undefined;
+                const is6Month = is6MonthCourseStudent(student);
+                if (!is6Month) return null;
+                
+                return (
+                  <div className="space-y-3">
+                    <div className="bg-pink-50 border border-pink-100 rounded-xl p-3 text-xs text-pink-850">
+                      <span className="font-bold block mb-1">6-Month Course Interest Rule:</span>
+                      This student is enrolled in a 6-month course. Selecting more than 2 EMIs requires dynamic interest charges (default 7%).
+                    </div>
+                    {newEmiCount > 2 && (
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Dynamic Interest Rate (%)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.1}
+                          value={restructureInterestRate}
+                          onChange={(e) => setRestructureInterestRate(parseFloat(e.target.value) || 0)}
+                          className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
+                        />
+                        <p className="text-[10px] text-gray-400 mt-1 italic">
+                          This interest is applied only to unpaid/new EMIs.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Restructuring Options</label>
+                <div className="space-y-2 mt-2">
+                  <label className="flex items-start gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                    <input
+                      type="radio"
+                      name="preservePaid"
+                      checked={restructureModal.preservePaid === true}
+                      onChange={() => setRestructureModal({ ...restructureModal, preservePaid: true })}
+                      className="mt-1 accent-pink-600"
+                    />
+                    <div>
+                      <span className="text-sm font-bold text-gray-900">Preserve Paid EMIs (Recommended)</span>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Keep any already-paid EMIs exactly as they are. Redistribute only the remaining unpaid balance among new pending EMIs starting from today.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                    <input
+                      type="radio"
+                      name="preservePaid"
+                      checked={restructureModal.preservePaid === false}
+                      onChange={() => setRestructureModal({ ...restructureModal, preservePaid: false })}
+                      className="mt-1 accent-pink-600"
+                    />
+                    <div>
+                      <span className="text-sm font-bold text-gray-900">Complete Reset</span>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Discard all current EMI payment statuses (including any paid EMIs) and completely regenerate all EMIs from the invoice creation date.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setRestructureModal(null)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRestructureEmis}
+                  className="flex-1 px-4 py-2 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 transition-colors"
+                >
+                  Restructure
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Payout Modal */}
       {payoutModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1586,7 +2068,7 @@ export default function AccountsPanel() {
                   className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 font-medium text-gray-800"
                 >
                   <option value="">-- Choose Student --</option>
-                  {students.map(std => {
+                  {students.filter(std => std.role === 'student' || std.applicationStatus === 'approved' || std.applicationStatus === 'submitted').map(std => {
                     const alreadyHasInvoice = invoices.some(inv => inv.studentId === std.id);
                     return (
                       <option key={std.id} value={std.id}>

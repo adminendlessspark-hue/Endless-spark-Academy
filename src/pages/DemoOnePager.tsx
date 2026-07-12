@@ -49,7 +49,8 @@ import {
   Terminal,
   Type,
   RefreshCw,
-  Calculator
+  Calculator,
+  Building
 } from 'lucide-react';
 import { cn } from '../utils';
 import { db, handleFirestoreError, OperationType } from '../firebase';
@@ -2130,24 +2131,34 @@ Question: ${text}`
                           ) : careerCenterTab === 'alumni' ? (
                             <div className="space-y-4">
                               {/* Alumni Placements List */}
-                              <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                              <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
                                 {(!placementSettings || !placementSettings.yearlyRecords || placementSettings.yearlyRecords.length === 0) ? (
-                                  <div className="p-4 text-center text-slate-400 italic text-xs bg-slate-50 border border-slate-150 rounded-2xl">
-                                    No custom corporate placement records found in database. Showing default alumni records:
-                                    <div className="mt-3 text-left space-y-2 not-italic">
-                                      <div className="p-3 bg-white border border-slate-100 rounded-xl flex justify-between items-center text-xs">
-                                        <div>
-                                          <div className="font-bold text-slate-800">Endless Spark Print Systems (2024-2025)</div>
-                                          <div className="text-slate-500 text-[10px]">12 Students Placed successfully</div>
+                                  <div className="p-4 text-center text-slate-450 italic text-xs bg-slate-50 border border-slate-150 rounded-2xl space-y-3">
+                                    <p className="text-slate-600 font-medium">No custom corporate records uploaded yet. Showing default alumni hiring partners:</p>
+                                    <div className="grid grid-cols-1 gap-3 not-italic">
+                                      <div className="p-4 bg-white border border-slate-150 rounded-xl flex justify-between items-center text-xs shadow-xs">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-8 h-8 border border-slate-100 rounded bg-white flex items-center justify-center p-0.5 shadow-xs shrink-0">
+                                            <Building className="w-4 h-4 text-slate-400" />
+                                          </div>
+                                          <div className="text-left">
+                                            <div className="font-bold text-slate-800">Endless Spark Print Systems</div>
+                                            <div className="text-slate-500 text-[10px]">12 Students Placed successfully (2024-2025)</div>
+                                          </div>
                                         </div>
-                                        <span className="font-bold text-indigo-600">₹ 4,50,000 max</span>
+                                        <span className="font-bold text-indigo-600 shrink-0">₹ 4,50,000 max</span>
                                       </div>
-                                      <div className="p-3 bg-white border border-slate-100 rounded-xl flex justify-between items-center text-xs">
-                                        <div>
-                                          <div className="font-bold text-slate-800">Spectrum Flexo Graphics (2023-2024)</div>
-                                          <div className="text-slate-500 text-[10px]">8 Students Placed successfully</div>
+                                      <div className="p-4 bg-white border border-slate-150 rounded-xl flex justify-between items-center text-xs shadow-xs">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-8 h-8 border border-slate-100 rounded bg-white flex items-center justify-center p-0.5 shadow-xs shrink-0">
+                                            <Building className="w-4 h-4 text-slate-400" />
+                                          </div>
+                                          <div className="text-left">
+                                            <div className="font-bold text-slate-800">Spectrum Flexo Graphics</div>
+                                            <div className="text-slate-500 text-[10px]">8 Students Placed successfully (2023-2024)</div>
+                                          </div>
                                         </div>
-                                        <span className="font-bold text-indigo-600">₹ 3,80,000 max</span>
+                                        <span className="font-bold text-indigo-600 shrink-0">₹ 3,80,000 max</span>
                                       </div>
                                     </div>
                                   </div>
@@ -2155,28 +2166,48 @@ Question: ${text}`
                                   [...placementSettings.yearlyRecords]
                                     .sort((a, b) => b.year.localeCompare(a.year))
                                     .map(yr => (
-                                      <div key={yr.year} className="bg-slate-50 rounded-2xl p-3 border border-slate-150">
-                                        <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-1.5">
-                                          <span className="text-xs font-black text-slate-800">Academic Year {yr.year}</span>
-                                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                                            Total: {yr.records.reduce((acc: number, r: any) => acc + r.studentsPlaced, 0)} Placed
+                                      <div key={yr.year} className="bg-white border border-slate-150 rounded-2xl p-4 shadow-xs space-y-3 mb-3">
+                                        <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-black rounded-md">
+                                              Year {yr.year}
+                                            </span>
+                                            <h5 className="text-xs font-bold text-slate-800">Campus Drive</h5>
+                                          </div>
+                                          <span className="text-[10px] text-slate-500 font-medium">
+                                            Total: <strong className="text-slate-800 font-black">{yr.records.reduce((acc: number, r: any) => acc + (r.studentsPlaced || 0), 0)} placed</strong>
                                           </span>
                                         </div>
-                                        <div className="space-y-1.5">
+                                        <div className="space-y-2">
                                           {yr.records.map((rec: any) => (
-                                            <div key={rec.id} className="p-2 bg-white border border-slate-100 rounded-xl flex justify-between items-center text-xs shadow-sm">
-                                              <div>
-                                                <div className="font-semibold text-slate-800 flex items-center gap-2">
-                                                  {rec.logoUrl && <img src={rec.logoUrl} className="w-4 h-4 object-contain" alt="" />}
-                                                  {rec.companyName}
+                                            <div key={rec.id} className="p-3 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between gap-2 transition-all duration-200">
+                                              <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className="w-8 h-8 border border-slate-200/80 rounded-lg bg-white flex items-center justify-center p-1 shrink-0 shadow-xs">
+                                                  {rec.logoUrl ? (
+                                                    <img src={rec.logoUrl} alt={rec.companyName} className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                                                  ) : (
+                                                    <Building className="w-4 h-4 text-slate-400" />
+                                                  )}
                                                 </div>
-                                                <div className="text-slate-500 text-[10px]">{rec.studentsPlaced} Students placed</div>
+                                                <div className="min-w-0">
+                                                  <h6 className="font-bold text-slate-800 text-xs truncate" title={rec.companyName}>
+                                                    {rec.companyName}
+                                                  </h6>
+                                                  <p className="text-[10px] text-slate-500">
+                                                    {rec.studentsPlaced} {rec.studentsPlaced === 1 ? 'Student' : 'Students'} Placed
+                                                  </p>
+                                                </div>
                                               </div>
-                                              <span className="font-bold text-indigo-600 font-mono">₹{rec.highestPackage.toLocaleString('en-IN')}</span>
+                                              <div className="text-right shrink-0">
+                                                <span className="block text-[8px] text-slate-400 uppercase font-bold">Highest Package</span>
+                                                <span className="font-bold text-xs text-indigo-600 font-mono">
+                                                  ₹{rec.highestPackage ? rec.highestPackage.toLocaleString('en-IN') : '0'}
+                                                </span>
+                                              </div>
                                             </div>
                                           ))}
                                           {yr.records.length === 0 && (
-                                            <div className="text-center text-slate-400 italic text-[10px]">No records for this year.</div>
+                                            <div className="text-center text-slate-400 italic text-[10px]">No records registered for this year.</div>
                                           )}
                                         </div>
                                       </div>

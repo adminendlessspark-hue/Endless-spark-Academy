@@ -35,7 +35,7 @@ interface CompensationScenario {
 }
 
 export default function ProgramOutcomes() {
-  const { logoUrl } = useSettings();
+  const { logoUrl, placementSettings } = useSettings();
   const [selectedCareer, setSelectedCareer] = useState<number | null>(null);
   const [targetExp, setTargetExp] = useState<number>(3);
 
@@ -391,6 +391,105 @@ export default function ProgramOutcomes() {
             <span className="text-[9px] text-teal-500">Based on industry standard covenants</span>
           </div>
         </div>
+      </div>
+
+      {/* Corporate Placements Section */}
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-3">
+          <div>
+            <h4 className="font-extrabold text-lg text-slate-900 flex items-center gap-2">
+              <Building className="w-5 h-5 text-indigo-600" />
+              Corporate Placements & Hiring Partners
+            </h4>
+            <p className="text-xs text-slate-500">Real-time placement records synchronized directly from the Admin Panel</p>
+          </div>
+          <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
+            Direct Corporate Pipeline
+          </span>
+        </div>
+
+        {(!placementSettings || !placementSettings.yearlyRecords || placementSettings.yearlyRecords.length === 0) ? (
+          <div className="bg-slate-50 border border-slate-200 rounded-3xl p-8 text-center max-w-4xl mx-auto space-y-4">
+            <Briefcase className="w-12 h-12 text-slate-300 mx-auto" />
+            <div className="space-y-1">
+              <h5 className="font-bold text-slate-800 text-sm">No custom corporate records uploaded yet</h5>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Showing default alumni hiring partners:
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto text-left">
+              <div className="p-4 bg-white border border-slate-150 rounded-2xl flex justify-between items-center shadow-sm">
+                <div>
+                  <div className="font-bold text-slate-800 text-xs">Endless Spark Print Systems</div>
+                  <div className="text-slate-500 text-[10px]">12 Students Placed successfully (2024-2025)</div>
+                </div>
+                <span className="font-bold text-indigo-600 text-xs">₹ 4,50,000 max</span>
+              </div>
+              <div className="p-4 bg-white border border-slate-150 rounded-2xl flex justify-between items-center shadow-sm">
+                <div>
+                  <div className="font-bold text-slate-800 text-xs">Spectrum Flexo Graphics</div>
+                  <div className="text-slate-500 text-[10px]">8 Students Placed successfully (2023-2024)</div>
+                </div>
+                <span className="font-bold text-indigo-600 text-xs">₹ 3,80,000 max</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {[...placementSettings.yearlyRecords]
+              .sort((a, b) => b.year.localeCompare(a.year))
+              .map((yr: any) => (
+                <div key={yr.year} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-black rounded-lg">
+                        Year {yr.year}
+                      </span>
+                      <h5 className="text-sm font-bold text-slate-800">Campus Recruitment Drive</h5>
+                    </div>
+                    <span className="text-xs text-slate-500 font-medium">
+                      Total Placed: <strong className="text-slate-800 font-bold">{yr.records.reduce((acc: number, r: any) => acc + (r.studentsPlaced || 0), 0)} students</strong>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {yr.records.map((rec: any) => (
+                      <div key={rec.id} className="p-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-150 rounded-2xl flex items-center justify-between gap-3 transition-all duration-200">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 border border-slate-200/80 rounded-xl bg-white flex items-center justify-center p-1 shrink-0 shadow-sm">
+                            {rec.logoUrl ? (
+                              <img src={rec.logoUrl} alt={rec.companyName} className="max-w-full max-h-full object-contain" />
+                            ) : (
+                              <Building className="w-5 h-5 text-slate-350" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h6 className="font-bold text-slate-800 text-xs truncate" title={rec.companyName}>
+                              {rec.companyName}
+                            </h6>
+                            <p className="text-[10px] text-slate-500">
+                              {rec.studentsPlaced} {rec.studentsPlaced === 1 ? 'Student' : 'Students'} Placed
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="block text-[10px] text-slate-400 uppercase font-bold text-xs">Highest Package</span>
+                          <span className="font-bold text-xs text-indigo-600 font-mono">
+                            ₹{rec.highestPackage ? rec.highestPackage.toLocaleString('en-IN') : '0'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {yr.records.length === 0 && (
+                      <div className="col-span-full text-center py-4 text-xs text-slate-400 italic">
+                        No corporate records registered for this year.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
       </div>
     </div>
   );

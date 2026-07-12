@@ -1051,25 +1051,35 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
           )}
           {(user.applicationStatus === 'submitted' || user.entranceTestStatus === 'assigned') && (
             <div className="flex justify-center flex-wrap gap-4 mt-6">
-              {user.entranceTestStatus !== 'evaluated' ? (
+              {user.entranceTestStatus === 'assigned' ? (
                 <button 
                   onClick={() => window.location.href = '/entrance-test'}
-                  className={cn(
-                    "btn-primary inline-flex items-center gap-2",
-                    user.entranceTestStatus === 'assigned' && "animate-bounce shadow-purple-200 bg-purple-600 hover:bg-purple-700"
-                  )}
+                  className="btn-primary inline-flex items-center gap-2 animate-bounce shadow-purple-200 bg-purple-600 hover:bg-purple-700"
                 >
                   <FileText className="w-5 h-5" />
-                  {user.entranceTestStatus === 'assigned' ? 'Complete Assigned Entrance Test' : 'Take Entrance Test'}
+                  Complete Assigned Entrance Test
                 </button>
-              ) : (
+              ) : user.entranceTestStatus === 'submitted' ? (
+                <div className="px-5 py-2.5 bg-amber-50 border border-amber-200 text-amber-800 text-sm font-bold rounded-xl flex items-center gap-2 shadow-xs">
+                  <Clock className="w-4 h-4 animate-spin" />
+                  Entrance Test Under Review
+                </div>
+              ) : user.entranceTestStatus === 'evaluated' ? (
                 <Link 
                   to="/entrance-test-results"
-                  className="btn-primary inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700"
+                  className="btn-primary inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-200"
                 >
                   <Award className="w-5 h-5" />
                   Entrance Test Results
                 </Link>
+              ) : (
+                <button 
+                  onClick={() => window.location.href = '/entrance-test'}
+                  className="btn-primary inline-flex items-center gap-2"
+                >
+                  <FileText className="w-5 h-5" />
+                  Take Entrance Test
+                </button>
               )}
               <button 
                 onClick={() => setShowIDCard(true)}
@@ -1267,6 +1277,46 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
             >
               View Analysis
             </Link>
+          </div>
+        )}
+
+        {/* Assigned Entrance Test for Approved Students */}
+        {user.entranceTestStatus === 'assigned' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 bg-purple-50/20 flex flex-col sm:flex-row items-center justify-between gap-4 animate-pulse">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center animate-bounce">
+                <FileText className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-purple-950">Assigned Entrance Test</h3>
+                <p className="text-sm text-purple-700 font-medium">You have an active entrance test assigned. Please complete it to finalize your evaluation.</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => window.location.href = '/entrance-test'}
+              className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-black hover:bg-purple-700 transition-all shadow-md shadow-purple-200 flex items-center gap-2 whitespace-nowrap"
+            >
+              <FileText className="w-4 h-4" />
+              Start Entrance Test
+            </button>
+          </div>
+        )}
+
+        {/* Submitted Entrance Test under review for Approved Students */}
+        {user.entranceTestStatus === 'submitted' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-amber-200 bg-amber-50/15 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <Clock className="w-6 h-6 animate-spin" style={{ animationDuration: '3s' }} />
+              </div>
+              <div>
+                <h3 className="font-bold text-amber-900">Entrance Test Submitted</h3>
+                <p className="text-sm text-amber-700 font-medium">Your submission has been received and is currently being evaluated by our team.</p>
+              </div>
+            </div>
+            <span className="px-4 py-1.5 bg-amber-100 text-amber-800 text-xs font-bold rounded-full border border-amber-200 shrink-0">
+              Under Review
+            </span>
           </div>
         )}
 

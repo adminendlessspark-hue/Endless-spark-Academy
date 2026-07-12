@@ -16,6 +16,7 @@ const navItems = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { name: 'AI Tutor', path: '/ai-tutor', icon: Zap },
   { name: 'Online Test', path: '/online-tests', icon: FileQuestion },
+  { name: 'Entrance Test', path: '/entrance-test', icon: FileText },
   { name: 'Demo Registration', path: '/register', icon: UserPlus },
   { name: 'Application', path: '/apply', icon: FileText },
   { name: 'Video Intro', path: '/video-intro', icon: Video },
@@ -45,6 +46,14 @@ export default function Layout({ children }: LayoutProps) {
   const { logoUrl } = useSettings();
 
   const filteredNavItems = navItems.filter(item => {
+    // If it's Entrance Test, allow student access if assigned, evaluated or submitted
+    if (item.path === '/entrance-test') {
+      if (user?.role === 'student') {
+        return user.entranceTestStatus === 'assigned' || user.entranceTestStatus === 'evaluated' || user.entranceTestStatus === 'submitted';
+      }
+      return false;
+    }
+
     // If it's AI tutor let all roles access it, except unapproved students and those without active coach
     if (item.path === '/ai-tutor') {
       if (user?.role === 'student') {

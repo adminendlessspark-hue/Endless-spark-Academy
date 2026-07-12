@@ -33,6 +33,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import Reports from '../components/Reports';
 import FacultyAvailabilityModal from '../components/FacultyAvailabilityModal';
 import ApplicationEditModal from '../components/ApplicationEditModal';
+import StudentIDCard from '../components/StudentIDCard';
 import SecureVideoPlayer from '../components/SecureVideoPlayer';
 import Dashboard from './Dashboard';
 
@@ -1731,6 +1732,7 @@ export default function AdminPanel() {
 
   const [viewingApplication, setViewingApplication] = useState<ApplicationData | null>(null);
   const [viewingApplicationStudentId, setViewingApplicationStudentId] = useState<string | null>(null);
+  const [viewingIDCardStudent, setViewingIDCardStudent] = useState<User | null>(null);
   const [viewingTestResults, setViewingTestResults] = useState<any | null>(null);
   const [viewingTestStudentName, setViewingTestStudentName] = useState<string>('');
   const [viewingTestStudentId, setViewingTestStudentId] = useState<string>('');
@@ -1871,9 +1873,74 @@ export default function AdminPanel() {
     if (!student) return;
     try {
       await updateDoc(doc(db, 'users', studentId), { idCardApproved: !student.idCardApproved });
+      // Update local state if needed (but firestore snapshot handles it)
+      if (viewingIDCardStudent && viewingIDCardStudent.id === studentId) {
+        setViewingIDCardStudent(prev => prev ? { ...prev, idCardApproved: !prev.idCardApproved } : null);
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${studentId}`);
     }
+  };
+
+  const handlePrintStudentIDCard = (student: User) => {
+    const printContent = document.getElementById('student-id-card-container');
+    if (!printContent) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    // Get all styles from the current document
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map(style => style.outerHTML)
+      .join('\n');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Student ID Card - ${student.name}</title>
+          ${styles}
+          <style>
+            @page { size: auto; margin: 0; }
+            body { 
+              margin: 0; 
+              display: flex; 
+              justify-content: center; 
+              align-items: center; 
+              min-height: 100vh; 
+              background: #f9fafb; 
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            #student-id-card-container { 
+              box-shadow: none !important; 
+              transform: scale(0.9);
+              transform-origin: center;
+              flex-direction: row !important;
+              gap: 20px !important;
+            }
+            #student-id-card-front, #student-id-card-back {
+              border: 1px solid #eee !important;
+              box-shadow: none !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div id="print-wrapper">
+            ${printContent.outerHTML}
+          </div>
+          <script>
+            window.onload = () => {
+              // Wait for images and fonts to load
+              setTimeout(() => {
+                window.print();
+                window.onafterprint = () => window.close();
+              }, 800);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const handleToggleCertificateApproval = async (studentId: string, currentStatus?: boolean) => {
@@ -4424,17 +4491,26 @@ export default function AdminPanel() {
                         )}
                       </td>
                       <td className="py-4">
-                        <button
-                          onClick={() => handleToggleIDApproval(student.id)}
-                          className={cn(
-                            "btn-compact uppercase",
-                            student.idCardApproved 
-                              ? "bg-green-100 text-green-700 hover:bg-green-200" 
-                              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                          )}
-                        >
-                          {student.idCardApproved ? 'Approved' : 'Pending'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleToggleIDApproval(student.id)}
+                            className={cn(
+                              "btn-compact uppercase",
+                              student.idCardApproved 
+                                ? "bg-green-100 text-green-700 hover:bg-green-200" 
+                                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                            )}
+                          >
+                            {student.idCardApproved ? 'Approved' : 'Pending'}
+                          </button>
+                          <button
+                            onClick={() => setViewingIDCardStudent(student)}
+                            className="p-1.5 text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
+                            title="View Student ID Card"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                       <td className="py-4">
                         <button
@@ -4544,6 +4620,16 @@ export default function AdminPanel() {
                                 className="w-full text-left px-4 py-2 text-sm text-pink-600 hover:bg-pink-50 flex items-center gap-2 font-medium"
                               >
                                 <Edit className="w-4 h-4" /> Edit Profile Details
+                              </button>
+
+                              <button 
+                                onClick={() => { 
+                                  setViewingIDCardStudent(student); 
+                                  setActiveDropdownId(null); 
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-pink-600 flex items-center gap-2"
+                              >
+                                <UserIcon className="w-4 h-4 text-pink-500" /> View ID Card
                               </button>
 
                               {student.isApproved && (
@@ -9811,6 +9897,79 @@ export default function AdminPanel() {
                 className="px-4 py-2 bg-pink-600 text-white rounded-xl font-medium hover:bg-pink-700 transition-colors disabled:opacity-50"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingIDCardStudent && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in duration-300">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-pink-600 text-white">
+              <div>
+                <h3 className="text-xl font-bold">Student ID Card Preview</h3>
+                <p className="text-pink-100 text-xs mt-1">Official ID card for {viewingIDCardStudent.name}</p>
+              </div>
+              <button 
+                onClick={() => setViewingIDCardStudent(null)}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-8 overflow-y-auto max-h-[70vh] bg-gray-50 flex flex-col items-center justify-center gap-6">
+              <div className="p-4 bg-white rounded-3xl shadow-md border border-gray-100 overflow-x-auto w-full flex justify-center">
+                <StudentIDCard user={viewingIDCardStudent} adminSignature={adminSignature} />
+              </div>
+
+              <div className="w-full max-w-xl bg-white p-6 rounded-2xl border border-gray-100 space-y-4">
+                <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider border-b border-gray-100 pb-2">ID Card Administration</h4>
+                
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Current Status</p>
+                    <span className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-1 mt-1 rounded-full text-xs font-bold uppercase",
+                      viewingIDCardStudent.idCardApproved 
+                        ? "bg-green-100 text-green-700" 
+                        : "bg-orange-100 text-orange-700"
+                    )}>
+                      {viewingIDCardStudent.idCardApproved ? "Approved" : "Pending Approval"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleIDApproval(viewingIDCardStudent.id)}
+                      className={cn(
+                        "px-4 py-2 text-xs font-bold rounded-xl transition-all shadow-sm uppercase",
+                        viewingIDCardStudent.idCardApproved 
+                          ? "bg-orange-50 text-orange-600 hover:bg-orange-100" 
+                          : "bg-green-600 text-white hover:bg-green-700 shadow-green-100"
+                      )}
+                    >
+                      {viewingIDCardStudent.idCardApproved ? "Revoke ID Card" : "Approve ID Card"}
+                    </button>
+                    
+                    <button
+                      onClick={() => handlePrintStudentIDCard(viewingIDCardStudent)}
+                      className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-sm uppercase"
+                    >
+                      <Printer className="w-4 h-4" /> Print / Save PDF
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setViewingIDCardStudent(null)}
+                className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl font-bold text-sm transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>

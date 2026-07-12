@@ -1035,7 +1035,7 @@ export default function AccountsPanel() {
                 <div className="space-y-4">
                   {(settings.coursesConfig || []).map((course, index) => (
                     <div key={course.courseId || index} className="flex flex-col md:flex-row md:items-end gap-3 bg-gray-50 p-4 rounded-xl border border-gray-100 relative group">
-                      <div className="flex-[2]">
+                      <div className="flex-[2] min-w-[200px]">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Course Title</label>
                         <input
                           type="text"
@@ -1052,7 +1052,24 @@ export default function AccountsPanel() {
                           placeholder="e.g. Diploma in Print Ready Engineer"
                         />
                       </div>
-                      <div className="flex-[1.5]">
+                      <div className="w-full md:w-36 shrink-0">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Course Level</label>
+                        <select
+                          value={course.level || ''}
+                          onChange={(e) => {
+                            const newConfig = [...(settings.coursesConfig || [])];
+                            newConfig[index].level = e.target.value as any;
+                            setSettings({ ...settings, coursesConfig: newConfig });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 text-sm font-medium bg-white"
+                        >
+                          <option value="">No Level</option>
+                          <option value="basic">Basic</option>
+                          <option value="intermediate">Intermediate</option>
+                          <option value="advanced">Advanced</option>
+                        </select>
+                      </div>
+                      <div className="flex-[1.2] min-w-[120px]">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Course ID</label>
                         <input
                           type="text"
@@ -1066,7 +1083,7 @@ export default function AccountsPanel() {
                           placeholder="e.g. print-ready-engineer"
                         />
                       </div>
-                      <div className="w-full md:w-28">
+                      <div className="w-full md:w-24 shrink-0">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fee (₹)</label>
                         <input
                           type="number"
@@ -1079,8 +1096,8 @@ export default function AccountsPanel() {
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 text-sm font-medium bg-white"
                         />
                       </div>
-                      <div className="w-full md:w-28">
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Duration (Months)</label>
+                      <div className="w-full md:w-24 shrink-0">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Duration (M)</label>
                         <input
                           type="number"
                           value={course.durationMonths}
@@ -1140,7 +1157,7 @@ export default function AccountsPanel() {
                         ...settings,
                         coursesConfig: [
                           ...(settings.coursesConfig || []),
-                          { courseId: tempId, title: 'New Course', fees: 0, durationMonths: 0 }
+                          { courseId: tempId, title: 'New Course', fees: 0, durationMonths: 0, level: '' }
                         ]
                       });
                     }}

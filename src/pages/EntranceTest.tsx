@@ -9,6 +9,8 @@ import VoiceInput from '../components/VoiceInput';
 import { GoogleGenAI, Type } from '@google/genai';
 import { generateGeminiContent } from '../services/gemini';
 
+const FATMAN_STORY_TEXT = `There is a fat man. He wants to lose weight. He is very fat. He weighs 300 pounds. The doctor tells him, "You must lose weight or you will die." The fat man is scared. He doesn't want to die. So he starts a diet. For one month, he eats only grass. Of course, the grass tastes terrible. But the man wants to lose weight. Unfortunately, after one month, he is still very fat. He does not lose any weight! Not one pound! He is frustrated. He decides to exercise. Every day, he walks 12 miles. He is very tired. In fact, he is exhausted. But after one month, he is still very fat! Oh, no! He is extremely frustrated. He decides to give up. He goes to a restaurant. He wants to eat everything because he is so frustrated. At the restaurant, he meets a beautiful woman. She likes him, and he likes her. They begin to date. Every day, the beautiful woman cooks healthy food for the fat man. His new girlfriend makes a difference in his life. The fat man loses weight! After six months, he weighs only 170 pounds. He is thin and he has a wonderful girlfriend. The man and his girlfriend are both thrilled.`;
+
 export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
@@ -20,6 +22,72 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
   const [showDemoLeadModal, setShowDemoLeadModal] = useState(isDemo);
   const [demoLeadInfo, setDemoLeadInfo] = useState({ name: '', email: '', phone: '' });
   const [selectedLanguage, setSelectedLanguage] = useState((!isDemo && user?.nativeLanguage) || '');
+  
+  const [ttsPlaying, setTtsPlaying] = useState(false);
+  const [ttsPaused, setTtsPaused] = useState(false);
+  const [ttsProgress, setTtsProgress] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (currentPart !== 'D' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setTtsPlaying(false);
+      setTtsPaused(false);
+    }
+  }, [currentPart]);
+
+  const startTts = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(FATMAN_STORY_TEXT);
+      utterance.rate = 0.95;
+      utterance.onend = () => {
+        setTtsPlaying(false);
+        setTtsPaused(false);
+        setTtsProgress(100);
+      };
+      utterance.onerror = () => {
+        setTtsPlaying(false);
+        setTtsPaused(false);
+      };
+      setTtsPlaying(true);
+      setTtsPaused(false);
+      setTtsProgress(0);
+      window.speechSynthesis.speak(utterance);
+    } else {
+      alert('Text-to-speech is not supported in this browser.');
+    }
+  };
+
+  const pauseTts = () => {
+    if ('speechSynthesis' in window) {
+      if (window.speechSynthesis.speaking) {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+          setTtsPaused(false);
+        } else {
+          window.speechSynthesis.pause();
+          setTtsPaused(true);
+        }
+      }
+    }
+  };
+
+  const stopTts = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setTtsPlaying(false);
+      setTtsPaused(false);
+      setTtsProgress(0);
+    }
+  };
   
   const [audioUrl, setAudioUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,6 +136,12 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
 
   const handleAnswerChange = (part: string, subPart: string | null, question: string, value: string) => {
     setAnswers(prev => {
+      if (part === 'partD_listening' || part === 'partE_paragraph') {
+        return {
+          ...prev,
+          [part]: value
+        };
+      }
       if (subPart) {
         return {
           ...prev,
@@ -90,6 +164,13 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
 
   const handleAppendAnswer = (part: string, question: string, text: string) => {
     setAnswers(prev => {
+      if (part === 'partD_listening' || part === 'partE_paragraph') {
+        const currentVal = (prev as any)[part] || '';
+        return {
+          ...prev,
+          [part]: currentVal ? `${currentVal} ${text.trim()}` : text.trim()
+        };
+      }
       const currentPart = (prev as any)[part];
       const currentVal = currentPart[question] || '';
       return {
@@ -806,24 +887,78 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
                   onTranscript={(text) => handleAppendAnswer('partD_listening', '', text)} 
                 />
               </div>
-              {audioUrl ? (
-                <div className="mb-6">
-                  <audio key={audioUrl} controls className="w-full h-12 rounded-lg bg-white shadow-sm">
-                    <source src={audioUrl} type="audio/mpeg" />
-                    Your browser does not support the audio element.
-                  </audio>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                {/* Custom Audio Player/Source */}
+                <div className="bg-white p-6 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-blue-600" /> Admin Uploaded Audio
+                    </h4>
+                    <p className="text-xs text-gray-400 mb-4">The native audio player configured by your school administrator.</p>
+                  </div>
+                  {audioUrl ? (
+                    <audio key={audioUrl} controls className="w-full h-12 rounded-lg bg-gray-50 border">
+                      <source src={audioUrl} type="audio/mpeg" />
+                      Your browser does not support the audio element.
+                    </audio>
+                  ) : (
+                    <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs text-gray-400 italic">
+                      No custom audio uploaded by administrator yet.
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="mb-6 p-4 bg-white rounded-xl border border-blue-200 text-blue-600 text-sm">
-                  Audio file not provided by administrator yet. Please write "Audio not available" below.
+
+                {/* AI Voice Fallback Player */}
+                <div className="bg-white p-6 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-pink-600" /> AI Narrator Voice (Fallback)
+                    </h4>
+                    <p className="text-xs text-gray-400 mb-4">Click below to play the FatMan audio story read out loud by the interactive AI voice narrator.</p>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {!ttsPlaying ? (
+                      <button
+                        type="button"
+                        onClick={startTts}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs hover:bg-blue-700 transition-all shadow-md hover:shadow-lg"
+                      >
+                        <Play className="w-4 h-4 fill-current" /> Play Story Audio
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 w-full">
+                        <button
+                          type="button"
+                          onClick={pauseTts}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-yellow-500 text-white font-bold rounded-xl text-xs hover:bg-yellow-600 transition-all shadow-md"
+                        >
+                          {ttsPaused ? <Play className="w-4 h-4 fill-current" /> : <Pause className="w-4 h-4 fill-current" />}
+                          {ttsPaused ? 'Resume' : 'Pause'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={stopTts}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white font-bold rounded-xl text-xs hover:bg-red-700 transition-all shadow-md"
+                        >
+                          Stop
+                        </button>
+                        <div className="flex-1 flex items-center gap-2">
+                          <span className="w-2 h-2 bg-pink-500 rounded-full animate-ping"></span>
+                          <span className="text-[10px] font-mono text-gray-400 uppercase tracking-wider">Playing...</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
               
               <textarea
                 value={answers.partD_listening}
                 onChange={(e) => handleAnswerChange('partD_listening', null, '', e.target.value)}
                 placeholder="Type your translation or summary here..."
-                className="w-full h-32 p-4 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                className="w-full h-32 p-4 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none font-medium text-gray-800"
               />
             </div>
 

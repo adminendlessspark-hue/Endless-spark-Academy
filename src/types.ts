@@ -571,6 +571,7 @@ export interface CourseFinancialConfig {
   title: string;
   fees: number;
   durationMonths: number;
+  level?: 'basic' | 'intermediate' | 'advanced' | '';
 }
 
 export interface FinancialSettings {

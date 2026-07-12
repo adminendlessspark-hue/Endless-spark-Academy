@@ -1177,19 +1177,27 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
             </div>
             {assignedCourses.length > 0 ? (
               <div className="space-y-3">
-                {assignedCourses.map(course => (
-                  <div key={course} className="space-y-1">
-                    <p className="text-white font-bold text-sm leading-tight">
-                      {formatCourseName(course)}
-                    </p>
-                    <span className={cn(
-                      "px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider",
-                      course === 'production-art-engineer' ? "bg-pink-400 text-white" : course === 'print-ready-engineer' ? "bg-orange-400 text-white" : "bg-purple-400 text-white"
-                    )}>
-                      {course === 'production-art-engineer' ? 'Basic' : course === 'print-ready-engineer' ? 'Intermediate' : 'Advanced'}
-                    </span>
-                  </div>
-                ))}
+                {assignedCourses.map(courseId => {
+                  const matchedCourse = financialSettings?.coursesConfig?.find((c: any) => c.courseId === courseId);
+                  const courseLevel = matchedCourse?.level;
+                  return (
+                    <div key={courseId} className="space-y-1">
+                      <p className="text-white font-bold text-sm leading-tight">
+                        {matchedCourse?.title || formatCourseName(courseId)}
+                      </p>
+                      {courseLevel && (
+                        <span className={cn(
+                          "px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider",
+                          courseLevel === 'basic' ? "bg-pink-400 text-white" : 
+                          courseLevel === 'intermediate' ? "bg-orange-400 text-white" : 
+                          "bg-purple-400 text-white"
+                        )}>
+                          {courseLevel}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
                 <div className="pt-2 border-t border-white/10">
                   <span className="text-[10px] font-mono opacity-60">ID: {user.studentId}</span>
                 </div>

@@ -13,7 +13,7 @@ export const getDirectDownloadUrl = (url: string) => {
   try {
     let absoluteUrl = url.trim();
     if (absoluteUrl.startsWith('/')) {
-      return typeof window !== 'undefined' ? window.location.origin + absoluteUrl : absoluteUrl;
+      return absoluteUrl;
     }
     if (!/^(f|ht)tps?:\/\//i.test(absoluteUrl)) {
       if (absoluteUrl.startsWith('//')) {

@@ -1416,21 +1416,31 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
                 <div className="space-y-3">
                   {holidays
                     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                    .map((holiday, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-pink-200 transition-colors">
-                        <div>
-                          <p className="font-bold text-xs text-gray-900">{holiday.title}</p>
-                          <p className="text-[10px] text-gray-500">
-                            {new Date(holiday.date).toLocaleDateString('en-US', { weekday: 'long' })}
-                          </p>
+                    .map((holiday, idx) => {
+                      const hDate = new Date(holiday.date);
+                      const holidayName = holiday.title;
+                      const formattedDate = hDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                      const formattedDay = hDate.toLocaleDateString('en-IN', { weekday: 'long' });
+                      return (
+                        <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-pink-200 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-center justify-center w-10 h-10 bg-pink-50 border border-pink-100 rounded-lg shrink-0">
+                              <span className="text-[9px] font-black text-pink-700 uppercase leading-none">{hDate.toLocaleDateString('en-IN', { month: 'short' })}</span>
+                              <span className="text-sm font-extrabold text-pink-950 leading-none mt-0.5">{hDate.toLocaleDateString('en-IN', { day: 'numeric' })}</span>
+                            </div>
+                            <div>
+                              <p className="font-bold text-xs text-gray-900">{holidayName}</p>
+                              <p className="text-[10px] text-pink-600 font-medium">
+                                {formattedDay}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-gray-400 font-medium font-mono">{formattedDate}</span>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <span className="inline-block px-2 py-0.5 bg-pink-100 text-pink-700 text-[10px] font-bold rounded-full">
-                            {new Date(holiday.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   {holidays.length === 0 && (
                     <p className="text-center py-4 text-xs text-gray-400 italic">No holidays scheduled.</p>
                   )}
@@ -2184,17 +2194,29 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
                 const sortedHolidays = [...holidays].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                 return (
                   <>
-                    {sortedHolidays.map(holiday => (
-                      <div key={holiday.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                        <div>
-                          <p className="text-xs font-bold text-gray-900">{holiday.title}</p>
-                          <p className="text-[10px] text-gray-500">
-                            {new Date(holiday.date).toLocaleDateString('en-IN', { weekday: 'long' })}
-                          </p>
+                    {sortedHolidays.map(holiday => {
+                      const hDate = new Date(holiday.date);
+                      const holidayName = holiday.title;
+                      const formattedDate = hDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                      const formattedDay = hDate.toLocaleDateString('en-IN', { weekday: 'long' });
+                      return (
+                        <div key={holiday.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-pink-200 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-center justify-center w-10 h-10 bg-pink-50 border border-pink-100 rounded-lg shrink-0">
+                              <span className="text-[9px] font-black text-pink-700 uppercase leading-none">{hDate.toLocaleDateString('en-IN', { month: 'short' })}</span>
+                              <span className="text-sm font-extrabold text-pink-950 leading-none mt-0.5">{hDate.toLocaleDateString('en-IN', { day: 'numeric' })}</span>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-900">{holidayName}</p>
+                              <p className="text-[10px] text-pink-600 font-medium">
+                                {formattedDay}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-gray-400 font-medium font-mono">{formattedDate}</span>
                         </div>
-                        <span className="text-[10px] text-gray-500">{new Date(holiday.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {sortedHolidays.length === 0 && (
                       <p className="text-center py-4 text-xs text-gray-400 italic">No holidays scheduled.</p>
                     )}

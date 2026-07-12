@@ -13,6 +13,7 @@ import {
   Building
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
+import CompanyLogo from './CompanyLogo';
 
 interface CareerOpportunity {
   title: string;
@@ -456,13 +457,7 @@ export default function ProgramOutcomes() {
                     {yr.records.map((rec: any) => (
                       <div key={rec.id} className="p-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-150 rounded-2xl flex items-center justify-between gap-3 transition-all duration-200">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 border border-slate-200/80 rounded-xl bg-white flex items-center justify-center p-1 shrink-0 shadow-sm">
-                            {rec.logoUrl ? (
-                              <img src={rec.logoUrl} alt={rec.companyName} className="max-w-full max-h-full object-contain" />
-                            ) : (
-                              <Building className="w-5 h-5 text-slate-350" />
-                            )}
-                          </div>
+                          <CompanyLogo src={rec.logoUrl} name={rec.companyName} className="w-10 h-10 border border-slate-200/80 rounded-xl bg-white shadow-sm" />
                           <div className="min-w-0">
                             <h6 className="font-bold text-slate-800 text-xs truncate" title={rec.companyName}>
                               {rec.companyName}

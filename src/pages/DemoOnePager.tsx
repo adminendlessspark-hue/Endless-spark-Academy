@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import CompanyLogo from '../components/CompanyLogo';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Sparkles, 
@@ -2182,13 +2183,7 @@ Question: ${text}`
                                           {yr.records.map((rec: any) => (
                                             <div key={rec.id} className="p-3 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between gap-2 transition-all duration-200">
                                               <div className="flex items-center gap-2.5 min-w-0">
-                                                <div className="w-8 h-8 border border-slate-200/80 rounded-lg bg-white flex items-center justify-center p-1 shrink-0 shadow-xs">
-                                                  {rec.logoUrl ? (
-                                                    <img src={rec.logoUrl} alt={rec.companyName} className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
-                                                  ) : (
-                                                    <Building className="w-4 h-4 text-slate-400" />
-                                                  )}
-                                                </div>
+                                                <CompanyLogo src={rec.logoUrl} name={rec.companyName} className="w-8 h-8 border border-slate-200/80 rounded-lg bg-white shadow-xs" />
                                                 <div className="min-w-0">
                                                   <h6 className="font-bold text-slate-800 text-xs truncate" title={rec.companyName}>
                                                     {rec.companyName}

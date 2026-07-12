@@ -5,6 +5,7 @@ import { PlacementSettings, GlobalPlacementYear, GlobalPlacementRecord, User, St
 import { Briefcase, Plus, Trash2, Edit, Check, X, Image } from 'lucide-react';
 import { cn } from '../utils';
 import { FileUploader } from './FileUploader';
+import CompanyLogo from './CompanyLogo';
 
 export default function PlacementAdminView({ students }: { students: User[] }) {
   const [placementSettings, setPlacementSettings] = useState<PlacementSettings | null>(null);
@@ -266,13 +267,11 @@ export default function PlacementAdminView({ students }: { students: User[] }) {
                       <div>
                         <h5 className="font-bold text-slate-800 text-sm uppercase tracking-wider mb-3">Company Logo Upload</h5>
                         <div className="flex items-center gap-4">
-                          <div className="w-16 h-16 border border-slate-200 rounded-xl overflow-hidden bg-white flex items-center justify-center shrink-0 shadow-sm">
-                            {newRecordForm.logoUrl ? (
-                              <img src={newRecordForm.logoUrl} alt="Logo preview" className="max-w-full max-h-full object-contain p-1" />
-                            ) : (
-                              <Image className="w-6 h-6 text-slate-300" />
-                            )}
-                          </div>
+                          <CompanyLogo
+                            src={newRecordForm.logoUrl}
+                            name={newRecordForm.companyName || 'New Company'}
+                            className="w-16 h-16 border border-slate-200 rounded-xl bg-white"
+                          />
                           <div className="flex-1">
                             <FileUploader
                               path="placement-logos"
@@ -360,13 +359,11 @@ export default function PlacementAdminView({ students }: { students: User[] }) {
                       <div>
                         <h5 className="font-bold text-amber-900 text-sm uppercase tracking-wider mb-3">Company Logo Upload</h5>
                         <div className="flex items-center gap-4">
-                          <div className="w-16 h-16 border border-amber-200 rounded-xl overflow-hidden bg-white flex items-center justify-center shrink-0 shadow-sm">
-                            {editRecordForm.logoUrl ? (
-                              <img src={editRecordForm.logoUrl} alt="Logo preview" className="max-w-full max-h-full object-contain p-1" />
-                            ) : (
-                              <Image className="w-6 h-6 text-slate-300" />
-                            )}
-                          </div>
+                          <CompanyLogo
+                            src={editRecordForm.logoUrl}
+                            name={editRecordForm.companyName || 'Edit Company'}
+                            className="w-16 h-16 border border-amber-200 rounded-xl bg-white"
+                          />
                           <div className="flex-1">
                             <FileUploader
                               path="placement-logos"
@@ -413,12 +410,8 @@ export default function PlacementAdminView({ students }: { students: User[] }) {
                     {y.records.map(r => (
                       <tr key={r.id} className="border-b border-gray-100 last:border-0 hover:bg-slate-50/50">
                         <td className="p-2 font-medium text-slate-800">{r.companyName}</td>
-                        <td className="p-2 text-center">
-                          {r.logoUrl ? (
-                            <img src={r.logoUrl} alt={r.companyName} className="h-8 mx-auto object-contain max-w-[120px]" />
-                          ) : (
-                            <span className="text-gray-400 text-xs italic">No Logo</span>
-                          )}
+                        <td className="p-2 text-center flex justify-center">
+                          <CompanyLogo src={r.logoUrl} name={r.companyName} className="w-10 h-10" />
                         </td>
                         <td className="p-2 text-slate-700">{r.studentsPlaced}</td>
                         <td className="p-2 font-medium text-slate-800">₹ {r.highestPackage.toLocaleString()}</td>

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download } from 'lucide-react';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { getDirectDownloadUrl } from '../utils';
 // @ts-ignore
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -17,6 +18,7 @@ interface SecurePdfViewerProps {
   isFullscreen?: boolean;
   externalPageNumber?: number;
   onPageChange?: (page: number) => void;
+  isSecure?: boolean;
 }
 
 export default function SecurePdfViewer({ 
@@ -26,7 +28,8 @@ export default function SecurePdfViewer({
   userId, 
   isFullscreen = false,
   externalPageNumber,
-  onPageChange
+  onPageChange,
+  isSecure = true
 }: SecurePdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -45,39 +48,55 @@ export default function SecurePdfViewer({
       setLoadError(null);
       setPdfData(null);
       
-      const proxies = [
-        (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-        (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-        (u: string) => u // Original URL
-      ];
-
-      // If it's a known CORS issue, start with the first proxy. Otherwise, start with original URL.
-      const startIndex = url.includes('b-cdn.net') ? 0 : 3;
+      const directUrl = getDirectDownloadUrl(url);
+      
+      let urlsToTry: string[] = [];
       let success = false;
+      const uploadIndex = directUrl.indexOf('/uploads/');
+      
+      if (uploadIndex !== -1) {
+        // This is a local upload! Strip domain to keep it relative, 100% same-origin & ultra-fast
+        const relativeUrl = directUrl.substring(uploadIndex);
+        urlsToTry = [relativeUrl, directUrl];
+      } else if (directUrl.startsWith('/') || directUrl.startsWith('uploads/')) {
+        const relativeUrl = directUrl.startsWith('/') ? directUrl : `/${directUrl}`;
+        urlsToTry = [relativeUrl, directUrl];
+      } else {
+        // External URLs (e.g. Google Drive, CDN links, Firebase Storage, GCS)
+        const proxies = [
+          (u: string) => `/api/proxy-pdf?url=${encodeURIComponent(u)}`,
+          (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+          (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+          (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+          (u: string) => u // Original URL
+        ];
 
-      const isSameOrigin = url.startsWith('/') || url.startsWith('uploads/') || (typeof window !== 'undefined' && url.startsWith(window.location.origin));
-      const orderedProxies = isSameOrigin 
-        ? [ (u: string) => u ] 
-        : [
-            proxies[startIndex],
-            ...proxies.filter((_, i) => i !== startIndex)
-          ];
+        // Always prioritize our custom high-speed backend proxy first, then try original direct URL, then other public proxies
+        const orderedProxies = [
+          proxies[0],       // Custom server-side proxy (fast & bypassed CORS)
+          (u: string) => u, // Direct fetch (might be CORS enabled)
+          proxies[1],       // corsproxy.io
+          proxies[2],       // codetabs
+          proxies[3]        // allorigins
+        ];
 
-      for (let i = 0; i < orderedProxies.length; i++) {
+        urlsToTry = orderedProxies.map(p => p(directUrl));
+      }
+
+      for (let i = 0; i < urlsToTry.length; i++) {
         if (!isMounted) return;
         
         const abortController = new AbortController();
         abortControllers.push(abortController);
         
         try {
-          const proxyUrl = orderedProxies[i](url);
-          console.log(`Attempting to fetch PDF from: ${proxyUrl}`);
+          const fetchUrl = urlsToTry[i];
+          console.log(`Attempting to fetch PDF from: ${fetchUrl}`);
           
-          // 15 second timeout per proxy to prevent hanging for 60 seconds
-          const timeoutId = setTimeout(() => abortController.abort(), 15000);
+          // 8 second timeout per attempt to prevent hanging
+          const timeoutId = setTimeout(() => abortController.abort(), 8000);
           
-          const response = await fetch(proxyUrl, { signal: abortController.signal });
+          const response = await fetch(fetchUrl, { signal: abortController.signal });
           clearTimeout(timeoutId);
 
           if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -148,24 +167,39 @@ export default function SecurePdfViewer({
 
   return (
     <div 
-      className={`flex flex-col items-center bg-gray-100 rounded-xl overflow-hidden border border-gray-200 select-none w-full ${isFullscreen ? 'h-full flex-1' : ''}`} 
-      style={{ 
+      className={`flex flex-col items-center bg-gray-100 rounded-xl overflow-hidden border border-gray-200 w-full ${isSecure ? 'select-none' : ''} ${isFullscreen ? 'h-full flex-1' : ''}`} 
+      style={isSecure ? { 
         WebkitTouchCallout: 'none', 
         WebkitUserSelect: 'none', 
         userSelect: 'none',
         KhtmlUserSelect: 'none',
         MozUserSelect: 'none',
         msUserSelect: 'none'
-      }}
+      } : {}}
       onContextMenu={(e) => {
-        e.preventDefault();
-        return false;
+        if (isSecure) {
+          e.preventDefault();
+          return false;
+        }
       }}
     >
       {/* Toolbar */}
       <div className="w-full bg-gray-800 text-white p-3 flex items-center justify-between">
         <div className="font-medium truncate max-w-[200px] md:max-w-md">{title || 'Document Viewer'}</div>
         <div className="flex items-center gap-4">
+          {!isSecure && (
+            <a 
+              href={getDirectDownloadUrl(url)} 
+              download 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="p-2 hover:bg-gray-700 rounded-lg transition-colors text-white shrink-0 flex items-center gap-1.5" 
+              title="Download Document"
+            >
+              <Download className="w-4 h-4" />
+              <span className="text-xs font-semibold hidden sm:inline">Download</span>
+            </a>
+          )}
           <div className="flex items-center gap-2 bg-gray-700 rounded-lg p-1">
             <button onClick={zoomOut} className="p-1 hover:bg-gray-600 rounded"><ZoomOut className="w-4 h-4" /></button>
             <span className="text-xs w-12 text-center">{Math.round(scale * 100)}%</span>
@@ -193,30 +227,32 @@ export default function SecurePdfViewer({
             loading={<div className="flex items-center justify-center h-64 text-gray-500">Rendering document...</div>}
             error={<div className="flex items-center justify-center h-64 text-red-500 text-center px-4">Failed to render document.</div>}
           >
-            <div className="relative inline-block pointer-events-none">
+            <div className={`relative inline-block ${isSecure ? 'pointer-events-none' : ''}`}>
               <Page 
                 pageNumber={pageNumber} 
                 scale={scale} 
-                renderTextLayer={false} 
-                renderAnnotationLayer={false}
+                renderTextLayer={!isSecure} 
+                renderAnnotationLayer={!isSecure}
                 className="shadow-xl"
               />
               {/* Transparent overlay to prevent long-press/save image on mobile */}
-              <div 
-                className="absolute inset-0 z-10 bg-transparent pointer-events-auto" 
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  return false;
-                }}
-                onTouchStart={(e) => {
-                  // Prevent default touch behaviors that might lead to download options
-                  if (e.touches.length > 1) return; // Allow multi-touch for zooming if implemented later
-                }}
-              />
+              {isSecure && (
+                <div 
+                  className="absolute inset-0 z-10 bg-transparent pointer-events-auto" 
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                  }}
+                  onTouchStart={(e) => {
+                    // Prevent default touch behaviors that might lead to download options
+                    if (e.touches.length > 1) return; // Allow multi-touch for zooming if implemented later
+                  }}
+                />
+              )}
               
               {/* Watermark Overlay */}
-              {(userName || userId) && (
+              {isSecure && (userName || userId) && (
                 <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden flex flex-wrap justify-center items-center opacity-10 select-none">
                   {Array.from({ length: 20 }).map((_, i) => (
                     <div key={i} className="transform -rotate-45 p-8 text-xl font-bold text-gray-900 whitespace-nowrap">

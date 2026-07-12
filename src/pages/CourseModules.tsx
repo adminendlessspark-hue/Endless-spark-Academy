@@ -36,18 +36,39 @@ export default function CourseModules() {
   const [modules, setModules] = useState<CourseModule[]>([]);
   const [category, setCategory] = useState<string>('');
   const [activeModule, setActiveModule] = useState<CourseModule | null>(null);
-  const [viewingPdf, setViewingPdf] = useState<{ url: string, title: string } | null>(null);
+  const [viewingPdf, setViewingPdf] = useState<{ url: string, title: string, isSecure?: boolean } | null>(null);
   const [isPdfFullscreen, setIsPdfFullscreen] = useState<boolean>(false);
   const [viewingIframe, setViewingIframe] = useState<{ url: string, title: string } | null>(null);
   const [iframeZoom, setIframeZoom] = useState<number>(1);
   const iframeContainerRef = useRef<HTMLDivElement>(null);
 
-  const handleOpenDocument = (url: string, title: string) => {
+  const handleOpenDocument = (url: string, title: string, isSecure: boolean = true) => {
     const absoluteUrl = ensureAbsoluteUrl(url);
-    if (absoluteUrl.includes('indd.adobe.com') || absoluteUrl.includes('youtube.com/embed') || absoluteUrl.includes('vimeo.com/video')) {
+    
+    // 1. Handle Google Drive URLs specifically to render via embedded preview iframe (extremely fast and 100% CORS safe)
+    if (absoluteUrl.includes('drive.google.com')) {
+      let previewUrl = absoluteUrl;
+      const driveMatch = absoluteUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || absoluteUrl.match(/id=([a-zA-Z0-9_-]+)/);
+      if (driveMatch && driveMatch[1]) {
+        previewUrl = `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
+      }
+      setViewingIframe({ url: previewUrl, title });
+      return;
+    }
+
+    // 2. Handle standard iframe-compatible content or external URLs that are not PDFs
+    const lowerUrl = absoluteUrl.toLowerCase();
+    const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('.pdf?') || (absoluteUrl.includes('/uploads/') && lowerUrl.endsWith('.pdf'));
+
+    if (
+      absoluteUrl.includes('indd.adobe.com') || 
+      absoluteUrl.includes('youtube.com/embed') || 
+      absoluteUrl.includes('vimeo.com/video') ||
+      !isPdf
+    ) {
       setViewingIframe({ url: absoluteUrl, title });
     } else {
-      setViewingPdf({ url: absoluteUrl, title });
+      setViewingPdf({ url: absoluteUrl, title, isSecure });
     }
   };
 
@@ -594,7 +615,7 @@ export default function CourseModules() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => handleOpenDocument(activeModule.mindMapUrl!, `Mind Map: ${activeModule.title}`)}
+                        onClick={() => handleOpenDocument(activeModule.mindMapUrl!, `Mind Map: ${activeModule.title}`, false)}
                         className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left"
                       >
                         <div className="flex items-center gap-3">
@@ -631,7 +652,7 @@ export default function CourseModules() {
                     </h4>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => handleOpenDocument(activeModule.worksheetUrl!, `Worksheet: ${activeModule.title}`)}
+                        onClick={() => handleOpenDocument(activeModule.worksheetUrl!, `Worksheet: ${activeModule.title}`, false)}
                         className="flex-1 flex items-center justify-between p-4 bg-orange-50 border border-orange-100 rounded-xl hover:bg-orange-100 transition-colors group text-left"
                       >
                         <div className="flex items-center gap-3">
@@ -668,7 +689,7 @@ export default function CourseModules() {
                     </h4>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => handleOpenDocument(activeModule.referenceMaterialUrl!, `Reference Material: ${activeModule.title}`)}
+                        onClick={() => handleOpenDocument(activeModule.referenceMaterialUrl!, `Reference Material: ${activeModule.title}`, false)}
                         className="flex-1 flex items-center justify-between p-4 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 transition-colors group text-left"
                       >
                         <div className="flex items-center gap-3">
@@ -706,7 +727,7 @@ export default function CourseModules() {
                     {activeModule.additionalReferenceMaterials.map((material, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <button 
-                          onClick={() => handleOpenDocument(material.url, material.title)}
+                          onClick={() => handleOpenDocument(material.url, material.title, false)}
                           className="flex-1 flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 transition-colors group text-left"
                         >
                           <div className="flex items-center gap-3">
@@ -1542,6 +1563,7 @@ export default function CourseModules() {
                 userName={user?.name}
                 userId={user?.studentId || user?.id}
                 isFullscreen={isPdfFullscreen}
+                isSecure={viewingPdf.isSecure}
               />
             </div>
           </div>

@@ -15,7 +15,7 @@ import JSZip from "jszip";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const localUploadsDir = path.join(process.cwd(), "uploads_fallback");
+const localUploadsDir = "/tmp/uploads_fallback";
 
 // Helper to seed missing course modules assignment PDF if it doesn't exist
 function ensureAssignmentPdfExists() {
@@ -226,13 +226,30 @@ async function startServer() {
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
+  // CORS middleware to enable cross-origin access (critical for iframe/PDF viewing environments)
+  app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Local static uploads folder as a seamless fallback if GCS storage is not enabled
   if (!fs.existsSync(localUploadsDir)) {
     fs.mkdirSync(localUploadsDir, { recursive: true });
   }
   ensureAssignmentPdfExists();
   await activateRazorpay();
-  app.use("/uploads", express.static(localUploadsDir));
+  app.use("/uploads", express.static(localUploadsDir, {
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    }
+  }));
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
   if (!apiKey) {
@@ -708,6 +725,35 @@ async function startServer() {
     } catch (error: any) {
       console.error("Backend: Error force resetting password:", error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API Route to proxy external PDF files (bypassing CORS extremely fast and securely)
+  app.get("/api/proxy-pdf", async (req: any, res: any) => {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl) {
+      console.error("Backend PDF Proxy: Missing url parameter");
+      return res.status(400).send("Missing url parameter");
+    }
+
+    try {
+      console.log(`Backend PDF Proxy: Fetching from target URL: ${targetUrl}`);
+      const response = await fetch(targetUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch from target URL (Status ${response.status})`);
+      }
+
+      const contentType = response.headers.get("content-type") || "application/pdf";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (err: any) {
+      console.error("Backend PDF Proxy: Error proxying PDF:", err);
+      res.status(500).send(`Error proxying PDF: ${err.message}`);
     }
   });
 

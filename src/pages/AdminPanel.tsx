@@ -51,6 +51,17 @@ import PrinterSpecForm from '../components/PrinterSpecForm';
 import { PrintStyles, ClientBriefPrintable } from '../components/PrintableChecklists';
 import StudentAIAgent from '../components/StudentAIAgent';
 
+const formatAnswerValue = (val: any): string => {
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object' && val !== null) {
+    if ('' in val) return val[''];
+    const keys = Object.keys(val);
+    if (keys.length > 0) return val[keys[0]];
+    return JSON.stringify(val);
+  }
+  return String(val || '');
+};
+
 const defaultCourseModules = [
   { id: 'packaging-engineer', title: 'Diploma in Packaging Engineer' },
   { id: 'production-art-engineer', title: 'Diploma in Production Art Engineer' },
@@ -7626,20 +7637,37 @@ export default function AdminPanel() {
             </form>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {holidays.map((h) => (
-                <div key={h.id} className="p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between group hover:border-pink-100 transition-colors">
-                  <div>
-                    <p className="font-bold text-gray-900">{h.title}</p>
-                    <p className="text-xs text-gray-500">{new Date(h.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                  </div>
-                  <button 
-                    onClick={() => handleDeleteHoliday(h.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+              {[...holidays]
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .map((h) => {
+                  const hDate = new Date(h.date);
+                  const formattedDate = hDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+                  const formattedDay = hDate.toLocaleDateString('en-IN', { weekday: 'long' });
+                  return (
+                    <div key={h.id} className="p-4 bg-white border border-gray-150 rounded-2xl flex items-center justify-between group hover:border-pink-200 hover:shadow-xs transition-all duration-200">
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col items-center justify-center w-12 h-12 bg-pink-50 border border-pink-100 rounded-xl shrink-0">
+                          <span className="text-[10px] font-black text-pink-700 uppercase leading-none">{hDate.toLocaleDateString('en-IN', { month: 'short' })}</span>
+                          <span className="text-base font-extrabold text-pink-950 leading-none mt-1">{hDate.toLocaleDateString('en-IN', { day: 'numeric' })}</span>
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900 text-sm">{h.title}</p>
+                          <div className="flex flex-col text-[11px] text-gray-500">
+                            <span className="font-semibold text-pink-600">{formattedDay}</span>
+                            <span>{formattedDate}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleDeleteHoliday(h.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                        title="Delete Holiday"
+                      >
+                        <Trash2 className="w-4.5 h-4.5" />
+                      </button>
+                    </div>
+                  );
+                })}
               {holidays.length === 0 && (
                 <div className="col-span-full py-12 text-center text-gray-500 italic">
                   No holidays added yet.
@@ -10329,19 +10357,19 @@ export default function AdminPanel() {
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2">Story 1 Translation ({viewingTestResults.nativeLanguage})</p>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewingTestResults.answers?.partC?.story1}</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{formatAnswerValue(viewingTestResults.answers?.partC?.story1)}</p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2">Story 2 Translation ({viewingTestResults.nativeLanguage})</p>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewingTestResults.answers?.partC?.story2}</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{formatAnswerValue(viewingTestResults.answers?.partC?.story2)}</p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2">Listening Practice Translation ({viewingTestResults.nativeLanguage})</p>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewingTestResults.answers?.partD_listening}</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{formatAnswerValue(viewingTestResults.answers?.partD_listening)}</p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2">Paragraph: My Daily Routine</p>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewingTestResults.answers?.partE_paragraph}</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{formatAnswerValue(viewingTestResults.answers?.partE_paragraph)}</p>
                   </div>
                   {viewingTestResults.answers?.partF && (
                     <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
@@ -10350,7 +10378,7 @@ export default function AdminPanel() {
                         {['q1', 'q2', 'q3', 'q4', 'q5'].map((id, idx) => (
                           <div key={id} className="border-l-2 border-blue-200 pl-3">
                             <p className="text-[10px] font-bold text-blue-600 mb-1">Question {idx + 1}</p>
-                            <p className="text-sm text-gray-700">{viewingTestResults.answers.partF[id] || 'No answer'}</p>
+                            <p className="text-sm text-gray-700">{formatAnswerValue(viewingTestResults.answers.partF[id]) || 'No answer'}</p>
                           </div>
                         ))}
                       </div>

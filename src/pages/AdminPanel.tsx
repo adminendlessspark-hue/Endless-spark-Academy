@@ -9969,6 +9969,121 @@ export default function AdminPanel() {
                     )}
                   </div>
                 </div>
+
+                <div className="md:col-span-2 space-y-4 pt-4 border-t border-gray-100">
+                  <h4 className="text-xs font-bold text-pink-600 uppercase tracking-widest">Attachments & Proofs</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    {/* Photo */}
+                    <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50/50 flex flex-col items-center justify-between text-center">
+                      <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-200 border border-gray-200 flex items-center justify-center mb-2">
+                        {viewingApplication.photo ? (
+                          <img src={viewingApplication.photo} alt="Passport Photo" className="w-full h-full object-cover" />
+                        ) : (
+                          <UserIcon className="w-8 h-8 text-gray-400" />
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-gray-700">Passport Photo</span>
+                      {viewingApplication.photo ? (
+                        <div className="flex gap-2 mt-3 w-full">
+                          <a 
+                            href={viewingApplication.photo} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex-1 px-2.5 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View
+                          </a>
+                          <a 
+                            href={viewingApplication.photo} 
+                            download={`${viewingApplication.fullName || 'Student'}_Photo.png`}
+                            className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold flex items-center justify-center transition-colors"
+                            title="Download"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 mt-2">Not Uploaded</span>
+                      )}
+                    </div>
+
+                    {/* Address Proof */}
+                    <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50/50 flex flex-col items-center justify-between text-center">
+                      <div className="w-16 h-16 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center mb-2 text-purple-600">
+                        {viewingApplication.addressProof ? (
+                          viewingApplication.addressProof.startsWith('data:image/') ? (
+                            <img src={viewingApplication.addressProof} alt="Address Proof" className="w-full h-full object-cover rounded-lg" />
+                          ) : (
+                            <FileText className="w-8 h-8" />
+                          )
+                        ) : (
+                          <FileText className="w-8 h-8 text-gray-300" />
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-gray-700">Address Proof (Aadhar/ID)</span>
+                      {viewingApplication.addressProof ? (
+                        <div className="flex gap-2 mt-3 w-full">
+                          <a 
+                            href={viewingApplication.addressProof} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex-1 px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View
+                          </a>
+                          <a 
+                            href={viewingApplication.addressProof} 
+                            download={`${viewingApplication.fullName || 'Student'}_AddressProof.png`}
+                            className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold flex items-center justify-center transition-colors"
+                            title="Download"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 mt-2">Not Uploaded</span>
+                      )}
+                    </div>
+
+                    {/* Education Proof */}
+                    <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50/50 flex flex-col items-center justify-between text-center">
+                      <div className="w-16 h-16 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center mb-2 text-amber-600">
+                        {viewingApplication.educationProof ? (
+                          viewingApplication.educationProof.startsWith('data:image/') ? (
+                            <img src={viewingApplication.educationProof} alt="Education Proof" className="w-full h-full object-cover rounded-lg" />
+                          ) : (
+                            <FileText className="w-8 h-8" />
+                          )
+                        ) : (
+                          <FileText className="w-8 h-8 text-gray-300" />
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-gray-700">Mark Sheet / Certificate</span>
+                      {viewingApplication.educationProof ? (
+                        <div className="flex gap-2 mt-3 w-full">
+                          <a 
+                            href={viewingApplication.educationProof} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View
+                          </a>
+                          <a 
+                            href={viewingApplication.educationProof} 
+                            download={`${viewingApplication.fullName || 'Student'}_Marksheet.png`}
+                            className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold flex items-center justify-center transition-colors"
+                            title="Download"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 mt-2">Not Uploaded</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">

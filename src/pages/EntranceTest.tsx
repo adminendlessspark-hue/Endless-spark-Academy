@@ -274,6 +274,19 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
         nativeLanguage: selectedLanguage
       });
 
+      // Trigger WhatsApp notification for entrance test completion (non-blocking)
+      fetch('/api/notify-milestone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: user?.name || '',
+          studentEmail: user?.email || '',
+          studentPhone: (user?.whatsapp || user?.phone || '').replace(/\+/g, ''),
+          milestone: 'entrance_test',
+          score: totalMarks
+        })
+      }).catch(err => console.error("Failed to send WhatsApp entrance test completed alert:", err));
+
       navigate('/entrance-test-results');
     } catch (err: any) {
       console.error("Submission error:", err);
@@ -377,20 +390,34 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Select Your Native Language</h2>
             <p className="text-gray-500 mb-6">This will help our AI agent evaluate your translations correctly.</p>
             
-            <div className="space-y-3 mb-8">
-              {['Tamil', 'Hindi', 'Malayalam', 'Telugu', 'Kannada', 'Bengali', 'Marathi', 'Gujarati'].map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => setSelectedLanguage(lang)}
-                  className={`w-full p-4 rounded-xl text-left font-bold transition-all ${
-                    selectedLanguage === lang 
-                      ? 'bg-pink-600 text-white shadow-lg shadow-pink-200' 
-                      : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-100'
-                  }`}
+            <div className="mb-8">
+              <label className="block text-xs font-bold text-pink-600 uppercase mb-2 tracking-wider">Choose Language</label>
+              <div className="relative">
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none appearance-none cursor-pointer transition-all"
                 >
-                  {lang}
-                </button>
-              ))}
+                  <option value="" disabled>Select native language...</option>
+                  {['Tamil', 'Hindi', 'Malayalam', 'Telugu', 'Kannada', 'Bengali', 'Marathi', 'Gujarati', 'Odia', 'Punjabi', 'Assamese', 'Urdu', 'English', 'Other'].map((lang) => (
+                    <option key={lang} value={lang}>
+                      {lang}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+                  <svg className="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                  </svg>
+                </div>
+              </div>
+              
+              {selectedLanguage && (
+                <div className="mt-4 p-4 bg-pink-50/50 rounded-xl border border-pink-100 text-pink-700 text-xs font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                  <span className="w-2 h-2 bg-pink-500 rounded-full animate-ping"></span>
+                  AI evaluation will optimize translations for: <strong className="font-bold">{selectedLanguage}</strong>
+                </div>
+              )}
             </div>
             
             <button

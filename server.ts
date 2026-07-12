@@ -906,6 +906,54 @@ async function startServer() {
     }
   });
 
+  // API Route for WhatsApp milestone notifications (Application & Entrance Test)
+  app.post("/api/notify-milestone", async (req: any, res: any) => {
+    const { studentName, studentEmail, studentPhone, milestone, score } = req.body;
+    
+    try {
+      const db = getDb();
+      const whatsappSettings = await db.collection("settings").doc("whatsapp").get();
+      
+      if (!whatsappSettings.exists || !whatsappSettings.data()?.enabled) {
+        return res.json({ skip: true, message: "WhatsApp notifications disabled" });
+      }
+
+      const settings = whatsappSettings.data()!;
+      const apiKey = settings.apiKey;
+      const targetNumber = settings.targetNumber;
+
+      if (!apiKey || !targetNumber) {
+        return res.status(400).json({ error: "WhatsApp settings incomplete" });
+      }
+
+      let rawMessage = "";
+      if (milestone === "application") {
+        rawMessage = `📝 *Application Completed!*\n\n*Student:* ${studentName}\n*Email:* ${studentEmail}${studentPhone ? `\n*Phone:* ${studentPhone}` : ""}\n\nThis student has completed and submitted their formal admission application!`;
+      } else if (milestone === "entrance_test") {
+        rawMessage = `🏆 *Entrance Test Completed!*\n\n*Student:* ${studentName}\n*Email:* ${studentEmail}${studentPhone ? `\n*Phone:* ${studentPhone}` : ""}\n*Score:* ${score} / 75\n\nThis student has finished their entrance assessment test.`;
+      } else {
+        rawMessage = `🔔 *Milestone Update!*\n\n*Student:* ${studentName}\n*Milestone:* ${milestone}`;
+      }
+
+      const encodedMessage = encodeURIComponent(rawMessage);
+      const whatsappUrl = `https://api.callmebot.com/whatsapp.php?phone=${targetNumber}&text=${encodedMessage}&apikey=${apiKey}`;
+      
+      console.log(`Sending WhatsApp milestone (${milestone}) notification via CallMeBot...`);
+      const response = await fetch(whatsappUrl);
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("WhatsApp API milestone error:", text);
+        return res.status(500).json({ error: "Failed to send WhatsApp message" });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("WhatsApp milestone notification error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Helper to recursively list and zip a Google Drive folder
   async function zipFolder(drive: any, folderId: string, zip: any, currentPath: string = "") {
     const response = await drive.files.list({

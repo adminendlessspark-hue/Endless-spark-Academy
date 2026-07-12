@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save } from 'lucide-react';
+import { X, Save, Upload, FileText } from 'lucide-react';
 import { ApplicationData } from '../types';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -24,6 +24,20 @@ export default function ApplicationEditModal({ studentId, initialName, initialEm
     email: initialEmail || ''
   });
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: 'photo' | 'educationProof' | 'addressProof') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({
+          ...prev,
+          [field]: reader.result as string
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -214,6 +228,92 @@ export default function ApplicationEditModal({ studentId, initialName, initialEm
                 </section>
               </div>
             </div>
+
+            <section className="space-y-4 pt-4 border-t border-gray-100">
+              <h4 className="text-xs font-bold text-pink-600 uppercase tracking-widest border-b border-pink-100 pb-2 flex items-center gap-2">
+                <span className="w-2 h-2 bg-pink-600 rounded-full"></span>
+                Attachments & Proofs
+              </h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Photo Upload */}
+                <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50/50 flex flex-col items-center justify-between text-center">
+                  <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-200 border border-gray-200 flex items-center justify-center mb-2">
+                    {formData.photo ? (
+                      <img src={formData.photo} alt="Passport Photo" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-gray-400 text-xs">No Photo</span>
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-gray-700">Passport Photo</span>
+                  <div className="mt-3 w-full space-y-2">
+                    <label className="block w-full px-2.5 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-lg text-xs font-bold text-center cursor-pointer transition-colors">
+                      <span className="flex items-center justify-center gap-1.5"><Upload className="w-3.5 h-3.5" /> Replace Photo</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => handleEditFileChange(e, 'photo')} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Address Proof Upload */}
+                <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50/50 flex flex-col items-center justify-between text-center">
+                  <div className="w-16 h-16 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center mb-2 text-purple-600">
+                    {formData.addressProof ? (
+                      formData.addressProof.startsWith('data:image/') ? (
+                        <img src={formData.addressProof} alt="Address Proof" className="w-full h-full object-cover rounded-lg" />
+                      ) : (
+                        <FileText className="w-8 h-8" />
+                      )
+                    ) : (
+                      <span className="text-gray-400 text-xs">No File</span>
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-gray-700">Address Proof (Aadhar/ID)</span>
+                  <div className="mt-3 w-full space-y-2">
+                    <label className="block w-full px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-lg text-xs font-bold text-center cursor-pointer transition-colors">
+                      <span className="flex items-center justify-center gap-1.5"><Upload className="w-3.5 h-3.5" /> Replace Proof</span>
+                      <input 
+                        type="file" 
+                        accept="image/*,application/pdf" 
+                        onChange={(e) => handleEditFileChange(e, 'addressProof')} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Education Proof Upload */}
+                <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50/50 flex flex-col items-center justify-between text-center">
+                  <div className="w-16 h-16 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center mb-2 text-amber-600">
+                    {formData.educationProof ? (
+                      formData.educationProof.startsWith('data:image/') ? (
+                        <img src={formData.educationProof} alt="Education Proof" className="w-full h-full object-cover rounded-lg" />
+                      ) : (
+                        <FileText className="w-8 h-8" />
+                      )
+                    ) : (
+                      <span className="text-gray-400 text-xs">No File</span>
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-gray-700">Mark Sheet / Certificate</span>
+                  <div className="mt-3 w-full space-y-2">
+                    <label className="block w-full px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-lg text-xs font-bold text-center cursor-pointer transition-colors">
+                      <span className="flex items-center justify-center gap-1.5"><Upload className="w-3.5 h-3.5" /> Replace Sheet</span>
+                      <input 
+                        type="file" 
+                        accept="image/*,application/pdf" 
+                        onChange={(e) => handleEditFileChange(e, 'educationProof')} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
         

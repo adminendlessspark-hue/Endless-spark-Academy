@@ -216,6 +216,19 @@ export default function Application() {
         applicationData: data,
         photo: data.photo
       });
+      
+      // Trigger WhatsApp notification for application completion (non-blocking)
+      fetch('/api/notify-milestone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: data.fullName || user?.name || '',
+          studentEmail: user?.email || '',
+          studentPhone: `${data.mobileCountryCode || ''}${data.mobileNumber || user?.phone || ''}`.replace(/\+/g, ''),
+          milestone: 'application'
+        })
+      }).catch(err => console.error("Failed to send WhatsApp application completed alert:", err));
+
       navigate('/entrance-test');
     } catch (err) {
       console.error("Failed to submit application:", err);

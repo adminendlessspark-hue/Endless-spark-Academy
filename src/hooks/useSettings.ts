@@ -245,6 +245,7 @@ export function useSettings() {
       unsubAdmin();
       unsubFinancial();
       unsubPlacement();
+      unsubWhatsapp();
       unsubBanners();
       unsubMarketing();
     };

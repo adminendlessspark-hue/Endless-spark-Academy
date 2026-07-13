@@ -400,6 +400,17 @@ async function startServer() {
     res.json({ email });
   });
 
+  app.get("/api/debug-modules", async (req: any, res: any) => {
+    try {
+      const db = getDb();
+      const snapshot = await db.collection("course_modules").get();
+      const modules = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      res.json(modules);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // API to check service account access to a specific Google Drive url
   app.get("/api/check-drive-access", async (req: any, res: any) => {
     const fileUrl = req.query.url as string;
@@ -737,6 +748,36 @@ async function startServer() {
     }
 
     try {
+      // Handle Google Drive links specially
+      if (targetUrl.includes("drive.google.com")) {
+        let fileId: string | null = null;
+        const fileIdMatch = targetUrl.match(/id=([-\w]+)/) || targetUrl.match(/\/file\/d\/([-\w]+)/);
+        if (fileIdMatch) {
+          fileId = fileIdMatch[1];
+        }
+        
+        if (fileId) {
+          try {
+            console.log(`Backend PDF Proxy: Accessing Google Drive File ID: ${fileId} via Google API`);
+            const auth = getGoogleAuth();
+            const drive = google.drive({ version: "v3", auth });
+            const metadata = await drive.files.get({ fileId, fields: "mimeType" });
+            const driveResponse = await drive.files.get(
+              { fileId, alt: "media" },
+              { responseType: "arraybuffer" }
+            );
+            res.setHeader("Content-Type", metadata.data.mimeType || "application/pdf");
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+            res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+            return res.send(Buffer.from(driveResponse.data as any));
+          } catch (driveErr: any) {
+            console.warn("Backend PDF Proxy: Google Drive API failed, falling back to direct uc redirect:", driveErr.message);
+            return res.redirect(`https://drive.google.com/uc?export=download&id=${fileId}`);
+          }
+        }
+      }
+
       console.log(`Backend PDF Proxy: Fetching from target URL: ${targetUrl}`);
       const response = await fetch(targetUrl);
       if (!response.ok) {
@@ -1035,9 +1076,6 @@ async function startServer() {
     let requestedTitle = req.query.title as string;
 
     try {
-      const auth = getGoogleAuth();
-      const drive = google.drive({ version: "v3", auth });
-
       // If projectId is provided, look up the file URL and title from Firestore
       if (projectId) {
         const db = getDb();
@@ -1055,12 +1093,17 @@ async function startServer() {
 
       console.log("Proxying download. projectId:", projectId, "fileUrl:", fileUrl, "requestedTitle:", requestedTitle);
 
-      const MASTER_FOLDER_ID = "1_bIMgMW8xqAioEq6hlz-7EgmaPgK89cz";
-      let fileId: string | null = null;
-      let isFolder = false;
+      if (!fileUrl) {
+        return res.status(400).send("No valid file URL provided");
+      }
 
-      // Extract file ID or folder ID from the file URL if it's a Google Drive link
-      if (fileUrl && fileUrl.includes("drive.google.com")) {
+      // Check if it's a Google Drive link
+      const isDriveLink = fileUrl.includes("drive.google.com");
+      
+      if (isDriveLink) {
+        let fileId: string | null = null;
+        let isFolder = false;
+
         if (fileUrl.includes("/folders/")) {
           const folderIdMatch = fileUrl.match(/\/folders\/([-\w]+)/);
           if (folderIdMatch) {
@@ -1073,99 +1116,101 @@ async function startServer() {
             fileId = fileIdMatch[0];
           }
         }
-      }
 
-      // If we don't have a direct fileId, or if we want to ensure we search inside the Master Folder:
-      if (!fileId && requestedTitle) {
-        console.log(`Searching for file/folder in Master folder ${MASTER_FOLDER_ID} with title: ${requestedTitle}`);
-        const escapedTitle = requestedTitle.replace(/'/g, "\\'");
-        
-        // Search first for folder or file in parent MASTER_FOLDER_ID matching the title
-        const searchQuery = `'${MASTER_FOLDER_ID}' in parents and name contains '${escapedTitle}' and trashed = false`;
-        const searchRes = await drive.files.list({
-          q: searchQuery,
-          fields: "files(id, name, mimeType)",
-          pageSize: 5
-        });
+        // Try downloading using Google Drive API if configured
+        if (fileId) {
+          try {
+            const auth = getGoogleAuth();
+            const drive = google.drive({ version: "v3", auth });
 
-        if (searchRes.data.files && searchRes.data.files.length > 0) {
-          const found = searchRes.data.files[0];
-          fileId = found.id || null;
-          isFolder = found.mimeType === "application/vnd.google-apps.folder";
-          console.log(`Found match in Master folder: ${found.name} (ID: ${fileId}, Folder: ${isFolder})`);
-        } else {
-          // Try searching by name globally as fallback
-          const globalQuery = `name contains '${escapedTitle}' and trashed = false`;
-          const globalSearchRes = await drive.files.list({
-            q: globalQuery,
-            fields: "files(id, name, mimeType)",
-            pageSize: 5
-          });
-          if (globalSearchRes.data.files && globalSearchRes.data.files.length > 0) {
-            const found = globalSearchRes.data.files[0];
-            fileId = found.id || null;
-            isFolder = found.mimeType === "application/vnd.google-apps.folder";
-            console.log(`Found global match: ${found.name} (ID: ${fileId}, Folder: ${isFolder})`);
-          }
-        }
-      }
+            if (isFolder) {
+              console.log(`Zipping Google Drive folder ID: ${fileId}`);
+              const zip = new JSZip();
+              await zipFolder(drive, fileId, zip);
+              
+              const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+              
+              let finalName = requestedTitle || "project_files";
+              if (!finalName.toLowerCase().endsWith('.zip')) {
+                finalName = `${finalName}.zip`;
+              }
 
-      // Handle download if we have an identified Google Drive fileId/folderId
-      if (fileId) {
-        if (isFolder) {
-          console.log(`Zipping Google Drive folder ID: ${fileId}`);
-          const zip = new JSZip();
-          await zipFolder(drive, fileId, zip);
-          
-          const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-          
-          let finalName = requestedTitle || "project_files";
-          if (!finalName.toLowerCase().endsWith('.zip')) {
-            finalName = `${finalName}.zip`;
-          }
-
-          res.setHeader("Content-Type", "application/zip");
-          res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
-          return res.send(zipBuffer);
-        } else {
-          console.log(`Attempting backend Google Drive file download for file ID: ${fileId}`);
-          
-          // Get file metadata to determine MIME type and name
-          const metadata = await drive.files.get({ fileId, fields: "name, mimeType" });
-          const originalName = metadata.data.name || "project.zip";
-          const mimeType = metadata.data.mimeType || "application/octet-stream";
-
-          res.setHeader("Content-Type", mimeType);
-          
-          let finalName = requestedTitle || originalName;
-          if (!finalName.toLowerCase().includes('.')) {
-            const extMatch = originalName.match(/\.[0-9a-z]+$/i);
-            if (extMatch) {
-              finalName = `${finalName}${extMatch[0]}`;
+              res.setHeader("Content-Type", "application/zip");
+              res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
+              return res.send(zipBuffer);
             } else {
-              finalName = `${finalName}.zip`;
+              console.log(`Attempting backend Google Drive file download for file ID: ${fileId}`);
+              
+              // Get file metadata to determine MIME type and name
+              const metadata = await drive.files.get({ fileId, fields: "name, mimeType" });
+              const originalName = metadata.data.name || "project.zip";
+              const mimeType = metadata.data.mimeType || "application/octet-stream";
+
+              res.setHeader("Content-Type", mimeType);
+              
+              let finalName = requestedTitle || originalName;
+              if (!finalName.toLowerCase().includes('.')) {
+                const extMatch = originalName.match(/\.[0-9a-z]+$/i);
+                if (extMatch) {
+                  finalName = `${finalName}${extMatch[0]}`;
+                } else {
+                  finalName = `${finalName}.zip`;
+                }
+              }
+              res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
+
+              const driveResponse = await drive.files.get(
+                { fileId, alt: "media" },
+                { responseType: "arraybuffer" }
+              );
+
+              return res.send(Buffer.from(driveResponse.data as any));
+            }
+          } catch (driveErr: any) {
+            console.warn("Google Drive API download failed, falling back to direct browser redirection:", driveErr.message);
+            // Fallback: Redirect to the direct Google Drive download/view URL
+            if (isFolder) {
+              return res.redirect(fileUrl);
+            } else {
+              return res.redirect(`https://drive.google.com/uc?export=download&id=${fileId}`);
             }
           }
-          res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
-
-          const driveResponse = await drive.files.get(
-            { fileId, alt: "media" },
-            { responseType: "arraybuffer" }
-          );
-
-          return res.send(Buffer.from(driveResponse.data as any));
         }
       }
 
-      // If no file ID/folder ID and we have no fileUrl, return 400
-      if (!fileUrl) {
-        return res.status(400).send("No valid file URL, project, or Google Drive matching file found");
+      // Handle relative or absolute local files
+      if (fileUrl.startsWith("/") || fileUrl.startsWith("uploads/") || !/^(f|ht)tps?:\/\//i.test(fileUrl)) {
+        let relativePath = fileUrl;
+        if (relativePath.startsWith("/")) {
+          relativePath = relativePath.substring(1);
+        }
+        
+        // If it starts with uploads/, serve it directly from localUploadsDir
+        if (relativePath.startsWith("uploads/")) {
+          const filePathOnDisk = path.join(localUploadsDir, relativePath.substring("uploads/".length));
+          if (fs.existsSync(filePathOnDisk)) {
+            let finalName = requestedTitle || path.basename(filePathOnDisk);
+            if (!finalName.toLowerCase().includes('.') && path.extname(filePathOnDisk)) {
+              finalName = `${finalName}${path.extname(filePathOnDisk)}`;
+            }
+            res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
+            return res.sendFile(filePathOnDisk);
+          }
+        }
+        
+        // If it's not on disk but is a relative URL, redirect to correct absolute URL
+        const hostname = req.get("host");
+        const protocol = req.protocol;
+        const absoluteRedirectUrl = `${protocol}://${hostname}/${relativePath}`;
+        return res.redirect(absoluteRedirectUrl);
       }
 
-      // Fallback / Standard URL downloader (for non-Google Drive links)
-      console.log("Using standard fetch fallback for:", fileUrl);
+      // Standard remote URL download (e.g. Firebase Storage, external links)
+      console.log("Using standard fetch proxy for remote URL:", fileUrl);
       const response = await fetch(fileUrl);
-      if (!response.ok) throw new Error(`External source returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`External remote source returned ${response.status}`);
+      }
       
       const contentType = response.headers.get("content-type") || "application/octet-stream";
       const contentDisposition = response.headers.get("content-disposition");
@@ -1174,8 +1219,14 @@ async function startServer() {
       
       if (requestedTitle) {
         let finalName = requestedTitle;
+        // Keep original file extension if present in fileUrl
+        const extMatch = fileUrl.split('?')[0].match(/\.[0-9a-z]+$/i);
         if (!finalName.toLowerCase().includes('.')) {
-          finalName = `${finalName}.zip`;
+          if (extMatch) {
+            finalName = `${finalName}${extMatch[0]}`;
+          } else {
+            finalName = `${finalName}.zip`;
+          }
         }
         res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
       } else if (contentDisposition) {
@@ -1183,13 +1234,22 @@ async function startServer() {
       }
       
       const buffer = await response.arrayBuffer();
-      res.send(Buffer.from(buffer));
+      return res.send(Buffer.from(buffer));
+
     } catch (error: any) {
-      console.error("Proxy download error:", error);
-      if (fileUrl) {
-        res.redirect(fileUrl);
-      } else {
-        res.status(500).send(`Failed to process download: ${error.message}`);
+      console.error("Proxy download root error:", error);
+      // In case of total failure, try redirecting directly as absolute URL
+      try {
+        let redirectUrl = fileUrl;
+        if (redirectUrl.startsWith("/") || !/^(f|ht)tps?:\/\//i.test(redirectUrl)) {
+          const hostname = req.get("host");
+          const protocol = req.protocol;
+          const relativePart = redirectUrl.startsWith("/") ? redirectUrl.substring(1) : redirectUrl;
+          redirectUrl = `${protocol}://${hostname}/${relativePart}`;
+        }
+        return res.redirect(redirectUrl);
+      } catch (redirectErr) {
+        return res.status(500).send(`Failed to process download: ${error.message}`);
       }
     }
   });

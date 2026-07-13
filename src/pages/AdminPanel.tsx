@@ -1587,13 +1587,64 @@ export default function AdminPanel() {
     }
   };
 
+  const getSlotsForDate = (dateString: string) => {
+    if (!dateString) return [];
+    const [year, month, dayNum] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, dayNum, 12, 0, 0);
+    const day = date.getDay(); // 0 = Sun, 1 = Mon, ...
+    const slots = [];
+
+    // Saturday (6) and Sunday (0): every two hours 9:00 AM to 5:00 PM
+    if (day === 6 || day === 0) {
+      slots.push("09:00 AM - 11:00 AM");
+      slots.push("11:00 AM - 01:00 PM");
+      slots.push("01:00 PM - 03:00 PM");
+      slots.push("03:00 PM - 05:00 PM");
+    }
+
+    // Monday to Friday (1 to 5): Only available 7:30 PM to 8:00 PM
+    if (day >= 1 && day <= 5) {
+      slots.push("07:30 PM - 08:00 PM");
+    }
+
+    return slots;
+  };
+
+  const parseDateTimeLocal = (dateStr: string, timeStr: string): string => {
+    try {
+      const cleanTime = timeStr.split('-')[0].trim(); // e.g. "07:30 PM" or "10:00 AM"
+      const match = cleanTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (match) {
+        let hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const ampm = match[3].toUpperCase();
+        if (ampm === 'PM' && hours < 12) hours += 12;
+        if (ampm === 'AM' && hours === 12) hours = 0;
+        
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const d = new Date(year, month - 1, day, hours, minutes, 0);
+        return d.toISOString();
+      }
+    } catch (err) {
+      console.error("Error parsing date/time:", err);
+    }
+    return new Date(`${dateStr}T12:00:00Z`).toISOString();
+  };
+
   const handleMarkDemoCompleted = async (studentId: string) => {
     try {
       const student = students.find(s => s.id === studentId);
-      
+      if (!student || !student.demoData) {
+        await updateDoc(doc(db, 'users', studentId), {
+          'demoData.completed': true
+        });
+        return;
+      }
+
       await updateDoc(doc(db, 'users', studentId), {
         'demoData.completed': true
       });
+      alert(`Approved ${student.name}'s demo class successfully.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${studentId}`);
     }
@@ -1609,10 +1660,24 @@ export default function AdminPanel() {
         'demoData.preferredDate': rescheduleDate,
         'demoData.preferredTime': rescheduleTime
       });
+
+      // Update associated live sessions
+      const parsedTime = parseDateTimeLocal(rescheduleDate, rescheduleTime);
+      const studentSessions = liveSessions.filter(ls => 
+        ls.type === 'demo' && 
+        ls.studentId === reschedulingDemoStudentId
+      );
+      
+      for (const session of studentSessions) {
+        await updateDoc(doc(db, 'live_sessions', session.id), {
+          scheduledFor: parsedTime
+        });
+      }
       
       setReschedulingDemoStudentId(null);
       setRescheduleDate('');
       setRescheduleTime('');
+      alert("Rescheduled demo class and updated live classroom session successfully.");
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${reschedulingDemoStudentId}`);
     }
@@ -5114,6 +5179,23 @@ export default function AdminPanel() {
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
+                          {student.demoData?.roomId && (
+                            <button
+                              onClick={() => {
+                                const classroomUrl = `${window.location.origin}/classroom/${student.demoData?.roomId}`;
+                                const shareMsg = `Hello ${student.name}! 🌟\n\nYour online Demo Class at Endless Spark is successfully scheduled!\n\n📅 Date/Time: ${student.demoData?.preferredDate} at ${student.demoData?.preferredTime}\n💻 Join Your Live Virtual Classroom directly:\n${classroomUrl}\n\n(No downloads or signups required. Open on Google Chrome / Apple Safari to begin!).`;
+                                const rawPhone = student.phone || '';
+                                const cleanedPhone = rawPhone.replace(/[^0-9]/g, '');
+                                const formattedPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone;
+                                const waUrl = formattedPhone ? `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(shareMsg)}` : `https://api.whatsapp.com/send?text=${encodeURIComponent(shareMsg)}`;
+                                window.open(waUrl, '_blank');
+                              }}
+                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg transition-colors"
+                              title="Share Demo Classroom link via WhatsApp"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                            </button>
+                          )}
                           {!student.demoData?.completed && (
                             <>
                               <button
@@ -9898,18 +9980,26 @@ export default function AdminPanel() {
                 <input
                   type="date"
                   value={rescheduleDate}
-                  onChange={(e) => setRescheduleDate(e.target.value)}
+                  onChange={(e) => {
+                    setRescheduleDate(e.target.value);
+                    setRescheduleTime(''); // Reset time when date changes to prevent invalid slots
+                  }}
                   className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Time</label>
-                <input
-                  type="time"
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Time Slot</label>
+                <select
                   value={rescheduleTime}
                   onChange={(e) => setRescheduleTime(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500"
-                />
+                  disabled={!rescheduleDate}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 bg-white disabled:opacity-50"
+                >
+                  <option value="">{rescheduleDate ? "Select time slot" : "Select date first"}</option>
+                  {getSlotsForDate(rescheduleDate).map((slot) => (
+                    <option key={slot} value={slot}>{slot}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">

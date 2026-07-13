@@ -167,6 +167,7 @@ export interface DemoData {
   completed?: boolean;
   mode?: 'physical' | 'online';
   roomId?: string;
+  cancelledClash?: boolean;
 }
 
 export interface SoftwareToolVideo {

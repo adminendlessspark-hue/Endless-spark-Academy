@@ -56,15 +56,21 @@ export default function CourseModules() {
       return;
     }
 
-    // 2. Handle standard iframe-compatible content or external URLs that are not PDFs
+    // 2. Handle standard iframe-compatible content, images, Office documents, or PDFs
     const lowerUrl = absoluteUrl.toLowerCase();
     const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('.pdf?') || (absoluteUrl.includes('/uploads/') && lowerUrl.endsWith('.pdf'));
+    const isImage = lowerUrl.endsWith('.png') || lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg') || lowerUrl.endsWith('.webp') || lowerUrl.includes('.png?') || lowerUrl.includes('.jpg?') || lowerUrl.includes('.jpeg?') || lowerUrl.includes('.webp?') || (absoluteUrl.includes('/uploads/') && (lowerUrl.endsWith('.png') || lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg') || lowerUrl.endsWith('.webp')));
+    const isOfficeDoc = lowerUrl.endsWith('.doc') || lowerUrl.endsWith('.docx') || lowerUrl.endsWith('.ppt') || lowerUrl.endsWith('.pptx') || lowerUrl.endsWith('.xls') || lowerUrl.endsWith('.xlsx') || lowerUrl.includes('.doc?') || lowerUrl.includes('.docx?') || lowerUrl.includes('.ppt?') || lowerUrl.includes('.pptx?') || lowerUrl.includes('.xls?') || lowerUrl.includes('.xlsx?');
 
-    if (
+    if (isOfficeDoc) {
+      // Use official Google Docs embedded viewer to render Office documents seamlessly
+      const googleViewerUrl = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(absoluteUrl)}`;
+      setViewingIframe({ url: googleViewerUrl, title });
+    } else if (
       absoluteUrl.includes('indd.adobe.com') || 
       absoluteUrl.includes('youtube.com/embed') || 
       absoluteUrl.includes('vimeo.com/video') ||
-      !isPdf
+      (!isPdf && !isImage)
     ) {
       setViewingIframe({ url: absoluteUrl, title });
     } else {
@@ -581,8 +587,8 @@ export default function CourseModules() {
                     </h4>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => handleOpenDocument(activeModule.assignmentPaperUrl!, `Assignment: ${activeModule.title}`)}
-                        className="w-full flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left"
+                        onClick={() => handleOpenDocument(activeModule.assignmentPaperUrl!, `Assignment: ${activeModule.title}`, false)}
+                        className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-pink-600 shadow-sm">
@@ -593,7 +599,19 @@ export default function CourseModules() {
                             <p className="text-xs text-gray-500">Reference material for this module</p>
                           </div>
                         </div>
+                        <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
                       </button>
+                      {(enableDocumentDownloads || user?.role !== 'student') && (
+                        <a 
+                          href={`/api/download?url=${encodeURIComponent(activeModule.assignmentPaperUrl!)}&title=${encodeURIComponent(`Assignment - ${activeModule.title}`)}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center"
+                          title="Download Assignment"
+                        >
+                          <Download className="w-5 h-5" />
+                        </a>
+                      )}
                     </div>
                   </div>
                 )}
@@ -629,9 +647,9 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {user?.role !== 'student' && (
+                      {(enableDocumentDownloads || user?.role !== 'student') && (
                         <a 
-                          href={getDirectDownloadUrl(activeModule.mindMapUrl!)} 
+                          href={`/api/download?url=${encodeURIComponent(activeModule.mindMapUrl!)}&title=${encodeURIComponent(`Mind Map - ${activeModule.title}`)}`} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center"
@@ -666,9 +684,9 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-orange-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {user?.role !== 'student' && (
+                      {(enableDocumentDownloads || user?.role !== 'student') && (
                         <a 
-                          href={getDirectDownloadUrl(activeModule.worksheetUrl!)} 
+                          href={`/api/download?url=${encodeURIComponent(activeModule.worksheetUrl!)}&title=${encodeURIComponent(`Worksheet - ${activeModule.title}`)}`} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="p-4 bg-orange-50 border border-orange-100 rounded-xl hover:bg-orange-100 transition-colors text-orange-600 shadow-sm flex items-center justify-center"
@@ -703,9 +721,9 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-purple-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {user?.role !== 'student' && (
+                      {(enableDocumentDownloads || user?.role !== 'student') && (
                         <a 
-                          href={getDirectDownloadUrl(activeModule.referenceMaterialUrl!)} 
+                          href={`/api/download?url=${encodeURIComponent(activeModule.referenceMaterialUrl!)}&title=${encodeURIComponent(`Reference Material - ${activeModule.title}`)}`} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="p-4 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 transition-colors text-purple-600 shadow-sm flex items-center justify-center"
@@ -741,9 +759,9 @@ export default function CourseModules() {
                           </div>
                           <ArrowRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-1 transition-transform" />
                         </button>
-                        {enableDocumentDownloads && user?.role !== 'student' && (
+                        {(enableDocumentDownloads || user?.role !== 'student') && (
                           <a 
-                            href={getDirectDownloadUrl(material.url)} 
+                            href={`/api/download?url=${encodeURIComponent(material.url)}&title=${encodeURIComponent(material.title)}`} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 transition-colors text-indigo-600 shadow-sm flex items-center justify-center"
@@ -763,21 +781,34 @@ export default function CourseModules() {
                       <FolderGit2 className="w-4 h-4 text-pink-600" />
                       Project
                     </h4>
-                    <button 
-                      onClick={() => handleOpenDocument(activeModule.projectTemplateUrl!, `Project Template: ${activeModule.title}`)}
-                      className="w-full flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-pink-600 shadow-sm">
-                          <FolderGit2 className="w-5 h-5" />
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleOpenDocument(activeModule.projectTemplateUrl!, `Project Template: ${activeModule.title}`, false)}
+                        className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-pink-600 shadow-sm">
+                            <FolderGit2 className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-900">View Template</p>
+                            <p className="text-xs text-gray-500">Starting files for your project</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-gray-900">View Template</p>
-                          <p className="text-xs text-gray-500">Starting files for your project</p>
-                        </div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
-                    </button>
+                        <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
+                      </button>
+                      {(enableDocumentDownloads || user?.role !== 'student') && (
+                        <a 
+                          href={`/api/download?url=${encodeURIComponent(activeModule.projectTemplateUrl!)}&title=${encodeURIComponent(`Project Template - ${activeModule.title}`)}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center"
+                          title="Download Project Template"
+                        >
+                          <Download className="w-5 h-5" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

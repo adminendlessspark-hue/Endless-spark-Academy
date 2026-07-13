@@ -72,6 +72,33 @@ export default function Registration() {
 
   const watchExperience = watch('experienceYears');
   const isFresher = watchExperience === 'Fresher';
+  const watchDate = watch('preferredDate');
+
+  const getSlotsForDate = (dateString: string) => {
+    if (!dateString) return [];
+    const [year, month, dayNum] = dateString.split('-').map(Number);
+    // Explicitly use noon to prevent timezone shifts to previous/next day
+    const date = new Date(year, month - 1, dayNum, 12, 0, 0);
+    const day = date.getDay(); // 0 = Sun, 1 = Mon, ...
+    const slots = [];
+
+    // Saturday (6) and Sunday (0): every two hours 9:00 AM to 5:00 PM
+    if (day === 6 || day === 0) {
+      slots.push("09:00 AM - 11:00 AM");
+      slots.push("11:00 AM - 01:00 PM");
+      slots.push("01:00 PM - 03:00 PM");
+      slots.push("03:00 PM - 05:00 PM");
+    }
+
+    // Monday to Friday (1 to 5): Only available 7:30 PM to 8:00 PM
+    if (day >= 1 && day <= 5) {
+      slots.push("07:30 PM - 08:00 PM");
+    }
+
+    return slots;
+  };
+
+  const slots = getSlotsForDate(watchDate || '');
 
   const onSubmit = async (data: RegistrationFormData) => {
     console.log('Registration Data:', data);
@@ -537,12 +564,13 @@ Endless Spark School of Printing and Packaging Admissions Team`);
                 <label className="block text-sm font-medium text-gray-700 mb-1">Preferred Time</label>
                 <select
                   {...register('preferredTime', { required: 'Time is required' })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white"
+                  disabled={!watchDate}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all bg-gray-50 focus:bg-white disabled:opacity-50"
                 >
-                  <option value="">Select time</option>
-                  <option value="10:00">10:00 AM</option>
-                  <option value="14:00">02:00 PM</option>
-                  <option value="18:00">06:00 PM</option>
+                  <option value="">{watchDate ? "Select time slot" : "Select date first"}</option>
+                  {slots.map((slot) => (
+                    <option key={slot} value={slot}>{slot}</option>
+                  ))}
                 </select>
                 {errors.preferredTime && <p className="text-red-500 text-xs mt-1">{errors.preferredTime.message}</p>}
               </div>

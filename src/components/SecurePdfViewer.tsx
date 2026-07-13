@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download, AlertTriangle, ExternalLink } from 'lucide-react';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { getDirectDownloadUrl } from '../utils';
@@ -36,17 +36,20 @@ export default function SecurePdfViewer({
   const [scale, setScale] = useState(1.0);
 
   const [pdfData, setPdfData] = useState<Blob | string | ArrayBuffer | null>(null);
+  const [isImage, setIsImage] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   React.useEffect(() => {
     let isMounted = true;
     const abortControllers: AbortController[] = [];
+    let objectUrlToRevoke: string | null = null;
 
     const fetchPdf = async () => {
       setIsLoading(true);
       setLoadError(null);
       setPdfData(null);
+      setIsImage(false);
       
       const directUrl = getDirectDownloadUrl(url);
       
@@ -91,7 +94,7 @@ export default function SecurePdfViewer({
         
         try {
           const fetchUrl = urlsToTry[i];
-          console.log(`Attempting to fetch PDF from: ${fetchUrl}`);
+          console.log(`Attempting to fetch document from: ${fetchUrl}`);
           
           // 8 second timeout per attempt to prevent hanging
           const timeoutId = setTimeout(() => abortController.abort(), 8000);
@@ -103,6 +106,19 @@ export default function SecurePdfViewer({
           
           const blob = await response.blob();
           
+          // Check if it is an image
+          if (blob.type.startsWith('image/')) {
+            if (isMounted) {
+              const objUrl = URL.createObjectURL(blob);
+              objectUrlToRevoke = objUrl;
+              setPdfData(objUrl);
+              setIsImage(true);
+              setIsLoading(false);
+              success = true;
+              break;
+            }
+          }
+
           // Basic validation to ensure we didn't get an HTML error page from the proxy
           if (blob.type.includes('text/html') || blob.size < 1000) {
              throw new Error('Invalid PDF data received');
@@ -118,6 +134,7 @@ export default function SecurePdfViewer({
 
           if (isMounted) {
             setPdfData(arrayBuffer);
+            setIsImage(false);
             setIsLoading(false);
             success = true;
             break;
@@ -138,6 +155,9 @@ export default function SecurePdfViewer({
     return () => {
       isMounted = false;
       abortControllers.forEach(controller => controller.abort());
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
     };
   }, [url]);
 
@@ -189,8 +209,7 @@ export default function SecurePdfViewer({
         <div className="flex items-center gap-4">
           {!isSecure && (
             <a 
-              href={getDirectDownloadUrl(url)} 
-              download 
+              href={`/api/download?url=${encodeURIComponent(getDirectDownloadUrl(url))}&title=${encodeURIComponent(title || 'document')}`} 
               target="_blank" 
               rel="noopener noreferrer"
               className="p-2 hover:bg-gray-700 rounded-lg transition-colors text-white shrink-0 flex items-center gap-1.5" 
@@ -218,7 +237,60 @@ export default function SecurePdfViewer({
         {isLoading ? (
           <div className="flex items-center justify-center h-64 text-gray-500">Loading document...</div>
         ) : loadError ? (
-          <div className="flex items-center justify-center h-64 text-red-500 text-center px-4">{loadError}</div>
+          <div className="flex flex-col items-center justify-center p-8 max-w-lg mx-auto text-center bg-white rounded-3xl border border-gray-150 shadow-lg my-12">
+            <div className="w-16 h-16 bg-pink-50 rounded-full flex items-center justify-center text-pink-500 mb-5">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">Secure Viewer Connection Notice</h4>
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+              We encountered a connection constraint or secure CORS policy while rendering this document inside the integrated player. Don't worry, you can still view or download it directly using the links below:
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+              <a 
+                href={url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                View Original Link
+              </a>
+              <a 
+                href={`/api/download?url=${encodeURIComponent(getDirectDownloadUrl(url))}&title=${encodeURIComponent(title || 'document')}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="px-5 py-3 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                Download Directly
+              </a>
+            </div>
+          </div>
+        ) : isImage && pdfData ? (
+          <div className="relative inline-block overflow-auto max-w-full">
+            <img 
+              src={pdfData as string} 
+              alt={title || 'Document Image'} 
+              style={{ transform: `scale(${scale})`, transformOrigin: 'center center', transition: 'transform 0.2s ease' }}
+              className="max-w-full shadow-2xl rounded-xl"
+              onContextMenu={(e) => {
+                if (isSecure) {
+                  e.preventDefault();
+                  return false;
+                }
+              }}
+            />
+            {/* Watermark Overlay */}
+            {isSecure && (userName || userId) && (
+              <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden flex flex-wrap justify-center items-center opacity-10 select-none">
+                {Array.from({ length: 20 }).map((_, i) => (
+                  <div key={i} className="transform -rotate-45 p-8 text-xl font-bold text-gray-900 whitespace-nowrap">
+                    {userName} {userName && userId ? '-' : ''} {userId}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         ) : pdfData ? (
           <Document
             file={pdfData}

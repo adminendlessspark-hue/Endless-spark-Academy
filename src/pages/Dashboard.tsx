@@ -1,5 +1,5 @@
 import { User, TopicScore, LeaveRequest, Holiday, CourseType, CourseModule, TrainingRecord, PlacementSettings } from '../types';
-import { CircleCheck, Circle, Clock, ArrowRight, FileText, Award, Download, Printer, X, ShieldAlert, Key, Calendar, Send, Info, Video, IdCard, IndianRupee, Smartphone, BookOpen, FolderKanban, CheckSquare, FileCheck, Briefcase, Zap, Camera, Upload, MessageSquare } from 'lucide-react';
+import { CircleCheck, Circle, Clock, ArrowRight, FileText, Award, Download, Printer, X, ShieldAlert, Key, Calendar, Send, Info, Video, IdCard, IndianRupee, Smartphone, BookOpen, FolderKanban, CheckSquare, FileCheck, Briefcase, Zap, Camera, Upload, MessageSquare, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { cn, formatCourseName } from '../utils';
@@ -1019,28 +1019,93 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
 
       {!user.isApproved ? (
         <div className="bg-pink-50 p-8 rounded-3xl border border-pink-100 text-center">
-          <Clock className="w-12 h-12 text-pink-600 mx-auto mb-4 animate-pulse" />
-          {(!user.applicationStatus || user.applicationStatus === 'none' || user.applicationStatus === 'pending') ? (
-            <>
-              <h2 className="text-2xl font-bold text-pink-900">
-                {user.demoData?.completed ? 'Demo Completed' : 'Demo Scheduled'}
+          {user.demoData?.cancelledClash ? (
+            <div className="py-6">
+              <ShieldAlert className="w-16 h-16 text-rose-600 mx-auto mb-4 animate-bounce" />
+              <h2 className="text-2xl font-bold text-rose-900">
+                Demo Registration Clash
               </h2>
-              <p className="text-pink-700 mt-2 max-w-lg mx-auto mb-6">
-                {user.demoData?.completed 
-                  ? "Your demo has been completed! You can now apply for the full course."
-                  : "Thank you for registering for a demo! Your demo request has been received. Our team will contact you shortly to confirm the schedule."}
+              <p className="text-rose-700 mt-2 max-w-lg mx-auto mb-6 leading-relaxed">
+                Your previously selected demo slot has been booked by another student and is no longer available. 
+                Please schedule another slot so we can guide you in a 1-on-1 session.
               </p>
-              {user.demoData?.completed && (
-                <button 
-                  onClick={() => window.location.href = '/apply'}
-                  className="btn-primary inline-flex items-center gap-2"
-                >
-                  <FileText className="w-5 h-5" />
-                  Apply for Course
-                </button>
-              )}
-            </>
+              <button 
+                onClick={async () => {
+                  // Reset registeredForDemo and cancelledClash to allow rescheduling
+                  await updateUser({ 
+                    registeredForDemo: false,
+                    demoData: {
+                      ...(user?.demoData || {}),
+                      cancelledClash: false
+                    } as any
+                  });
+                  window.location.href = '/register';
+                }}
+                className="btn-primary bg-rose-600 hover:bg-rose-700 inline-flex items-center gap-2"
+              >
+                <Calendar className="w-5 h-5" />
+                Reschedule New Demo Slot
+              </button>
+            </div>
           ) : (
+            <>
+              <Clock className="w-12 h-12 text-pink-600 mx-auto mb-4 animate-pulse" />
+              {(!user.applicationStatus || user.applicationStatus === 'none' || user.applicationStatus === 'pending') ? (
+                <>
+                  <h2 className="text-2xl font-bold text-pink-900">
+                    {user.demoData?.completed ? 'Demo Completed' : 'Demo Scheduled'}
+                  </h2>
+                  <p className="text-pink-700 mt-2 max-w-lg mx-auto mb-6">
+                    {user.demoData?.completed 
+                      ? "Your demo has been completed! You can now apply for the full course."
+                      : "Thank you for registering for a demo! Your demo request has been received. Our team will contact you shortly to confirm the schedule."}
+                  </p>
+
+                  {/* Share Demo Classroom link directly with student */}
+                  {!user.demoData?.completed && user.demoData?.roomId && (
+                    <div className="mt-6 p-6 bg-white border border-pink-200 rounded-3xl max-w-lg mx-auto text-left shadow-lg">
+                      <h4 className="font-bold text-pink-900 flex items-center gap-2 mb-2">
+                        <Video className="w-5 h-5 text-pink-500 animate-pulse" />
+                        Your Live Demo Classroom is Ready
+                      </h4>
+                      <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+                        Your autopilot 1-on-1 demo session is scheduled for <strong className="text-pink-600">{user.demoData.preferredDate}</strong> at <strong className="text-pink-600">{user.demoData.preferredTime}</strong>. You can join your virtual classroom directly:
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <a 
+                          href={`/classroom/${user.demoData.roomId}`}
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex-1 py-3 px-4 bg-pink-600 hover:bg-pink-700 text-white font-bold rounded-2xl text-sm transition-colors flex items-center justify-center gap-2 shadow-md"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Join Live Virtual Classroom
+                        </a>
+                        <button 
+                          onClick={() => {
+                            const shareMsg = `Hello! 🌟 Here is my Live Demo Classroom link at Endless Spark:\n📅 Date/Time: ${user.demoData?.preferredDate} at ${user.demoData?.preferredTime}\n💻 Join my Live Virtual Classroom directly here:\n${window.location.origin}/classroom/${user.demoData?.roomId}\n\n(No downloads or signups required. Open on Google Chrome / Apple Safari to begin!).`;
+                            window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareMsg)}`, '_blank');
+                          }}
+                          className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-sm transition-colors flex items-center justify-center gap-2 shadow-md"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          Share on WhatsApp
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {user.demoData?.completed && (
+                    <button 
+                      onClick={() => window.location.href = '/apply'}
+                      className="btn-primary inline-flex items-center gap-2"
+                    >
+                      <FileText className="w-5 h-5" />
+                      Apply for Course
+                    </button>
+                  )}
+                </>
+              ) : (
             <>
               <h2 className="text-2xl font-bold text-pink-900">Application Under Review</h2>
               <p className="text-pink-700 mt-2 max-w-lg mx-auto font-medium">
@@ -1090,6 +1155,8 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
               </button>
             </div>
           )}
+        </>
+      )}
         </div>
       ) : (
         <>

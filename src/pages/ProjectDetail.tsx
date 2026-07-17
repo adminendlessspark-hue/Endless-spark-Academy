@@ -1986,18 +1986,60 @@ export default function ProjectDetail() {
             )}
 
             {project.qcRejections && project.qcRejections.length > 0 && (
-              <section>
-                <h3 className="text-lg font-bold text-red-600 mb-4 flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5" /> QC Feedback
-                </h3>
-                <div className="space-y-4">
+              <section className="bg-white rounded-2xl border border-red-100 overflow-hidden p-6 mt-8">
+                <div className="flex items-center justify-between border-b border-red-50 pb-3 mb-4">
+                  <h3 className="text-lg font-bold text-red-600 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 animate-pulse" /> QC Rejection History
+                  </h3>
+                  <span className="bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full border border-red-200">
+                    Rejected {project.qcRejections.length} {project.qcRejections.length === 1 ? 'Time' : 'Times'}
+                  </span>
+                </div>
+                <div className="space-y-4 max-h-[450px] overflow-y-auto pr-1">
                   {project.qcRejections.map((rejection, idx) => (
-                    <div key={idx} className="bg-red-50 border border-red-100 p-4 rounded-xl">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="font-bold text-red-800">{rejection.errorCategory} Error</span>
-                        <span className="text-xs text-red-500">{new Date(rejection.timestamp).toLocaleString()}</span>
+                    <div key={idx} className="bg-red-50/50 border border-red-100 p-4 rounded-xl space-y-2.5">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-red-700 bg-red-100/70 px-2 py-0.5 rounded mr-2">
+                            Rejection #{idx + 1}
+                          </span>
+                          <span className="font-bold text-slate-800 text-sm">
+                            {rejection.errorCategory} Error
+                          </span>
+                        </div>
+                        <span className="text-xs text-red-500 font-medium font-mono">
+                          {rejection.timestamp ? new Date(rejection.timestamp).toLocaleString() : 'N/A'}
+                        </span>
                       </div>
-                      <p className="text-red-700 text-sm">{rejection.notes}</p>
+                      
+                      <p className="text-slate-700 text-xs leading-relaxed bg-white p-2.5 rounded-lg border border-red-100/50">
+                        {rejection.notes || rejection.reason}
+                      </p>
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-500 pt-1">
+                        <div>
+                          <span className="font-semibold text-slate-600">Reviewer:</span> {rejection.rejectedBy || 'Anonymous QC'}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-600">Sent back to:</span> <span className="font-bold text-red-700 uppercase text-[10px]">{rejection.targetStage || 'production'}</span>
+                        </div>
+                      </div>
+
+                      {rejection.correctionPdfUrl && (
+                        <div className="mt-2 pt-2 border-t border-red-100 flex items-center justify-between">
+                          <span className="text-[11px] text-red-600 font-semibold flex items-center gap-1">
+                            📂 Correction Reference Path:
+                          </span>
+                          <a 
+                            href={rejection.correctionPdfUrl.match(/^https?:\/\//i) ? rejection.correctionPdfUrl : `https://${rejection.correctionPdfUrl}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-100 hover:bg-red-200 px-3 py-1 rounded-xl transition-colors border border-red-200 shadow-sm"
+                          >
+                            <FileCheck className="w-3.5 h-3.5" /> View Correction PDF
+                          </a>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2263,9 +2305,15 @@ export default function ProjectDetail() {
                             }
                             try {
                               const newRejection = {
+                                id: `rej_${Date.now()}`,
                                 timestamp: new Date().toISOString(),
+                                rejectedAt: new Date().toISOString(),
+                                rejectedBy: user?.name || 'Anonymous QC',
                                 errorCategory: detailQcSelectedCategories.join(', '),
-                                notes: detailQcRejectionNotes
+                                notes: detailQcRejectionNotes,
+                                reason: detailQcRejectionNotes,
+                                targetStage: detailQcRejectionTargetStage,
+                                correctionPdfUrl: detailQcRejectionPdfUrl || null
                               };
                               await updateDoc(doc(db, 'student_projects', project.id), {
                                 status: detailQcRejectionTargetStage,

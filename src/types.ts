@@ -370,9 +370,15 @@ export interface ChatMessage {
 }
 
 export interface ProjectQCRejection {
+  id?: string;
   timestamp: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
   errorCategory: string;
   notes: string;
+  reason?: string;
+  targetStage?: string;
+  correctionPdfUrl?: string | null;
 }
 
 export interface ClientBrief {

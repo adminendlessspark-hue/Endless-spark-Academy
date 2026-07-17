@@ -4,7 +4,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import { Link, useNavigate } from 'react-router-dom';
-import { FolderKanban, MessageSquare, ChevronDown, ChevronUp, Image, Download, ExternalLink, Trash2, CheckCircle2, Globe, Info } from 'lucide-react';
+import { FolderKanban, MessageSquare, ChevronDown, ChevronUp, Image, Download, ExternalLink, Trash2, CheckCircle2, Globe, Info, AlertCircle } from 'lucide-react';
 import { cn } from '../utils';
 import { StudentProject } from '../types';
 import { extractReworkItems } from '../components/ProductionReworkChecklist';
@@ -15,6 +15,7 @@ export default function StudentProjects() {
   const [projects, setProjects] = useState<StudentProject[]>([]);
   const [expandedRow, setExpandedRow] = useState<Record<string, boolean>>({});
   const [localFinalFileLinks, setLocalFinalFileLinks] = useState<Record<string, string>>({});
+  const [showRejectionHistory, setShowRejectionHistory] = useState<Record<string, boolean>>({});
 
   const toggleRow = (id: string) => {
     setExpandedRow(prev => ({ ...prev, [id]: !prev[id] }));
@@ -634,9 +635,71 @@ export default function StudentProjects() {
                                     Download Correction PDF
                                   </a>
                                   {project.qcRejections && project.qcRejections.length > 0 && (
-                                    <div className="w-full mt-4 p-4 bg-white/50 rounded-2xl border border-red-100">
-                                      <p className="text-xs font-bold text-red-800 uppercase mb-2">Latest Rejection Reason ({project.qcRejections[project.qcRejections.length - 1].errorCategory})</p>
-                                      <p className="text-sm text-red-700 italic">"{project.qcRejections[project.qcRejections.length - 1].notes}"</p>
+                                    <div className="w-full mt-4 space-y-3">
+                                      <div className="p-4 bg-white/60 rounded-2xl border border-red-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm text-left">
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-xs font-black text-red-800 uppercase tracking-wide">
+                                            Latest Rejection Reason ({project.qcRejections[project.qcRejections.length - 1].errorCategory})
+                                          </p>
+                                          <p className="text-sm text-red-700 italic mt-1 truncate">
+                                            "{project.qcRejections[project.qcRejections.length - 1].notes || project.qcRejections[project.qcRejections.length - 1].reason}"
+                                          </p>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => setShowRejectionHistory(prev => ({ ...prev, [project.id]: !prev[project.id] }))}
+                                          className="shrink-0 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
+                                        >
+                                          <Info className="w-3.5 h-3.5" />
+                                          {showRejectionHistory[project.id] ? 'Hide' : 'Show All'} History ({project.qcRejections.length})
+                                        </button>
+                                      </div>
+
+                                      {showRejectionHistory[project.id] && (
+                                        <div className="bg-white rounded-2xl border border-red-100 p-4 space-y-3 max-h-[250px] overflow-y-auto shadow-inner text-left animate-in slide-in-from-top-2 duration-200">
+                                          <p className="text-xs font-extrabold text-red-900 border-b border-red-50 pb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+                                            <AlertCircle className="w-3.5 h-3.5 text-red-600 animate-pulse" /> Rejection Log (Newest first)
+                                          </p>
+                                          {[...project.qcRejections].reverse().map((rejection, idx, arr) => {
+                                            const originalIndex = arr.length - 1 - idx;
+                                            return (
+                                              <div key={originalIndex} className="p-3 bg-red-50/30 rounded-xl border border-red-100/50 space-y-2">
+                                                <div className="flex justify-between items-start">
+                                                  <div>
+                                                    <span className="text-[9px] font-black uppercase tracking-wider text-red-700 bg-red-100 px-1.5 py-0.5 rounded mr-1.5">
+                                                      Rejection #{originalIndex + 1}
+                                                    </span>
+                                                    <span className="font-bold text-slate-800 text-xs">
+                                                      {rejection.errorCategory} Error
+                                                    </span>
+                                                  </div>
+                                                  <span className="text-[10px] text-red-500 font-medium font-mono">
+                                                    {rejection.timestamp ? new Date(rejection.timestamp).toLocaleDateString() : 'N/A'}
+                                                  </span>
+                                                </div>
+                                                <p className="text-xs text-slate-700 leading-normal bg-white p-2 rounded border border-red-100/20">
+                                                  {rejection.notes || rejection.reason}
+                                                </p>
+                                                <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[10px] text-slate-500 font-medium">
+                                                  <div>
+                                                    Reviewer: <span className="text-slate-600">{rejection.rejectedBy || 'Anonymous QC'}</span>
+                                                  </div>
+                                                  {rejection.correctionPdfUrl && (
+                                                    <a 
+                                                      href={rejection.correctionPdfUrl.match(/^https?:\/\//i) ? rejection.correctionPdfUrl : `https://${rejection.correctionPdfUrl}`} 
+                                                      target="_blank" 
+                                                      rel="noopener noreferrer"
+                                                      className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 hover:underline"
+                                                    >
+                                                      <Download className="w-3 h-3" /> View Correction PDF
+                                                    </a>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>

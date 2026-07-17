@@ -412,12 +412,14 @@ export default function PublicQcPanel() {
     try {
       const newRejection = {
         id: `rej_${Date.now()}`,
+        timestamp: new Date().toISOString(),
         rejectedBy: user?.name || 'Anonymous QC Admin',
         rejectedAt: new Date().toISOString(),
         reason: rejectionNotes,
         errorCategory: rejectionCategories.join(', '),
         notes: rejectionNotes,
-        targetStage: rejectionTargetStage
+        targetStage: rejectionTargetStage,
+        correctionPdfUrl: correctionPdfUrl || null
       };
 
       const projectRef = doc(db, 'student_projects', project.id);
@@ -1875,6 +1877,62 @@ export default function PublicQcPanel() {
                                 )}
 
                               </div>
+
+                              {/* Rejection History Section */}
+                              {project.qcRejections && project.qcRejections.length > 0 && (
+                                <div className="bg-white p-5 rounded-2xl border border-red-100 shadow-sm space-y-4">
+                                  <div className="flex items-center justify-between border-b border-red-50 pb-2">
+                                    <h4 className="text-xs font-bold text-red-650 uppercase tracking-wider flex items-center gap-2">
+                                      <AlertCircle className="w-4 h-4 text-red-500 animate-pulse" /> Rejection History
+                                    </h4>
+                                    <span className="bg-red-50 border border-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                      Rejected {project.qcRejections.length} {project.qcRejections.length === 1 ? 'Time' : 'Times'}
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                                    {project.qcRejections.map((rejection, idx) => (
+                                      <div key={idx} className="bg-red-50/40 p-3 rounded-xl border border-red-100/50 space-y-1.5 text-xs text-slate-700">
+                                        <div className="flex justify-between items-center">
+                                          <span className="font-extrabold text-red-800 text-[10px] bg-red-100 px-1.5 py-0.5 rounded">
+                                            REJECTION #{idx + 1}
+                                          </span>
+                                          <span className="text-[10px] text-red-400 font-mono font-semibold">
+                                            {rejection.timestamp ? new Date(rejection.timestamp).toLocaleString() : 'N/A'}
+                                          </span>
+                                        </div>
+
+                                        <p className="bg-white p-2 rounded border border-red-100/30 text-slate-800 font-medium text-[11px] leading-relaxed">
+                                          {rejection.notes || rejection.reason}
+                                        </p>
+
+                                        <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500 pt-0.5 font-medium">
+                                          <div>
+                                            <span className="text-gray-400">By:</span> {rejection.rejectedBy || 'Anonymous QC'}
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-400">To:</span> <span className="font-bold text-red-700 uppercase">{rejection.targetStage || 'production'}</span>
+                                          </div>
+                                        </div>
+
+                                        {rejection.correctionPdfUrl && (
+                                          <div className="mt-2 pt-1.5 border-t border-red-100/40 flex items-center justify-between">
+                                            <span className="text-[10px] font-bold text-red-700">Correction PDF Path:</span>
+                                            <a 
+                                              href={rejection.correctionPdfUrl.match(/^https?:\/\//i) ? rejection.correctionPdfUrl : `https://${rejection.correctionPdfUrl}`} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1 text-[9px] font-extrabold text-red-700 bg-red-100 hover:bg-red-200 px-2 py-1 rounded transition-colors border border-red-200"
+                                            >
+                                              <ExternalLink className="w-2.5 h-2.5" /> View Correction PDF
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
 
                             </div>
 

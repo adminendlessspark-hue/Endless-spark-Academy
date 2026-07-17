@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, where, updateDoc, doc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
+import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import { Link, useNavigate } from 'react-router-dom';
 import { FolderKanban, MessageSquare, ChevronDown, ChevronUp, Image, Download, ExternalLink, Trash2, CheckCircle2, Globe, Info } from 'lucide-react';
 import { cn } from '../utils';
@@ -63,6 +64,17 @@ export default function StudentProjects() {
     });
   }, [projects, user?.id, user?.email, user?.role]);
 
+  // Auto-pause active project timers if student is inactive for 15 minutes on this page
+  useIdleTimeout(async () => {
+    if (user?.role === 'student') {
+      const runningProjects = projects.filter(p => p.isTimerRunning);
+      for (const p of runningProjects) {
+        console.log(`Auto-pausing project ${p.id} due to student idle timeout on list page.`);
+        await handleWorkStatusChange(p, 'Paused');
+      }
+    }
+  }, 15);
+
   const handleWorkStatusChange = async (project: StudentProject, newWorkStatus: string) => {
     // QC Protection
     if (project.status === 'qc' || project.status === 'approved') {
@@ -95,7 +107,12 @@ export default function StudentProjects() {
       if (project.isTimerRunning && project.lastTimerStart) {
         const startTime = new Date(project.lastTimerStart).getTime();
         const endTime = Date.now();
-        const sessionTimeMinutes = Math.ceil((endTime - startTime) / 60000);
+        let sessionTimeMinutes = Math.ceil((endTime - startTime) / 60000);
+        
+        // Cap single session time at 10 hours (600 minutes) as requested
+        if (sessionTimeMinutes > 600) {
+          sessionTimeMinutes = 600;
+        }
         
         updates.isTimerRunning = false;
         updates.lastTimerStart = null;
@@ -108,9 +125,14 @@ export default function StudentProjects() {
       const currentStageIndex = stages.indexOf(project.status || 'client');
 
       // Calculate total actual time after this operation
-      const sessionTime = project.isTimerRunning && project.lastTimerStart
+      let sessionTime = project.isTimerRunning && project.lastTimerStart
         ? Math.ceil((Date.now() - new Date(project.lastTimerStart).getTime()) / 60000)
         : 0;
+      
+      // Cap single session time at 10 hours (600 minutes) as requested
+      if (sessionTime > 600) {
+        sessionTime = 600;
+      }
       
       const totalTimeAfter = (project.actualTime || 0) + sessionTime;
       const lastStageTime = project.lastStageActualTime || 0;
@@ -270,7 +292,13 @@ export default function StudentProjects() {
     if (project.isTimerRunning && project.lastTimerStart) {
       const startTime = new Date(project.lastTimerStart).getTime();
       const endTime = Date.now();
-      const sessionTimeMinutes = Math.ceil((endTime - startTime) / 60000);
+      let sessionTimeMinutes = Math.ceil((endTime - startTime) / 60000);
+      
+      // Cap single session time at 10 hours (600 minutes) as requested
+      if (sessionTimeMinutes > 600) {
+        sessionTimeMinutes = 600;
+      }
+      
       updates.isTimerRunning = false;
       updates.lastTimerStart = null;
       updates.actualTime = (project.actualTime || 0) + sessionTimeMinutes;

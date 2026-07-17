@@ -55,15 +55,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const pauseRunningProjects = useCallback(async (studentId: string) => {
+    try {
+      const q = query(
+        collection(db, 'student_projects'),
+        where('studentId', '==', studentId),
+        where('isTimerRunning', '==', true)
+      );
+      const querySnapshot = await getDocs(q);
+      for (const docSnap of querySnapshot.docs) {
+        const p = docSnap.data();
+        const startTime = new Date(p.lastTimerStart).getTime();
+        const endTime = Date.now();
+        let sessionTimeMinutes = Math.ceil((endTime - startTime) / 60000);
+        
+        // Cap single session time at 10 hours (600 minutes) as requested
+        if (sessionTimeMinutes > 600) {
+          sessionTimeMinutes = 600;
+        }
+
+        await updateDoc(doc(db, 'student_projects', docSnap.id), {
+          isTimerRunning: false,
+          lastTimerStart: null,
+          workStatus: 'Paused',
+          actualTime: (p.actualTime || 0) + sessionTimeMinutes,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error("Error auto-pausing projects on logout/idle:", error);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
+    if (user?.id && user.role === 'student') {
+      await pauseRunningProjects(user.id);
+    }
     localStorage.removeItem('sandbox_bypass_user');
     await signOut(auth);
     setUser(null);
-  }, []);
+  }, [user, pauseRunningProjects]);
 
   const isAdmin = user?.role === 'admin' || (auth.currentUser?.email && ADMIN_EMAILS.includes(auth.currentUser.email)) || false;
   const isQC = user?.role === 'qc';
   const isElevated = isAdmin || isQC;
+
+  // Auto-pause active project timers if a student is inactive for 15 minutes
+  useIdleTimeout(() => {
+    if (user && user.role === 'student' && !isAdmin) {
+      console.log("Student idle for 15 minutes, auto-pausing running projects...");
+      pauseRunningProjects(user.id);
+    }
+  }, 15);
 
   // Idle timeout: 30 minutes of inactivity logs students out for security
   useIdleTimeout(() => {
@@ -72,6 +115,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout();
     }
   }, 30);
+
+  // Auto-pause project on page unload/close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (user && user.role === 'student' && user.id) {
+        pauseRunningProjects(user.id);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [user, pauseRunningProjects]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {

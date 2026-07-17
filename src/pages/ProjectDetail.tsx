@@ -5,6 +5,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
+import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import { StudentProject, StudentQuery } from '../types';
 import { downloadDataUrlFile } from './QueryTracker';
 import { ArrowLeft, Clock, CheckCircle, AlertCircle, FileText, Play, Square, ExternalLink, Cloud, Calendar, Printer, ChevronDown, ChevronUp, FileCheck, Upload, Download, Loader2, Globe, Lightbulb, HelpCircle } from 'lucide-react';
@@ -189,9 +190,14 @@ export default function ProjectDetail() {
     if (!project) return;
     
     // Calculate total actual time after this operation (if timer is running)
-    const sessionTime = project.isTimerRunning && project.lastTimerStart
+    let sessionTime = project.isTimerRunning && project.lastTimerStart
       ? Math.ceil((Date.now() - new Date(project.lastTimerStart).getTime()) / 60000)
       : 0;
+    
+    // Cap session time at 10 hours (600 minutes)
+    if (sessionTime > 600) {
+      sessionTime = 600;
+    }
     
     const totalTimeAfter = (project.actualTime || 0) + sessionTime;
     const lastStageTime = project.lastStageActualTime || 0;
@@ -258,7 +264,13 @@ export default function ProjectDetail() {
       if (project.isTimerRunning && project.lastTimerStart) {
         const startTime = new Date(project.lastTimerStart).getTime();
         const endTime = Date.now();
-        const sessionTimeMinutes = Math.ceil((endTime - startTime) / 60000);
+        let sessionTimeMinutes = Math.ceil((endTime - startTime) / 60000);
+        
+        // Cap single session time at 10 hours (600 minutes) as requested
+        if (sessionTimeMinutes > 600) {
+          sessionTimeMinutes = 600;
+        }
+        
         updates.isTimerRunning = false;
         updates.lastTimerStart = null;
         updates.actualTime = (project.actualTime || 0) + sessionTimeMinutes;
@@ -474,17 +486,35 @@ export default function ProjectDetail() {
     if (project?.isTimerRunning && project.lastTimerStart) {
       const startTime = new Date(project.lastTimerStart).getTime();
       
+      const updateElapsed = () => {
+        const currentElapsed = Math.floor((Date.now() - startTime) / 1000);
+        // If elapsed time exceeds 10 hours (36000 seconds), auto-pause the project
+        if (currentElapsed >= 36000) {
+          clearInterval(interval);
+          handleWorkStatusChange('Paused');
+          alert("Your project session has reached the maximum allowed limit of 10 hours. The timer has been automatically paused.");
+        } else {
+          setElapsedTime(currentElapsed);
+        }
+      };
+
       // Initial calculation
-      setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+      updateElapsed();
       
-      interval = setInterval(() => {
-        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
-      }, 1000);
+      interval = setInterval(updateElapsed, 1000);
     } else {
       setElapsedTime(0);
     }
     return () => clearInterval(interval);
   }, [project?.isTimerRunning, project?.lastTimerStart]);
+
+  // Auto-pause active project timer if student is inactive for 15 minutes on this page
+  useIdleTimeout(async () => {
+    if (project && project.isTimerRunning && user?.role === 'student') {
+      console.log("Student idle for 15 minutes, auto-pausing running project on detail page...");
+      await handleWorkStatusChange('Paused');
+    }
+  }, 15);
 
   // Main return happens after all hooks are defined
   if (loading) {
@@ -536,7 +566,12 @@ export default function ProjectDetail() {
       if (project.isTimerRunning && project.lastTimerStart) {
         const startTime = new Date(project.lastTimerStart).getTime();
         const endTime = Date.now();
-        const sessionTimeMinutes = Math.ceil((endTime - startTime) / 60000);
+        let sessionTimeMinutes = Math.ceil((endTime - startTime) / 60000);
+        
+        // Cap single session time at 10 hours (600 minutes) as requested
+        if (sessionTimeMinutes > 600) {
+          sessionTimeMinutes = 600;
+        }
         
         updates.isTimerRunning = false;
         updates.lastTimerStart = null;
@@ -546,9 +581,14 @@ export default function ProjectDetail() {
 
     if (newWorkStatus === 'Completed') {
       // Calculate total actual time after this operation
-      const sessionTime = project.isTimerRunning && project.lastTimerStart
+      let sessionTime = project.isTimerRunning && project.lastTimerStart
         ? Math.ceil((Date.now() - new Date(project.lastTimerStart).getTime()) / 60000)
         : 0;
+      
+      // Cap single session time at 10 hours (600 minutes) as requested
+      if (sessionTime > 600) {
+        sessionTime = 600;
+      }
       
       const totalTimeAfter = (project.actualTime || 0) + sessionTime;
       const lastStageTime = project.lastStageActualTime || 0;

@@ -23,7 +23,8 @@ import {
   Printer, 
   FileText,
   Download,
-  HelpCircle
+  HelpCircle,
+  Loader2
 } from 'lucide-react';
 import { cn, getDirectDownloadUrl } from '../utils';
 import { StudentProject, User } from '../types';
@@ -64,6 +65,12 @@ export default function PublicQcPanel() {
   const [rejectionCategories, setRejectionCategories] = useState<string[]>(['Typography']);
   const [rejectionNotes, setRejectionNotes] = useState<string>('');
   const [correctionPdfUrl, setCorrectionPdfUrl] = useState<string>('');
+
+  // States for correction PDF re-upload / editing
+  const [editingPdfProject, setEditingPdfProject] = useState<StudentProject | null>(null);
+  const [editingRejectionIndex, setEditingRejectionIndex] = useState<number | null>(null);
+  const [newCorrectionPdfUrl, setNewCorrectionPdfUrl] = useState<string>('');
+  const [isUpdatingCorrectionPdf, setIsUpdatingCorrectionPdf] = useState<boolean>(false);
 
   // Query raising form states for QC Panel
   const [raisingQueryForProjId, setRaisingQueryForProjId] = useState<string | null>(null);
@@ -463,6 +470,62 @@ export default function PublicQcPanel() {
       setExpandedProjectId(null);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `student_projects/${project.id}`);
+    }
+  };
+
+  const handleUpdateCorrectionPdf = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPdfProject) return;
+    setIsUpdatingCorrectionPdf(true);
+    try {
+      const projectRef = doc(db, 'student_projects', editingPdfProject.id);
+      let updatedRejections = [...(editingPdfProject.qcRejections || [])];
+
+      if (editingRejectionIndex !== null && editingRejectionIndex >= 0 && editingRejectionIndex < updatedRejections.length) {
+        // Edit specific rejection index
+        updatedRejections[editingRejectionIndex] = {
+          ...updatedRejections[editingRejectionIndex],
+          correctionPdfUrl: newCorrectionPdfUrl.trim()
+        };
+        
+        // If it's the latest rejection, also update the main project.correctionPdfUrl
+        if (editingRejectionIndex === updatedRejections.length - 1) {
+          await updateDoc(projectRef, {
+            correctionPdfUrl: newCorrectionPdfUrl.trim(),
+            qcRejections: updatedRejections,
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          await updateDoc(projectRef, {
+            qcRejections: updatedRejections,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } else {
+        // Fallback: update latest rejection and main correctionPdfUrl
+        const latestRejectionIndex = editingPdfProject.qcRejections ? editingPdfProject.qcRejections.length - 1 : -1;
+        if (latestRejectionIndex >= 0) {
+          updatedRejections[latestRejectionIndex] = {
+            ...updatedRejections[latestRejectionIndex],
+            correctionPdfUrl: newCorrectionPdfUrl.trim()
+          };
+        }
+        await updateDoc(projectRef, {
+          correctionPdfUrl: newCorrectionPdfUrl.trim(),
+          qcRejections: updatedRejections,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      alert('Correction PDF Google Drive link updated successfully!');
+      setEditingPdfProject(null);
+      setEditingRejectionIndex(null);
+      setNewCorrectionPdfUrl('');
+    } catch (err) {
+      console.error('Error updating correction PDF link in Public QC Panel:', err);
+      alert('Failed to update: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsUpdatingCorrectionPdf(false);
     }
   };
 
@@ -1710,6 +1773,39 @@ export default function PublicQcPanel() {
                                     </div>
                                   )}
                                 </div>
+
+                                {project.correctionPdfUrl && (
+                                  <div className="pt-2 border-t border-slate-100">
+                                    <p className="text-[10px] uppercase font-bold text-rose-500 tracking-wider mb-2 flex items-center gap-1">
+                                      <FileCheck className="w-3.5 h-3.5 text-rose-500" /> Active Correction PDF Link
+                                    </p>
+                                    <div className="space-y-2">
+                                      <p className="text-[10px] font-mono p-2 bg-red-50/50 rounded border border-red-100 font-medium text-slate-600 break-all leading-normal select-all">
+                                        {project.correctionPdfUrl}
+                                      </p>
+                                      <div className="flex gap-2">
+                                        <a 
+                                          href={project.correctionPdfUrl.match(/^https?:\/\//i) ? project.correctionPdfUrl : `https://${project.correctionPdfUrl}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex-1 flex items-center justify-center gap-1.5 bg-rose-600 text-white rounded-xl py-1.5 px-3 text-[11px] font-bold hover:bg-rose-700 transition-colors shadow-sm cursor-pointer"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" /> View PDF
+                                        </a>
+                                        <button 
+                                          onClick={() => {
+                                            setEditingPdfProject(project);
+                                            setEditingRejectionIndex(project.qcRejections ? project.qcRejections.length - 1 : null);
+                                            setNewCorrectionPdfUrl(project.correctionPdfUrl || '');
+                                          }}
+                                          className="flex-1 py-1.5 px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl text-[11px] font-bold transition-all border border-red-200 cursor-pointer"
+                                        >
+                                          Update Link
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                               
                               {/* QC Decision Center & Form */}
@@ -1943,14 +2039,27 @@ export default function PublicQcPanel() {
                                         {rejection.correctionPdfUrl && (
                                           <div className="mt-2 pt-1.5 border-t border-red-100/40 flex items-center justify-between">
                                             <span className="text-[10px] font-bold text-red-700">Correction PDF Path:</span>
-                                            <a 
-                                              href={rejection.correctionPdfUrl.match(/^https?:\/\//i) ? rejection.correctionPdfUrl : `https://${rejection.correctionPdfUrl}`} 
-                                              target="_blank" 
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-1 text-[9px] font-extrabold text-red-700 bg-red-100 hover:bg-red-200 px-2 py-1 rounded transition-colors border border-red-200"
-                                            >
-                                              <ExternalLink className="w-2.5 h-2.5" /> View Correction PDF
-                                            </a>
+                                            <div className="flex items-center gap-1.5">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setEditingPdfProject(project);
+                                                  setEditingRejectionIndex(idx);
+                                                  setNewCorrectionPdfUrl(rejection.correctionPdfUrl || '');
+                                                }}
+                                                className="text-[10px] font-bold text-red-600 hover:text-red-800 hover:underline cursor-pointer"
+                                              >
+                                                Edit Link
+                                              </button>
+                                              <a 
+                                                href={rejection.correctionPdfUrl.match(/^https?:\/\//i) ? rejection.correctionPdfUrl : `https://${rejection.correctionPdfUrl}`} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 text-[9px] font-extrabold text-red-700 bg-red-100 hover:bg-red-200 px-2 py-1 rounded transition-colors border border-red-200 cursor-pointer"
+                                              >
+                                                <ExternalLink className="w-2.5 h-2.5" /> View Correction PDF
+                                              </a>
+                                            </div>
                                           </div>
                                         )}
                                       </div>
@@ -2071,6 +2180,63 @@ export default function PublicQcPanel() {
               <span className="font-medium text-left">Studying Brand Guidelines & mandated rules.</span>
               <span className="font-mono text-[10px]">Secure Sandbox Document Preview</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Correction PDF Link Modal */}
+      {editingPdfProject && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150">
+            <h3 className="text-base font-extrabold text-slate-900 mb-2 flex items-center gap-2">
+              <FileCheck className="w-5 h-5 text-red-500 animate-pulse" />
+              Update Correction PDF Link
+            </h3>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              Enter the correct Google Drive folder or PDF link. This will automatically update the active correction file and the selected rejection log for the student in autopilot.
+            </p>
+            <form onSubmit={handleUpdateCorrectionPdf} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Google Drive / Correction Link
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newCorrectionPdfUrl}
+                  onChange={(e) => setNewCorrectionPdfUrl(e.target.value)}
+                  placeholder="https://drive.google.com/file/d/... or Google Drive URL"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-700 focus:bg-white focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingPdfProject(null);
+                    setEditingRejectionIndex(null);
+                    setNewCorrectionPdfUrl('');
+                  }}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingCorrectionPdf}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-100 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {isUpdatingCorrectionPdf ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Path'
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

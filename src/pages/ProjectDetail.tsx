@@ -71,6 +71,62 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleUpdateCorrectionPdf = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project) return;
+    setIsUpdatingCorrectionPdf(true);
+    try {
+      const projectRef = doc(db, 'student_projects', project.id);
+      let updatedRejections = [...(project.qcRejections || [])];
+
+      if (editingRejectionIndex !== null && editingRejectionIndex >= 0 && editingRejectionIndex < updatedRejections.length) {
+        // Edit specific rejection index
+        updatedRejections[editingRejectionIndex] = {
+          ...updatedRejections[editingRejectionIndex],
+          correctionPdfUrl: newCorrectionPdfUrl.trim()
+        };
+        
+        // If it's the latest rejection, also update the main project.correctionPdfUrl
+        if (editingRejectionIndex === updatedRejections.length - 1) {
+          await updateDoc(projectRef, {
+            correctionPdfUrl: newCorrectionPdfUrl.trim(),
+            qcRejections: updatedRejections,
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          await updateDoc(projectRef, {
+            qcRejections: updatedRejections,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } else {
+        // Fallback: update latest rejection and main correctionPdfUrl
+        const latestRejectionIndex = project.qcRejections ? project.qcRejections.length - 1 : -1;
+        if (latestRejectionIndex >= 0) {
+          updatedRejections[latestRejectionIndex] = {
+            ...updatedRejections[latestRejectionIndex],
+            correctionPdfUrl: newCorrectionPdfUrl.trim()
+          };
+        }
+        await updateDoc(projectRef, {
+          correctionPdfUrl: newCorrectionPdfUrl.trim(),
+          qcRejections: updatedRejections,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      alert('Correction PDF link updated successfully!');
+      setIsEditingCorrectionPdf(false);
+      setEditingRejectionIndex(null);
+      setNewCorrectionPdfUrl('');
+    } catch (err) {
+      console.error('Error updating correction PDF link:', err);
+      alert('Failed to update: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsUpdatingCorrectionPdf(false);
+    }
+  };
+
   const getViewerEmbedUrl = (url: string) => {
     if (!url) return '';
     if (url.includes('drive.google.com')) {
@@ -120,6 +176,12 @@ export default function ProjectDetail() {
   const [detailQcRejectionNotes, setDetailQcRejectionNotes] = useState('');
   const [detailQcRejectionPdfUrl, setDetailQcRejectionPdfUrl] = useState('');
   const [detailQcRejectionTargetStage, setDetailQcRejectionTargetStage] = useState('production');
+  
+  // Correction PDF re-upload / editing states
+  const [isEditingCorrectionPdf, setIsEditingCorrectionPdf] = useState(false);
+  const [editingRejectionIndex, setEditingRejectionIndex] = useState<number | null>(null);
+  const [newCorrectionPdfUrl, setNewCorrectionPdfUrl] = useState('');
+  const [isUpdatingCorrectionPdf, setIsUpdatingCorrectionPdf] = useState(false);
   const [qcErrorCategories, setQcErrorCategories] = useState<string[]>(['Typography', 'Color', 'Layout', 'Bleed/Trim', 'Other']);
 
   useEffect(() => {
@@ -1955,16 +2017,46 @@ export default function ProjectDetail() {
                       Google Drive Folder
                     </a>
                   )}
-                  {project.correctionPdfUrl && (
-                    <a 
-                      href={project.correctionPdfUrl.match(/^https?:\/\//i) ? project.correctionPdfUrl : `https://${project.correctionPdfUrl}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 bg-red-50 text-red-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors border border-red-200 animate-pulse"
-                    >
-                      <FileCheck className="w-4 h-4" />
-                      QC Correction PDF
-                    </a>
+                  {project.correctionPdfUrl ? (
+                    <div className="flex flex-col gap-1.5">
+                      <a 
+                        href={project.correctionPdfUrl.match(/^https?:\/\//i) ? project.correctionPdfUrl : `https://${project.correctionPdfUrl}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 bg-red-50 text-red-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors border border-red-200 animate-pulse"
+                      >
+                        <FileCheck className="w-4 h-4" />
+                        QC Correction PDF
+                      </a>
+                      {isStaff && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewCorrectionPdfUrl(project.correctionPdfUrl || '');
+                            setEditingRejectionIndex(project.qcRejections ? project.qcRejections.length - 1 : null);
+                            setIsEditingCorrectionPdf(true);
+                          }}
+                          className="text-left text-[11px] font-bold text-red-600 hover:text-red-800 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Upload className="w-3 h-3" /> Update Correction PDF Link
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    isStaff && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewCorrectionPdfUrl('');
+                          setEditingRejectionIndex(project.qcRejections ? project.qcRejections.length - 1 : null);
+                          setIsEditingCorrectionPdf(true);
+                        }}
+                        className="flex items-center gap-2 bg-red-50 text-red-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors border border-red-200 border-dashed cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Attach Correction PDF Link
+                      </button>
+                    )
                   )}
                   {project.supportDocuments && project.supportDocuments.map((doc, idx) => {
                     const formattedUrl = doc.match(/^https?:\/\//i) ? doc : `https://${doc}`;
@@ -2030,14 +2122,29 @@ export default function ProjectDetail() {
                           <span className="text-[11px] text-red-600 font-semibold flex items-center gap-1">
                             📂 Correction Reference Path:
                           </span>
-                          <a 
-                            href={rejection.correctionPdfUrl.match(/^https?:\/\//i) ? rejection.correctionPdfUrl : `https://${rejection.correctionPdfUrl}`} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-100 hover:bg-red-200 px-3 py-1 rounded-xl transition-colors border border-red-200 shadow-sm"
-                          >
-                            <FileCheck className="w-3.5 h-3.5" /> View Correction PDF
-                          </a>
+                          <div className="flex items-center gap-2">
+                            {isStaff && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNewCorrectionPdfUrl(rejection.correctionPdfUrl || '');
+                                  setEditingRejectionIndex(idx);
+                                  setIsEditingCorrectionPdf(true);
+                                }}
+                                className="text-[11px] font-bold text-red-600 hover:text-red-800 hover:underline cursor-pointer"
+                              >
+                                Edit Link
+                              </button>
+                            )}
+                            <a 
+                              href={rejection.correctionPdfUrl.match(/^https?:\/\//i) ? rejection.correctionPdfUrl : `https://${rejection.correctionPdfUrl}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-100 hover:bg-red-200 px-3 py-1 rounded-xl transition-colors border border-red-200 shadow-sm"
+                            >
+                              <FileCheck className="w-3.5 h-3.5" /> View Correction PDF
+                            </a>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2715,6 +2822,63 @@ export default function ProjectDetail() {
                         <CheckCircle className="w-4 h-4" />
                         <span>Save Changes</span>
                       </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Update Correction PDF Link Modal */}
+        {isEditingCorrectionPdf && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-150">
+              <h3 className="text-lg font-extrabold text-slate-900 mb-2 flex items-center gap-2">
+                <Upload className="w-5 h-5 text-red-500 animate-bounce" />
+                Update Correction PDF Link
+              </h3>
+              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                Enter the correct Google Drive folder or PDF link. This will automatically update the active correction file and the selected rejection log for the student in autopilot.
+              </p>
+              <form onSubmit={handleUpdateCorrectionPdf} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1">
+                    Google Drive / Correction Link
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newCorrectionPdfUrl}
+                    onChange={(e) => setNewCorrectionPdfUrl(e.target.value)}
+                    placeholder="https://drive.google.com/file/d/... or Google Drive URL"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl font-mono text-xs text-slate-700 focus:bg-white focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                  />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingCorrectionPdf(false);
+                      setEditingRejectionIndex(null);
+                      setNewCorrectionPdfUrl('');
+                    }}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingCorrectionPdf}
+                    className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-100 cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {isUpdatingCorrectionPdf ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Path'
                     )}
                   </button>
                 </div>

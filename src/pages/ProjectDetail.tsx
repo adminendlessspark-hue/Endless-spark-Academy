@@ -2324,6 +2324,31 @@ export default function ProjectDetail() {
                                 points: Math.max(0, (project.points || 100) - 5),
                                 updatedAt: new Date().toISOString()
                               });
+
+                              // Auto-pilot: notify student by email of QC rejection
+                              try {
+                                fetch('/api/notify-rejection', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    projectId: project.id,
+                                    errorCategory: detailQcSelectedCategories.join(', '),
+                                    notes: detailQcRejectionNotes,
+                                    rejectedBy: user?.name || 'Anonymous QC',
+                                    targetStage: detailQcRejectionTargetStage,
+                                    correctionPdfUrl: detailQcRejectionPdfUrl || null
+                                  })
+                                }).then(res => res.json()).then(data => {
+                                  if (data.error) {
+                                    console.error("Autopilot Rejection Email Error:", data.error);
+                                  } else {
+                                    console.log("Autopilot Rejection Email Sent:", data.message);
+                                  }
+                                });
+                              } catch (emailErr) {
+                                console.error("Failed to fetch notify-rejection API:", emailErr);
+                              }
+
                               alert('Project rejected successfully!');
                               setDetailQcDecision(null);
                               setDetailQcRejectionNotes('');

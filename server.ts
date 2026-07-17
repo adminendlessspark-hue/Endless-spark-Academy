@@ -11,6 +11,7 @@ import { google } from "googleapis";
 import { WebSocketServer } from "ws";
 import { GoogleGenAI, Modality } from "@google/genai";
 import JSZip from "jszip";
+import nodemailer from "nodemailer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1040,6 +1041,198 @@ async function startServer() {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // API Route for automatic QC Rejection email notifications
+  app.post("/api/notify-rejection", async (req: any, res: any) => {
+    const { projectId, errorCategory, notes, rejectedBy, targetStage, correctionPdfUrl, studentEmail: inputStudentEmail } = req.body;
+    
+    if (!projectId) {
+      return res.status(400).json({ error: "projectId is required" });
+    }
+
+    try {
+      const db = getDb();
+      
+      // Fetch student project details
+      const projectDoc = await db.collection("student_projects").doc(projectId).get();
+      if (!projectDoc.exists) {
+        return res.status(404).json({ error: "Student project not found" });
+      }
+      
+      const project = projectDoc.data()!;
+      const studentName = project.studentName || "Student";
+      const projectTitle = project.title || "Untitled Project";
+      const projectCode = project.projectCode || "N/A";
+      const submittedFileUrl = project.projectFileUrl || project.googleDriveLink || null;
+      
+      // Resolve student email
+      let studentEmail = inputStudentEmail || null;
+      if (!studentEmail) {
+        // Query users collection by studentId
+        if (project.studentId) {
+          const userSnap = await db.collection("users")
+            .where("studentId", "==", project.studentId)
+            .limit(1)
+            .get();
+          if (!userSnap.empty) {
+            studentEmail = userSnap.docs[0].data()?.email || null;
+          }
+          
+          if (!studentEmail) {
+            // Check by doc ID
+            const userDoc = await db.collection("users").doc(project.studentId).get();
+            if (userDoc.exists) {
+              studentEmail = userDoc.data()?.email || null;
+            }
+          }
+        }
+      }
+
+      // If we still don't have an email, use fallback/system default to ensure notifications go somewhere
+      if (!studentEmail) {
+        console.warn(`No email found for student ${studentName} (ID: ${project.studentId}). Falling back to system admin emails.`);
+        studentEmail = "adminendlessspark@gmail.com";
+      }
+
+      console.log(`QC Autopilot: Preparing rejection email for ${studentName} <${studentEmail}> regarding project "${projectTitle}"`);
+
+      // Determine if SMTP is configured
+      const smtpHost = process.env.SMTP_HOST;
+      const smtpPort = process.env.SMTP_PORT;
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      const smtpFrom = process.env.SMTP_FROM || smtpUser || "noreply@endlesssparkcreativehub.in";
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Rework Required - QC Alert</title>
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
+            .container { max-width: 600px; background: #ffffff; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+            .header { background: #e11d48; padding: 24px; text-align: center; color: #ffffff; }
+            .header h1 { margin: 0; font-size: 20px; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase; }
+            .content { padding: 32px 24px; }
+            .greeting { font-size: 16px; font-weight: bold; margin-bottom: 16px; color: #0f172a; }
+            .intro { font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 24px; }
+            .project-card { background: #f1f5f9; border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid #cbd5e1; }
+            .project-title { font-size: 15px; font-weight: bold; color: #0f172a; margin: 0 0 8px 0; }
+            .project-meta { font-size: 12px; color: #64748b; margin-bottom: 16px; }
+            .error-badge { background: #ffe4e6; color: #991b1b; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 12px; text-transform: uppercase; }
+            .rejection-notes { font-size: 14px; line-height: 1.6; color: #7f1d1d; background: #fef2f2; border-left: 4px solid #f43f5e; padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 20px; font-style: italic; }
+            .action-area { text-align: center; margin: 32px 0 16px 0; }
+            .btn { background: #e11d48; color: #ffffff !important; text-decoration: none; font-weight: bold; font-size: 14px; padding: 12px 28px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px -1px rgb(225 29 72 / 0.3); transition: background 0.2s; }
+            .btn-alt { background: #f1f5f9; color: #334155 !important; border: 1px solid #cbd5e1; box-shadow: none; margin-left: 8px; }
+            .footer { background: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; }
+            .footer p { margin: 4px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Quality Control - Rework Required</h1>
+            </div>
+            <div class="content">
+              <p class="greeting">Hello ${studentName},</p>
+              <p class="intro">Your submitted project work has been reviewed by our Quality Control (QC) department. Some issues were identified that require correction before the project can be approved.</p>
+              
+              <div class="project-card">
+                <p class="project-title">${projectTitle}</p>
+                <div class="project-meta">
+                  <span><strong>Project Code:</strong> ${projectCode}</span> &bull; 
+                  <span><strong>Reviewer:</strong> ${rejectedBy || 'QC Department'}</span> &bull; 
+                  <span><strong>Returned to Stage:</strong> <span style="text-transform: uppercase; color: #b91c1c; font-weight: bold;">${targetStage || 'production'}</span></span>
+                </div>
+                
+                <span class="error-badge">${errorCategory || 'General Quality'} Error</span>
+                <div class="rejection-notes">
+                  "${notes || 'Please review correction guidelines and update the file.'}"
+                </div>
+              </div>
+
+              <p class="intro" style="margin-bottom: 8px;"><strong>What you need to do next:</strong></p>
+              <ol style="font-size: 13px; color: #475569; line-height: 1.6; padding-left: 20px; margin-bottom: 24px;">
+                <li>Carefully review the correction feedback and error categories listed above.</li>
+                ${correctionPdfUrl ? '<li>Download and view the attached <strong>Correction PDF</strong> for precise annotations.</li>' : ''}
+                <li>Open your design files, make the required changes, and re-export the clean files.</li>
+                <li>Go to your Student Portal, select this project, and re-upload/submit your revised files.</li>
+              </ol>
+
+              <div class="action-area">
+                ${correctionPdfUrl ? `
+                  <a href="${correctionPdfUrl.match(/^https?:\/\//i) ? correctionPdfUrl : 'https://' + correctionPdfUrl}" target="_blank" class="btn">
+                    View Correction PDF
+                  </a>
+                ` : ''}
+                ${submittedFileUrl ? `
+                  <a href="${submittedFileUrl.match(/^https?:\/\//i) ? submittedFileUrl : 'https://' + submittedFileUrl}" target="_blank" class="btn btn-alt">
+                    Access My Submitted Job
+                  </a>
+                ` : ''}
+              </div>
+            </div>
+            <div class="footer">
+              <p>This is an automated notification from <strong>Endless Spark Academy</strong>.</p>
+              <p>&copy; 2026 Endless Spark Creative Hub. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      if (!smtpHost || !smtpUser || !smtpPass) {
+        console.warn("SMTP credentials are not configured in environment variables. Email notification running in Simulation Mode!");
+        console.log("----------------- SIMULATED REJECTION EMAIL LOG -----------------");
+        console.log(`TO: ${studentEmail}`);
+        console.log(`FROM: ${smtpFrom}`);
+        console.log(`SUBJECT: 🚨 QC Rejection Alert: Project "${projectTitle}" [Rework Required]`);
+        console.log(`BODY SUMMARY:`);
+        console.log(`- Student: ${studentName}`);
+        console.log(`- Project: ${projectTitle} (${projectCode})`);
+        console.log(`- Error Category: ${errorCategory}`);
+        console.log(`- Notes: ${notes}`);
+        if (correctionPdfUrl) console.log(`- Correction PDF: ${correctionPdfUrl}`);
+        if (submittedFileUrl) console.log(`- Student Job File: ${submittedFileUrl}`);
+        console.log("-----------------------------------------------------------------");
+        
+        return res.json({ 
+          success: true, 
+          simulated: true, 
+          message: "Email simulation logged successfully. SMTP is not configured.",
+          recipient: studentEmail
+        });
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: parseInt(smtpPort || '587'),
+        secure: smtpPort === '465',
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        }
+      });
+
+      console.log(`Sending real rejection email via ${smtpHost} to ${studentEmail}...`);
+      await transporter.sendMail({
+        from: `"${rejectedBy || 'Endless Spark QC'}" <${smtpFrom}>`,
+        to: studentEmail,
+        cc: ["adminendlessspark@gmail.com", "endlessspark.in@gmail.com"], // Copy admins as requested by user
+        subject: `🚨 QC Rejection Alert: Project "${projectTitle}" [Rework Required]`,
+        html: htmlContent
+      });
+
+      console.log(`Email successfully sent to ${studentEmail}`);
+      res.json({ success: true, message: `Rejection email successfully sent to ${studentEmail}` });
+
+    } catch (error: any) {
+      console.error("Critical error in /api/notify-rejection:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
 
   // Helper to recursively list and zip a Google Drive folder
   async function zipFolder(drive: any, folderId: string, zip: any, currentPath: string = "") {

@@ -431,7 +431,32 @@ export default function PublicQcPanel() {
         updatedAt: new Date().toISOString()
       });
 
+      // Auto-pilot: notify student by email of QC rejection
+      try {
+        fetch('/api/notify-rejection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: project.id,
+            errorCategory: rejectionCategories.join(', '),
+            notes: rejectionNotes,
+            rejectedBy: user?.name || 'Anonymous QC Admin',
+            targetStage: rejectionTargetStage,
+            correctionPdfUrl: correctionPdfUrl || null
+          })
+        }).then(res => res.json()).then(data => {
+          if (data.error) {
+            console.error("Autopilot Rejection Email Error:", data.error);
+          } else {
+            console.log("Autopilot Rejection Email Sent:", data.message);
+          }
+        });
+      } catch (emailErr) {
+        console.error("Failed to fetch notify-rejection API:", emailErr);
+      }
+
       alert(`Project "${project.title}" rejected back to stage: ${rejectionTargetStage.toUpperCase()}`);
+
       setDecision(null);
       setRejectionNotes('');
       setRejectionCategories(['Typography']);

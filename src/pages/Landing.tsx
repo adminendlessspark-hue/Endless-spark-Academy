@@ -53,7 +53,7 @@ export default function Landing() {
     {
       id: 'dm-1',
       title: 'Performance Marketing Masterclass',
-      imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=1200',
+      imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
       level: 'Advanced',
       levelPercentage: 95,
       overview: [
@@ -65,7 +65,7 @@ export default function Landing() {
     {
       id: 'dm-2',
       title: 'SEO & Content Automation with GenAI',
-      imageUrl: 'https://images.unsplash.com/photo-1542744094-3a31f103e35f?auto=format&fit=crop&q=80&w=1200',
+      imageUrl: 'https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=800&q=80',
       level: 'Intermediate',
       levelPercentage: 85,
       overview: [

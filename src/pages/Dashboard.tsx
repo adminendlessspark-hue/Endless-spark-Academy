@@ -1,5 +1,5 @@
 import { User, TopicScore, LeaveRequest, Holiday, CourseType, CourseModule, TrainingRecord, PlacementSettings } from '../types';
-import { CircleCheck, Circle, Clock, ArrowRight, FileText, Award, Download, Printer, X, ShieldAlert, Key, Calendar, Send, Info, Video, IdCard, IndianRupee, Smartphone, BookOpen, FolderKanban, CheckSquare, FileCheck, Briefcase, Zap, Camera, Upload, MessageSquare, ExternalLink } from 'lucide-react';
+import { CircleCheck, Circle, Clock, ArrowRight, FileText, Award, Download, Printer, X, ShieldAlert, Key, Calendar, Send, Info, Video, IdCard, IndianRupee, Smartphone, BookOpen, FolderKanban, CheckSquare, FileCheck, Briefcase, Zap, Camera, Upload, MessageSquare, ExternalLink, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { cn, formatCourseName } from '../utils';
@@ -217,8 +217,9 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
 
   useEffect(() => {
     if (wellnessEnabled && user && user.role === 'student' && !previewUser) {
-      // Only show on first login (if lastWellnessDate is not set yet)
-      if (!user.lastWellnessDate && user.isApproved) {
+      // Show daily morning wellness routine if not completed today
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (user.lastWellnessDate !== todayStr && user.isApproved) {
         setShowWellness(true);
       }
     }
@@ -1434,6 +1435,31 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
             >
               Raise / Track Query <ArrowRight className="w-4 h-4" />
             </Link>
+          </div>
+        )}
+
+        {/* Morning Routine / Wellness Day Starter Card */}
+        {wellnessEnabled && user.isApproved && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-pink-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center shrink-0">
+                <Sparkles className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Morning Routine Module</h3>
+                <p className="text-sm text-gray-500">
+                  {user.lastWellnessDate === new Date().toISOString().split('T')[0]
+                    ? "✓ You have successfully completed your holistic morning routine for today. Keep up the excellent work!"
+                    : "Start your morning with mandatory self-care, focus exercises, meditation, and daily check-ins."}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowWellness(true)}
+              className="px-6 py-2 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 transition-all shadow-sm shadow-pink-200 flex items-center gap-2 whitespace-nowrap cursor-pointer shrink-0"
+            >
+              Start Morning Routine <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         )}
 

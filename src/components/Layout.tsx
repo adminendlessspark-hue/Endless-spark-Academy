@@ -22,6 +22,7 @@ const navItems = [
   { name: 'Video Intro', path: '/video-intro', icon: Video },
   { name: 'Course Modules', path: '/modules', icon: BookOpen },
   { name: 'Software Library', path: '/software-library', icon: Video },
+  { name: 'Morning Routine', path: '/morning-routine', icon: Sparkles },
 
   { name: 'Master Library', path: '/master-library', icon: FolderKanban, adminOnly: true },
   { name: 'My Projects', path: '/projects', icon: FolderKanban },
@@ -43,9 +44,14 @@ export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const { user, logout, isAdmin, isQC } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { logoUrl } = useSettings();
+  const { logoUrl, wellnessEnabled } = useSettings();
 
   const filteredNavItems = navItems.filter(item => {
+    // If it's Morning Routine, only show if wellness is enabled
+    if (item.path === '/morning-routine') {
+      return !!wellnessEnabled && (user?.role === 'student' || isAdmin);
+    }
+
     // If it's Entrance Test, allow student access if assigned, evaluated or submitted
     if (item.path === '/entrance-test') {
       if (user?.role === 'student') {

@@ -272,7 +272,7 @@ service cloud.firestore {
     match /student_queries/{queryId} {
       allow get: if isSignedIn() && (isStaff() || isOwner(existing().studentId));
       allow list: if isSignedIn() && (isStaffForList() || resource.data.studentId == request.auth.uid);
-      allow create: if isSignedIn() && isValidId(queryId) && incoming().studentId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(queryId) && (isStaff() || incoming().studentId == request.auth.uid);
       allow update: if isSignedIn() && (
         isStaff() || 
         (isOwner(existing().studentId) && existing().status == 'pending' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description']))

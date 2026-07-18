@@ -34,6 +34,7 @@ import LeadCapture from './pages/LeadCapture';
 import CourseOverview from './pages/CourseOverview';
 import CommunicationAgent from './pages/CommunicationAgent';
 import ResumeBuilder from './pages/ResumeBuilder';
+import MorningRoutine from './pages/MorningRoutine';
 
 import MasterProjectLibrary from './pages/MasterProjectLibrary';
 import QueryTracker from './pages/QueryTracker';
@@ -355,6 +356,11 @@ function AppContent() {
         <Route path="/resume-builder" element={
           <ProtectedRoute allowAdmin>
             <Layout><ResumeBuilder /></Layout>
+          </ProtectedRoute>
+        } />
+        <Route path="/morning-routine" element={
+          <ProtectedRoute>
+            <Layout><MorningRoutine /></Layout>
           </ProtectedRoute>
         } />
         <Route path="/interview/:roomId" element={<InterviewRoom />} />

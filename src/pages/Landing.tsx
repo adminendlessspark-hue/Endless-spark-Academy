@@ -100,7 +100,7 @@ export default function Landing() {
               <img 
                 src={logoUrl} 
                 alt="Endless Spark Logo" 
-                className="h-10 md:h-12 object-contain cursor-pointer hover:scale-105 transition-all duration-300" 
+                className="h-14 md:h-16 object-contain cursor-pointer hover:scale-105 transition-all duration-300" 
                 style={{ imageRendering: '-webkit-optimize-contrast', transform: 'translateZ(0)' } as React.CSSProperties}
                 onClick={() => setSelectedCourse(null)} 
               />
@@ -160,7 +160,7 @@ export default function Landing() {
                     <img 
                       src={logoUrl} 
                       alt="Endless Spark Logo" 
-                      className="h-16 md:h-20 object-contain transition-all hover:scale-105 duration-300 select-none pointer-events-none" 
+                      className="h-28 md:h-36 object-contain transition-all hover:scale-105 duration-300 select-none pointer-events-none" 
                       style={{ imageRendering: '-webkit-optimize-contrast', transform: 'translateZ(0)' } as React.CSSProperties}
                     />
                   </div>
@@ -339,7 +339,7 @@ export default function Landing() {
                       <img 
                         src={logoUrl} 
                         alt="Logo" 
-                        className="h-16 md:h-20 object-contain transition-all duration-300 hover:scale-[1.02] cursor-pointer" 
+                        className="h-28 md:h-36 object-contain transition-all duration-300 hover:scale-[1.02] cursor-pointer" 
                         style={{ imageRendering: '-webkit-optimize-contrast', transform: 'translateZ(0)' } as React.CSSProperties}
                         onClick={() => setSelectedCourse(null)}
                       />
@@ -618,7 +618,7 @@ export default function Landing() {
                       <img 
                         src={logoUrl} 
                         alt="Logo" 
-                        className="h-16 md:h-20 object-contain transition-all duration-300 hover:scale-[1.02] cursor-pointer" 
+                        className="h-28 md:h-36 object-contain transition-all duration-300 hover:scale-[1.02] cursor-pointer" 
                         style={{ imageRendering: '-webkit-optimize-contrast', transform: 'translateZ(0)' } as React.CSSProperties}
                         onClick={() => setSelectedCourse(null)}
                       />
@@ -833,7 +833,7 @@ export default function Landing() {
                     <img 
                       src={logoUrl} 
                       alt="Endless Spark Logo" 
-                      className="h-10 object-contain" 
+                      className="h-14 object-contain" 
                       style={{ imageRendering: '-webkit-optimize-contrast', transform: 'translateZ(0)' } as React.CSSProperties}
                     />
                   </div>

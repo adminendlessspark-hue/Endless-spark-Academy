@@ -7,14 +7,16 @@ export default function PreFlightChecklist({
   isAdmin = true,
   readOnly = false,
   initialData,
+  printerSpec,
   onSave
 }: { 
   isAdmin?: boolean;
   readOnly?: boolean;
   initialData?: any;
+  printerSpec?: any;
   onSave?: (data: any) => Promise<void> | void;
 }) {
-  const { logoUrl } = useSettings();
+  const { logoUrl, printMethods, printingSubstrates } = useSettings();
   const [isSaving, setIsSaving] = useState(false);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -32,9 +34,9 @@ export default function PreFlightChecklist({
         typeOfPackaging: '',
         packType: '',
         productCategory: '',
-        printingProcess: '',
+        printingProcess: printerSpec?.printMethod || '',
         printType: '',
-        substrateType: ''
+        substrateType: printerSpec?.printingSubstrate || ''
       },
 
       // File Verification
@@ -85,7 +87,14 @@ export default function PreFlightChecklist({
     return {
       ...defaultFormData,
       ...initialData,
-      tech: { ...defaultFormData.tech, ...(initialData.tech || {}) },
+      tech: { 
+        typeOfPackaging: initialData.tech?.typeOfPackaging || '',
+        packType: initialData.tech?.packType || '',
+        productCategory: initialData.tech?.productCategory || '',
+        printingProcess: initialData.tech?.printingProcess || printerSpec?.printMethod || '',
+        printType: initialData.tech?.printType || '',
+        substrateType: initialData.tech?.substrateType || printerSpec?.printingSubstrate || ''
+      },
       sow: { 
         ...defaultFormData.sow, 
         ...(initialData.sow || {}),
@@ -103,12 +112,18 @@ export default function PreFlightChecklist({
 
   // Sync initialData when it becomes available
   const serializedInitial = JSON.stringify(initialData || null);
+  const serializedPrinterSpec = JSON.stringify(printerSpec || null);
   React.useEffect(() => {
     if (initialData) {
       setFormData((prev: any) => ({
         ...prev,
         ...initialData,
-        tech: { ...(prev.tech || {}), ...(initialData.tech || {}) },
+        tech: { 
+          ...(prev.tech || {}), 
+          ...(initialData.tech || {}),
+          printingProcess: initialData.tech?.printingProcess || prev.tech?.printingProcess || printerSpec?.printMethod || '',
+          substrateType: initialData.tech?.substrateType || prev.tech?.substrateType || printerSpec?.printingSubstrate || ''
+        },
         sow: { 
           ...(prev.sow || {}), 
           ...(initialData.sow || {}),
@@ -124,7 +139,7 @@ export default function PreFlightChecklist({
       }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serializedInitial]);
+  }, [serializedInitial, serializedPrinterSpec]);
 
   const [fileVerificationOptions, setFileVerificationOptions] = useState([
     "Ensure variant name, net weight, matching design file, and brief information.",
@@ -558,11 +573,9 @@ export default function PreFlightChecklist({
                   onChange={e => updateNestedState('tech', 'printingProcess', e.target.value)}
                 >
                   <option value="" className="text-gray-400 font-normal">Select Printing Process</option>
-                  <option value="Flexo">Flexo</option>
-                  <option value="Offset">Offset</option>
-                  <option value="Digital">Digital</option>
-                  <option value="Gravure">Gravure</option>
-                  <option value="Screen Printing">Screen Printing</option>
+                  {printMethods.map((pm: string) => (
+                    <option key={pm} value={pm}>{pm}</option>
+                  ))}
                 </select>
               </div>
 
@@ -622,12 +635,9 @@ export default function PreFlightChecklist({
                   onChange={e => updateNestedState('tech', 'substrateType', e.target.value)}
                 >
                   <option value="" className="text-gray-400 font-normal">Select Substrate Type</option>
-                  <option value="Paperboard">Paperboard</option>
-                  <option value="Kraft Paper">Kraft Paper</option>
-                  <option value="Plastic Film">Plastic Film</option>
-                  <option value="Poly white">Poly white</option>
-                  <option value="Corrugated Cardboard">Corrugated Cardboard</option>
-                  <option value="Metal (Tin/Aluminum)">Metal (Tin/Aluminum)</option>
+                  {printingSubstrates.map((sub: string) => (
+                    <option key={sub} value={sub}>{sub}</option>
+                  ))}
                 </select>
               </div>
 

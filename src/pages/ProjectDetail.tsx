@@ -1929,6 +1929,7 @@ export default function ProjectDetail() {
                         isAdmin={false}
                         readOnly={project.status !== 'preflight' || !project.isTimerRunning}
                         initialData={(project as any).digitalPreflight}
+                        printerSpec={project.printerSpec}
                         onSave={async (data) => {
                           if (!project) return;
                           try {
@@ -1982,6 +1983,7 @@ export default function ProjectDetail() {
                           isAdmin={false}
                           readOnly={project.status !== 'pqc' || !project.isTimerRunning}
                           initialData={(project as any).digitalProduction}
+                          printerSpec={project.printerSpec}
                           onSave={async (data) => {
                             if (!project) return;
                             try {

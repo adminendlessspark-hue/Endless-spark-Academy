@@ -56,6 +56,7 @@ export default function PublicQcPanel() {
   const [projects, setProjects] = useState<StudentProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState<string>('all');
   const [currentTab, setCurrentTab] = useState<'pending' | 'active' | 'approved'>('pending');
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
   
@@ -365,8 +366,13 @@ export default function PublicQcPanel() {
     }
   };
 
+  // Extract unique students who have projects in the list
+  const uniqueStudents = Array.from(new Set(projects.map(p => p.studentName).filter(Boolean))).sort();
+
   // Filter projects by current tab and search query
   const filteredProjects = projects.filter(project => {
+    if (selectedStudent !== 'all' && project.studentName !== selectedStudent) return false;
+
     const matchesSearch = 
       project.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       project.studentName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -641,15 +647,37 @@ export default function PublicQcPanel() {
                 </button>
               </div>
 
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter by Student Name, project title, code..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-pink-500/20"
-                />
+              <div className="flex flex-col sm:flex-row gap-2 flex-1 max-w-xl">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filter by Student Name, project title, code..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-pink-500/20"
+                  />
+                </div>
+
+                <div className="relative shrink-0">
+                  <select
+                    value={selectedStudent}
+                    onChange={(e) => setSelectedStudent(e.target.value)}
+                    className="w-full sm:w-auto pl-3 pr-8 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-pink-500/20 appearance-none cursor-pointer"
+                  >
+                    <option value="all">All Students ({uniqueStudents.length})</option>
+                    {uniqueStudents.map(studentName => (
+                      <option key={studentName} value={studentName}>
+                        {studentName}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                      <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                    </svg>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1429,6 +1457,7 @@ export default function PublicQcPanel() {
                                       readOnly={true} 
                                       isAdmin={true} 
                                       initialData={(project as any).digitalPreflight} 
+                                      printerSpec={project.printerSpec}
                                     />
                                   </div>
                                 )}
@@ -1479,6 +1508,7 @@ export default function PublicQcPanel() {
                                       readOnly={true} 
                                       isAdmin={true} 
                                       initialData={(project as any).digitalProduction} 
+                                      printerSpec={project.printerSpec}
                                     />
                                   </div>
                                 )}
@@ -1528,6 +1558,7 @@ export default function PublicQcPanel() {
                                     <QcProductionChecklist 
                                       readOnly={!isStaff} 
                                       initialData={(project as any).qcProduction} 
+                                      printerSpec={project.printerSpec}
                                       onSave={async (data) => {
                                         try {
                                           const projectRef = doc(db, 'student_projects', project.id);

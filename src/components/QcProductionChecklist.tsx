@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Save, CheckCircle2, FileCheck, ShieldAlert } from 'lucide-react';
 import { cn } from '../utils';
+import { useSettings } from '../hooks/useSettings';
 
 const TECHNICAL_FIELD_OPTIONS: Record<string, string[]> = {
   typeOfPackaging: ['Primary', 'Secondary', 'Tertiary'],
@@ -81,23 +82,32 @@ const SECTIONS = {
 export default function QcProductionChecklist({
   readOnly = false,
   initialData,
+  printerSpec,
   onSave
 }: {
   readOnly?: boolean;
   initialData?: any;
+  printerSpec?: any;
   onSave?: (data: any) => Promise<void> | void;
 }) {
+  const { printMethods, printingSubstrates } = useSettings();
   const [isSaving, setIsSaving] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const fieldOptions = {
+    ...TECHNICAL_FIELD_OPTIONS,
+    printingProcess: printMethods,
+    substrateType: printingSubstrates,
+  };
   const [formData, setFormData] = useState(() => {
     const defaultFormData = {
       tech: {
         typeOfPackaging: '',
         packType: '',
         productCategory: '',
-        substrateType: '',
-        printingProcess: '',
-        printType: ''
+        printingProcess: printerSpec?.printMethod || '',
+        printType: '',
+        substrateType: printerSpec?.printingSubstrate || ''
       },
       preflight: Array(3).fill('pending'),
       instruction: Array(14).fill('pending'),
@@ -122,7 +132,14 @@ export default function QcProductionChecklist({
     return {
       ...defaultFormData,
       ...initialData,
-      tech: { ...defaultFormData.tech, ...(initialData.tech || {}) },
+      tech: { 
+        typeOfPackaging: initialData.tech?.typeOfPackaging || '',
+        packType: initialData.tech?.packType || '',
+        productCategory: initialData.tech?.productCategory || '',
+        printingProcess: initialData.tech?.printingProcess || printerSpec?.printMethod || '',
+        printType: initialData.tech?.printType || '',
+        substrateType: initialData.tech?.substrateType || printerSpec?.printingSubstrate || ''
+      },
       barcode: { ...defaultFormData.barcode, ...(initialData.barcode || {}) },
       eyeMark: { ...defaultFormData.eyeMark, ...(initialData.eyeMark || {}) },
       preflight: initialData.preflight || defaultFormData.preflight,
@@ -139,17 +156,23 @@ export default function QcProductionChecklist({
 
   // Sync initialData when it becomes available
   const serializedInitial = JSON.stringify(initialData || null);
+  const serializedPrinterSpec = JSON.stringify(printerSpec || null);
   React.useEffect(() => {
     if (initialData) {
       setFormData((prev: any) => ({
         ...prev,
         ...initialData,
-        tech: { ...(prev.tech || {}), ...(initialData.tech || {}) },
+        tech: { 
+          ...(prev.tech || {}), 
+          ...(initialData.tech || {}),
+          printingProcess: initialData.tech?.printingProcess || prev.tech?.printingProcess || printerSpec?.printMethod || '',
+          substrateType: initialData.tech?.substrateType || prev.tech?.substrateType || printerSpec?.printingSubstrate || ''
+        },
         barcode: { ...(prev.barcode || {}), ...(initialData.barcode || {}) },
         eyeMark: { ...(prev.eyeMark || {}), ...(initialData.eyeMark || {}) }
       }));
     }
-  }, [serializedInitial]);
+  }, [serializedInitial, serializedPrinterSpec]);
 
   const updateSectionArray = (section: keyof typeof formData, idx: number, value: string) => {
     setFormData((prev: any) => {
@@ -202,7 +225,7 @@ export default function QcProductionChecklist({
           <h2 className="text-lg font-bold text-gray-900 border-b border-gray-200 pb-2 mb-4">Pre-flight</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
             {['typeOfPackaging', 'packType', 'productCategory', 'substrateType', 'printingProcess', 'printType'].map((field) => {
-              const options = TECHNICAL_FIELD_OPTIONS[field];
+              const options = (fieldOptions as any)[field];
               const displayLabel = field.replace(/([A-Z])/g, ' $1').trim();
               return (
                 <div key={field} className="flex flex-col">

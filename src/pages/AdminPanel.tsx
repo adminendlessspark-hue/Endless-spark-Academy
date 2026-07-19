@@ -11629,6 +11629,7 @@ export default function AdminPanel() {
                         isAdmin={true} 
                         readOnly={true} 
                         initialData={projectToReview.digitalPreflight} 
+                        printerSpec={projectToReview.printerSpec}
                       />
                     </div>
                   )}
@@ -11640,6 +11641,7 @@ export default function AdminPanel() {
                         isAdmin={true} 
                         readOnly={true} 
                         initialData={projectToReview.digitalProduction} 
+                        printerSpec={projectToReview.printerSpec}
                       />
                     </div>
                   )}
@@ -11650,6 +11652,7 @@ export default function AdminPanel() {
                       <QcProductionChecklist 
                         readOnly={false} 
                         initialData={projectToReview.qcProduction} 
+                        printerSpec={projectToReview.printerSpec}
                         onSave={async (data) => {
                           try {
                             const projectRef = doc(db, 'student_projects', projectToReview.id);

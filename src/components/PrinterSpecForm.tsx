@@ -1,7 +1,14 @@
-import React from 'react';
-import { Trash2, PlusCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Trash2, PlusCircle, ArrowUp, ArrowDown, Plus, X } from 'lucide-react';
+import { useSettings } from '../hooks/useSettings';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 export default function PrinterSpecForm({ projectForm, setProjectForm }: { projectForm: any, setProjectForm: any }) {
+  const { printMethods, printingSubstrates } = useSettings();
+  const [newMethod, setNewMethod] = useState('');
+  const [newSubstrate, setNewSubstrate] = useState('');
+
   const insertBarcodeRow = (index: number) => {
     const newBc = [...projectForm.printerSpec.barcodes];
     newBc.splice(index + 1, 0, {codeType:'', codeNumber:'', codeColour:'', bwr:'', magnification:'', narrowBar:''});
@@ -12,6 +19,92 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
     const newCr = [...projectForm.printerSpec.colorRotation];
     newCr.splice(index + 1, 0, {colorName:'', lineScreen:'', lpi:'', dotType:'', angle:'', new:''});
     setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, colorRotation: newCr}});
+  };
+
+  const moveColorRowUp = (index: number) => {
+    if (index === 0) return;
+    const newCr = [...projectForm.printerSpec.colorRotation];
+    const temp = newCr[index];
+    newCr[index] = newCr[index - 1];
+    newCr[index - 1] = temp;
+    setProjectForm({
+      ...projectForm,
+      printerSpec: { ...projectForm.printerSpec, colorRotation: newCr }
+    });
+  };
+
+  const moveColorRowDown = (index: number) => {
+    if (index === projectForm.printerSpec.colorRotation.length - 1) return;
+    const newCr = [...projectForm.printerSpec.colorRotation];
+    const temp = newCr[index];
+    newCr[index] = newCr[index + 1];
+    newCr[index + 1] = temp;
+    setProjectForm({
+      ...projectForm,
+      printerSpec: { ...projectForm.printerSpec, colorRotation: newCr }
+    });
+  };
+
+  const handleAddPrintMethod = async () => {
+    const trimmed = newMethod.trim();
+    if (!trimmed) return;
+    if (printMethods.includes(trimmed)) {
+      setNewMethod('');
+      return;
+    }
+    try {
+      const updated = [...printMethods, trimmed];
+      await updateDoc(doc(db, 'settings', 'admin'), { printMethods: updated });
+      setNewMethod('');
+    } catch (err) {
+      console.error('Error adding print method:', err);
+    }
+  };
+
+  const handleRemovePrintMethod = async (method: string) => {
+    try {
+      const updated = printMethods.filter((m: string) => m !== method);
+      await updateDoc(doc(db, 'settings', 'admin'), { printMethods: updated });
+      if (projectForm.printerSpec.printMethod === method) {
+        setProjectForm({
+          ...projectForm,
+          printerSpec: { ...projectForm.printerSpec, printMethod: '' }
+        });
+      }
+    } catch (err) {
+      console.error('Error removing print method:', err);
+    }
+  };
+
+  const handleAddPrintingSubstrate = async () => {
+    const trimmed = newSubstrate.trim();
+    if (!trimmed) return;
+    if (printingSubstrates.includes(trimmed)) {
+      setNewSubstrate('');
+      return;
+    }
+    try {
+      const updated = [...printingSubstrates, trimmed];
+      await updateDoc(doc(db, 'settings', 'admin'), { printingSubstrates: updated });
+      setNewSubstrate('');
+    } catch (err) {
+      console.error('Error adding printing substrate:', err);
+    }
+  };
+
+  const handleRemovePrintingSubstrate = async (substrate: string) => {
+    try {
+      const updated = printingSubstrates.filter((s: string) => s !== substrate);
+      await updateDoc(doc(db, 'settings', 'admin'), { printingSubstrates: updated });
+      if (projectForm.printerSpec.printingSubstrate === substrate) {
+        setProjectForm({
+          ...projectForm,
+          printerSpec: { ...projectForm.printerSpec, printingSubstrate: '' }
+        });
+      }
+    } catch (err) {
+      console.error('Error removing printing substrate:', err);
+    }
   };
 
   return (
@@ -111,7 +204,23 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
                   <td className="p-0 border-r"><input type="text" className="w-full p-2 outline-none focus:bg-blue-50" value={cr.angle} onChange={e => { const newCr = [...projectForm.printerSpec.colorRotation]; newCr[idx].angle = e.target.value; setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, colorRotation: newCr}}) }} /></td>
                   <td className="p-0 border-r"><input type="text" className="w-full p-2 outline-none focus:bg-blue-50" value={cr.new} onChange={e => { const newCr = [...projectForm.printerSpec.colorRotation]; newCr[idx].new = e.target.value; setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, colorRotation: newCr}}) }} /></td>
                   <td className="p-2">
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button 
+                        disabled={idx === 0}
+                        onClick={() => moveColorRowUp(idx)}
+                        className="p-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-500 transition-colors"
+                        title="Move Row Up"
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </button>
+                      <button 
+                        disabled={idx === projectForm.printerSpec.colorRotation.length - 1}
+                        onClick={() => moveColorRowDown(idx)}
+                        className="p-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-500 transition-colors"
+                        title="Move Row Down"
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </button>
                       <button 
                         onClick={() => insertColorRow(idx)}
                         className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -142,33 +251,126 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
       {/* Print Method */}
       <div>
         <h4 className="font-bold text-gray-900 mb-3 border-b pb-2">Print Method</h4>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {['Offset', 'Flexo', 'Gravure', 'Dry offset', 'Digital'].map(method => (
-            <label key={method} className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="printMethod" value={method} checked={projectForm.printerSpec.printMethod === method} onChange={(e) => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, printMethod: e.target.value}})} className="w-4 h-4 text-pink-600" />
-              <span className="text-sm text-gray-700">{method}</span>
-            </label>
-          ))}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="printMethod" value="Others" checked={projectForm.printerSpec.printMethod.startsWith('Others')} onChange={(e) => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, printMethod: 'Others'}})} className="w-4 h-4 text-pink-600" />
-            <span className="text-sm text-gray-700">Others</span>
-            {projectForm.printerSpec.printMethod.startsWith('Others') && (
-              <input type="text" className="border-b border-gray-300 outline-none px-1 w-24 text-sm" value={projectForm.printerSpec.printMethod.replace('Others', '').trim()} onChange={(e) => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, printMethod: `Others ${e.target.value}`}})} placeholder="Specify..." />
-            )}
-          </label>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {printMethods.map((method: string) => (
+              <div key={method} className="flex items-center justify-between group bg-gray-50 hover:bg-gray-100 p-2 rounded-lg border border-gray-200 transition-all">
+                <label className="flex items-center gap-2 cursor-pointer flex-1">
+                  <input 
+                    type="radio" 
+                    name="printMethod" 
+                    value={method} 
+                    checked={projectForm.printerSpec.printMethod === method} 
+                    onChange={(e) => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, printMethod: e.target.value}})} 
+                    className="w-4 h-4 text-pink-600 focus:ring-pink-500" 
+                  />
+                  <span className="text-sm font-medium text-gray-700">{method}</span>
+                </label>
+                <button 
+                  type="button"
+                  onClick={() => handleRemovePrintMethod(method)}
+                  className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                  title={`Delete option "${method}"`}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center justify-between group bg-gray-50 hover:bg-gray-100 p-2 rounded-lg border border-gray-200 transition-all">
+              <label className="flex items-center gap-2 cursor-pointer flex-1">
+                <input 
+                  type="radio" 
+                  name="printMethod" 
+                  value="Others" 
+                  checked={projectForm.printerSpec.printMethod.startsWith('Others')} 
+                  onChange={(e) => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, printMethod: 'Others'}})} 
+                  className="w-4 h-4 text-pink-600 focus:ring-pink-500" 
+                />
+                <span className="text-sm font-medium text-gray-700">Others</span>
+                {projectForm.printerSpec.printMethod.startsWith('Others') && (
+                  <input 
+                    type="text" 
+                    className="border-b border-pink-500 outline-none px-1 w-24 text-sm font-semibold text-pink-600" 
+                    value={projectForm.printerSpec.printMethod.replace('Others', '').trim()} 
+                    onChange={(e) => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, printMethod: `Others ${e.target.value}`}})} 
+                    placeholder="Specify..." 
+                  />
+                )}
+              </label>
+            </div>
+          </div>
+          
+          {/* Add custom print method form */}
+          <div className="flex items-center gap-2 max-w-xs mt-1">
+            <input 
+              type="text" 
+              placeholder="Add dynamic print method..." 
+              value={newMethod}
+              onChange={(e) => setNewMethod(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddPrintMethod(); } }}
+              className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 bg-white"
+            />
+            <button 
+              type="button"
+              onClick={handleAddPrintMethod}
+              className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add</span>
+            </button>
+          </div>
         </div>
       </div>
       
       {/* Printing Substrate */}
       <div>
         <h4 className="font-bold text-gray-900 mb-3 border-b pb-2">Printing Substrate</h4>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {['Carton board', 'Foil', 'White Poly', 'Paper', 'Metal', 'Poly clear'].map(sub => (
-            <label key={sub} className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="printingSubstrate" value={sub} checked={projectForm.printerSpec.printingSubstrate === sub} onChange={(e) => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, printingSubstrate: e.target.value}})} className="w-4 h-4 text-pink-600" />
-              <span className="text-sm text-gray-700">{sub}</span>
-            </label>
-          ))}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {printingSubstrates.map((sub: string) => (
+              <div key={sub} className="flex items-center justify-between group bg-gray-50 hover:bg-gray-100 p-2 rounded-lg border border-gray-200 transition-all">
+                <label className="flex items-center gap-2 cursor-pointer flex-1">
+                  <input 
+                    type="radio" 
+                    name="printingSubstrate" 
+                    value={sub} 
+                    checked={projectForm.printerSpec.printingSubstrate === sub} 
+                    onChange={(e) => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, printingSubstrate: e.target.value}})} 
+                    className="w-4 h-4 text-pink-600 focus:ring-pink-500" 
+                  />
+                  <span className="text-sm font-medium text-gray-700">{sub}</span>
+                </label>
+                <button 
+                  type="button"
+                  onClick={() => handleRemovePrintingSubstrate(sub)}
+                  className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                  title={`Delete option "${sub}"`}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          
+          {/* Add custom printing substrate form */}
+          <div className="flex items-center gap-2 max-w-xs mt-1">
+            <input 
+              type="text" 
+              placeholder="Add dynamic substrate..." 
+              value={newSubstrate}
+              onChange={(e) => setNewSubstrate(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddPrintingSubstrate(); } }}
+              className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 bg-white"
+            />
+            <button 
+              type="button"
+              onClick={handleAddPrintingSubstrate}
+              className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add</span>
+            </button>
+          </div>
         </div>
       </div>
 

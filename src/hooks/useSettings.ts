@@ -49,6 +49,8 @@ export function useSettings() {
   const [pantoneBooksUrl, setPantoneBooksUrl] = useState<string>('https://www.pantone.com/connect');
   const [teamViewerUrl, setTeamViewerUrl] = useState<string>('https://www.teamviewer.com/download');
   const [adobeScriptToolkitUrl, setAdobeScriptToolkitUrl] = useState<string>('https://github.com/Adobe-CEP/CEP-Resources');
+  const [printMethods, setPrintMethods] = useState<string[]>(['Offset', 'Flexo', 'Gravure', 'Dry offset', 'Digital']);
+  const [printingSubstrates, setPrintingSubstrates] = useState<string[]>(['Carton board', 'Foil', 'White Poly', 'Paper', 'Metal', 'Poly clear']);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -157,6 +159,16 @@ export function useSettings() {
         if (data.pantoneBooksUrl) setPantoneBooksUrl(data.pantoneBooksUrl);
         if (data.teamViewerUrl) setTeamViewerUrl(data.teamViewerUrl);
         if (data.adobeScriptToolkitUrl) setAdobeScriptToolkitUrl(data.adobeScriptToolkitUrl);
+        if (data.printMethods && Array.isArray(data.printMethods)) {
+          setPrintMethods(data.printMethods);
+        } else {
+          setPrintMethods(['Offset', 'Flexo', 'Gravure', 'Dry offset', 'Digital']);
+        }
+        if (data.printingSubstrates && Array.isArray(data.printingSubstrates)) {
+          setPrintingSubstrates(data.printingSubstrates);
+        } else {
+          setPrintingSubstrates(['Carton board', 'Foil', 'White Poly', 'Paper', 'Metal', 'Poly clear']);
+        }
       }
       checkLoaded();
     }, (err) => {
@@ -277,6 +289,8 @@ export function useSettings() {
     pantoneBooksUrl,
     teamViewerUrl,
     adobeScriptToolkitUrl,
+    printMethods,
+    printingSubstrates,
     loading 
   };
 }

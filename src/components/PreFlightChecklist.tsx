@@ -121,8 +121,8 @@ export default function PreFlightChecklist({
         tech: { 
           ...(prev.tech || {}), 
           ...(initialData.tech || {}),
-          printingProcess: initialData.tech?.printingProcess || prev.tech?.printingProcess || printerSpec?.printMethod || '',
-          substrateType: initialData.tech?.substrateType || prev.tech?.substrateType || printerSpec?.printingSubstrate || ''
+          printingProcess: initialData.tech?.printingProcess || printerSpec?.printMethod || prev.tech?.printingProcess || '',
+          substrateType: initialData.tech?.substrateType || printerSpec?.printingSubstrate || prev.tech?.substrateType || ''
         },
         sow: { 
           ...(prev.sow || {}), 

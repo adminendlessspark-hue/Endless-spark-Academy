@@ -207,6 +207,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
   const [payingInvoices, setPayingInvoices] = useState<{ invoice: any, emi?: any } | null>(null);
   const [courseModules, setCourseModules] = useState<CourseModule[]>([]);
   const [showPlacementModal, setShowPlacementModal] = useState(false);
+  const [placedStudents, setPlacedStudents] = useState<User[]>([]);
   const [placementSettings, setPlacementSettings] = useState<PlacementSettings | null>(null);
   const [projectsCount, setProjectsCount] = useState<number>(0);
 
@@ -237,6 +238,25 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.id}`);
     }
   };
+
+  // Load placed students / employees
+  useEffect(() => {
+    if (!showPlacementModal) return;
+    const q = query(collection(db, 'users'), where('role', '==', 'student'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list: User[] = [];
+      snapshot.forEach((doc) => {
+        const u = { ...doc.data(), id: doc.id } as User;
+        if (u.placementInfo?.status === 'Placed') {
+          list.push(u);
+        }
+      });
+      setPlacedStudents(list);
+    }, (err) => {
+      console.warn("Failed to load placed students:", err);
+    });
+    return () => unsub();
+  }, [showPlacementModal]);
 
   useEffect(() => {
     if (!user?.id || previewUser) return;
@@ -286,6 +306,14 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
     // Load course modules to get topics
     const unsubModules = onSnapshot(collection(db, 'course_modules'), (snapshot) => {
       let allModules = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CourseModule));
+      
+      // Sort modules by order/sequence field as per Edit Module Details configuration
+      allModules.sort((a, b) => {
+        const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
+        const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.title || '').localeCompare(b.title || '');
+      });
       
       setCourseModules(allModules);
       
@@ -542,7 +570,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
     return (
       <MoralEducation
         userName={user.name || 'Student'}
-        videoUrl={wellnessVideoUrl}
+        videoUrl={wellnessVideoUrl || 'https://www.youtube.com/embed/-GHd77C4brk?si=lnvBe-_P2fXxAeaW'}
         onComplete={handleWellnessComplete}
         onBack={() => setShowWellness(false)}
       />
@@ -861,7 +889,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
   };
 
   return (
-    <div className="max-w-6xl space-y-8">
+    <div className="w-full max-w-7xl mx-auto space-y-8">
       {/* Required Workstation Software Setup Onboarding */}
       {user?.role === 'student' && (
         <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden group">
@@ -1438,19 +1466,19 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
           </div>
         )}
 
-        {/* Morning Routine / Wellness Day Starter Card */}
-        {wellnessEnabled && user.isApproved && (
+        {/* Morning Routine / Wellness Practice Card - Always available for students to practice when they want */}
+        {user.isApproved && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-pink-100 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center shrink-0">
                 <Sparkles className="w-6 h-6 animate-pulse" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900">Morning Routine Module</h3>
+                <h3 className="font-bold text-gray-900">Morning Routine & Wellness Practice</h3>
                 <p className="text-sm text-gray-500">
                   {user.lastWellnessDate === new Date().toISOString().split('T')[0]
-                    ? "✓ You have successfully completed your holistic morning routine for today. Keep up the excellent work!"
-                    : "Start your morning with mandatory self-care, focus exercises, meditation, and daily check-ins."}
+                    ? "✓ Completed today! Feel free to practice mindfulness, focus exercises, and meditation again anytime you want."
+                    : "Start your day with holistic self-care, focus exercises, meditation, and daily check-ins (available for practice 24/7)."}
                 </p>
               </div>
             </div>
@@ -1458,138 +1486,141 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
               onClick={() => setShowWellness(true)}
               className="px-6 py-2 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 transition-all shadow-sm shadow-pink-200 flex items-center gap-2 whitespace-nowrap cursor-pointer shrink-0"
             >
-              Start Morning Routine <ArrowRight className="w-4 h-4" />
+              Practice Wellness Now <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         )}
 
       {/* STUDENT SCORE CARD - Moved after Student ID as per user request */}
-      <div className="space-y-6">
+      <div className="space-y-8">
         <div className="flex items-center gap-2 px-2">
           <FileText className="w-5 h-5 text-pink-600" />
           <h2 className="text-xl font-bold text-gray-900 uppercase tracking-wider">STUDENT SCORE CARD</h2>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Circular Overview */}
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col">
-              <div className="flex items-center gap-2 mb-6">
-                <Award className="w-6 h-6 text-pink-600" />
-                <h3 className="text-lg font-bold text-gray-900">Overall Progress</h3>
-              </div>
-              <div className="flex-1 flex flex-col items-center justify-center py-4">
-                <div className="relative w-40 h-40 flex items-center justify-center">
-                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="45" fill="none" stroke="#fce7f3" strokeWidth="10" />
-                    <circle 
-                      cx="50" cy="50" r="45" fill="none" stroke="#db2777" strokeWidth="10" 
-                      strokeDasharray={`${Math.min(100, Math.max(0, (getStudentScoreCard().totalScore / Math.max(1, getStudentScoreCard().maxPossible)) * 100)) * 2.827} 282.7`}
-                      className="transition-all duration-1000 ease-out"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-3xl font-black text-gray-900 leading-none">{getStudentScoreCard().totalScore}</span>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">/ {getStudentScoreCard().maxPossible}</span>
-                  </div>
-                </div>
-                <p className="mt-4 text-xs text-gray-500 text-center px-4 leading-relaxed">
-                  Total marks accumulated across all completed modules and assignments.
-                </p>
-              </div>
+        {/* Progress Metrics Row (Full Width Columns Side-by-Side) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+          {/* Circular Progress (takes 1 column of 3 on md/lg, but can span full in mobile) */}
+          <div className="md:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+            <div className="flex items-center gap-2 mb-6">
+              <Award className="w-6 h-6 text-pink-600" />
+              <h3 className="text-lg font-bold text-gray-900">Overall Progress</h3>
             </div>
-
-            {/* Re-added Institution Holidays */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col">
-              <div className="flex items-center gap-2 mb-6">
-                <Calendar className="w-6 h-6 text-pink-600" />
-                <h3 className="text-lg font-bold text-gray-900">Institution Holidays</h3>
+            <div className="flex-1 flex flex-col items-center justify-center py-4">
+              <div className="relative w-40 h-40 flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="45" fill="none" stroke="#fce7f3" strokeWidth="10" />
+                  <circle 
+                    cx="50" cy="50" r="45" fill="none" stroke="#db2777" strokeWidth="10" 
+                    strokeDasharray={`${Math.min(100, Math.max(0, (getStudentScoreCard().totalScore / Math.max(1, getStudentScoreCard().maxPossible)) * 100)) * 2.827} 282.7`}
+                    className="transition-all duration-1000 ease-out"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-3xl font-black text-gray-900 leading-none">{getStudentScoreCard().totalScore}</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">/ {getStudentScoreCard().maxPossible}</span>
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto pr-2" style={{ maxHeight: '250px' }}>
-                <div className="space-y-3">
-                  {holidays
-                    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                    .map((holiday, idx) => {
-                      const hDate = new Date(holiday.date);
-                      const holidayName = holiday.title;
-                      const formattedDate = hDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-                      const formattedDay = hDate.toLocaleDateString('en-IN', { weekday: 'long' });
-                      return (
-                        <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-pink-200 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className="flex flex-col items-center justify-center w-10 h-10 bg-pink-50 border border-pink-100 rounded-lg shrink-0">
-                              <span className="text-[9px] font-black text-pink-700 uppercase leading-none">{hDate.toLocaleDateString('en-IN', { month: 'short' })}</span>
-                              <span className="text-sm font-extrabold text-pink-950 leading-none mt-0.5">{hDate.toLocaleDateString('en-IN', { day: 'numeric' })}</span>
-                            </div>
-                            <div>
-                              <p className="font-bold text-xs text-gray-900">{holidayName}</p>
-                              <p className="text-[10px] text-pink-600 font-medium">
-                                {formattedDay}
-                              </p>
-                            </div>
+              <p className="mt-4 text-xs text-gray-500 text-center px-4 leading-relaxed">
+                Total marks accumulated across all completed modules and assignments.
+              </p>
+            </div>
+          </div>
+
+          {/* Re-added Institution Holidays (takes 2 columns of 3, allowing it to stretch) */}
+          <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+            <div className="flex items-center gap-2 mb-6">
+              <Calendar className="w-6 h-6 text-pink-600" />
+              <h3 className="text-lg font-bold text-gray-900">Institution Holidays</h3>
+            </div>
+            <div className="flex-1 overflow-y-auto pr-2" style={{ maxHeight: '250px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {holidays
+                  .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                  .map((holiday, idx) => {
+                    const hDate = new Date(holiday.date);
+                    const holidayName = holiday.title;
+                    const formattedDate = hDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                    const formattedDay = hDate.toLocaleDateString('en-IN', { weekday: 'long' });
+                    return (
+                      <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-pink-200 transition-colors">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex flex-col items-center justify-center w-10 h-10 bg-pink-50 border border-pink-100 rounded-lg shrink-0">
+                            <span className="text-[9px] font-black text-pink-700 uppercase leading-none">{hDate.toLocaleDateString('en-IN', { month: 'short' })}</span>
+                            <span className="text-sm font-extrabold text-pink-950 leading-none mt-0.5">{hDate.toLocaleDateString('en-IN', { day: 'numeric' })}</span>
                           </div>
-                          <div className="text-right">
-                            <span className="text-[10px] text-gray-400 font-medium font-mono">{formattedDate}</span>
+                          <div className="min-w-0">
+                            <p className="font-bold text-xs text-gray-900 truncate">{holidayName}</p>
+                            <p className="text-[10px] text-pink-600 font-medium truncate">
+                              {formattedDay}
+                            </p>
                           </div>
                         </div>
-                      );
-                    })}
-                  {holidays.length === 0 && (
-                    <p className="text-center py-4 text-xs text-gray-400 italic">No holidays scheduled.</p>
-                  )}
-                </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-[10px] text-gray-400 font-medium font-mono">{formattedDate}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                {holidays.length === 0 && (
+                  <p className="text-center col-span-full py-4 text-xs text-gray-400 italic">No holidays scheduled.</p>
+                )}
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Detailed Tables for All Assigned Courses */}
-          <div className="lg:col-span-2 space-y-6">
-            {assignedCourses.length === 0 ? (
-              <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-gray-200">
-                <p className="text-gray-400 italic">Score cards will appear here once courses are assigned.</p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {assignedCourses.map(courseId => {
-                  const topicsMap: Record<CourseType, { title: string, videoUrl?: string }[]> = {
-                    'packaging-engineer': packagingEngineerTopics,
-                    'production-art-engineer': productionArtEngineerTopics,
-                    'print-ready-engineer': printReadyEngineerTopics,
-                    'plate-ready-engineer': plateReadyEngineerTopics,
-                    'colour-retouching-engineer': colourRetouchingEngineerTopics,
-                    'quality-control-engineer': qualityControlEngineerTopics,
-                    'printing-and-packaging-cross-courses': printingAndPackagingTopics
-                  };
-                  
-                  const scoreKeyMap: Record<CourseType, keyof User['scores']> = {
-                    'packaging-engineer': 'packagingEngineer',
-                    'production-art-engineer': 'productionArtEngineer',
-                    'print-ready-engineer': 'printReadyEngineer',
-                    'plate-ready-engineer': 'plateReadyEngineer',
-                    'colour-retouching-engineer': 'colourRetouchingEngineer',
-                    'quality-control-engineer': 'qualityControlEngineer',
-                    'printing-and-packaging-cross-courses': 'printingAndPackagingCrossCourses'
-                  };
-
-                  return (
-                    <ScoreTable 
-                      key={courseId}
-                      categoryId={courseId}
-                      title={`Module - ${formatCourseName(courseId)}`} 
-                      topics={topicsMap[courseId] || []} 
-                      scores={user.scores?.[scoreKeyMap[courseId]] || {}} 
-                      onMarkAttendance={handleMarkAttendance}
-                      trainingRecords={trainingRecords}
-                      onViewRecord={(record) => {
-                        setViewingTrainingRecord(record);
-                        setShowTrainingModal(true);
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            )}
+        {/* Detailed Tables for All Assigned Courses - RENDERED FULL WIDTH! */}
+        <div className="w-full space-y-6">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-pink-600" />
+            <h3 className="font-bold text-gray-800 text-lg">Detailed Course Module Score Cards</h3>
           </div>
+          {assignedCourses.length === 0 ? (
+            <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-gray-200">
+              <p className="text-gray-400 italic">Score cards will appear here once courses are assigned.</p>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {assignedCourses.map(courseId => {
+                const topicsMap: Record<CourseType, { title: string, videoUrl?: string }[]> = {
+                  'packaging-engineer': packagingEngineerTopics,
+                  'production-art-engineer': productionArtEngineerTopics,
+                  'print-ready-engineer': printReadyEngineerTopics,
+                  'plate-ready-engineer': plateReadyEngineerTopics,
+                  'colour-retouching-engineer': colourRetouchingEngineerTopics,
+                  'quality-control-engineer': qualityControlEngineerTopics,
+                  'printing-and-packaging-cross-courses': printingAndPackagingTopics
+                };
+                
+                const scoreKeyMap: Record<CourseType, keyof User['scores']> = {
+                  'packaging-engineer': 'packagingEngineer',
+                  'production-art-engineer': 'productionArtEngineer',
+                  'print-ready-engineer': 'printReadyEngineer',
+                  'plate-ready-engineer': 'plateReadyEngineer',
+                  'colour-retouching-engineer': 'colourRetouchingEngineer',
+                  'quality-control-engineer': 'qualityControlEngineer',
+                  'printing-and-packaging-cross-courses': 'printingAndPackagingCrossCourses'
+                };
+
+                return (
+                  <ScoreTable 
+                    key={courseId}
+                    categoryId={courseId}
+                    title={`Module - ${formatCourseName(courseId)}`} 
+                    topics={topicsMap[courseId] || []} 
+                    scores={user.scores?.[scoreKeyMap[courseId]] || {}} 
+                    onMarkAttendance={handleMarkAttendance}
+                    trainingRecords={trainingRecords}
+                    onViewRecord={(record) => {
+                      setViewingTrainingRecord(record);
+                      setShowTrainingModal(true);
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2761,6 +2792,43 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
                     </div>
                     <h5 className="font-bold text-gray-900 text-lg mb-2">Course In Progress</h5>
                     <p className="text-sm text-gray-500 max-w-md">Upon completing your enrolled course successfully, you will become eligible for campus placements. Auto-updates will appear here.</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Placed Students & Employees Success Stories */}
+              <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-6 h-6 text-emerald-600 animate-pulse" />
+                    <h4 className="font-bold text-gray-800 text-lg">Our Placed Students & Employees</h4>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold uppercase bg-emerald-100 text-emerald-700">
+                    {placedStudents.length} Placed
+                  </span>
+                </div>
+
+                {placedStudents.length === 0 ? (
+                  <div className="p-10 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                    <p className="text-gray-400 italic">No placed student records found.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {placedStudents.map((st) => (
+                      <div 
+                        key={st.id} 
+                        className="p-5 bg-gradient-to-br from-emerald-50/30 to-teal-50/10 rounded-2xl border border-emerald-100/50 shadow-xs flex items-center gap-4 hover:shadow-md transition-all duration-300 group"
+                      >
+                        <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 font-extrabold flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+                          {st.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-gray-900 truncate text-sm">{st.name}</p>
+                          <p className="text-xs text-gray-500 font-medium truncate">{st.placementInfo?.placedCompany || 'Confidential Company'}</p>
+                          <p className="text-xs text-emerald-600 font-semibold mt-1">Package: {st.placementInfo?.packageAmount || 'As Per Norms'}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

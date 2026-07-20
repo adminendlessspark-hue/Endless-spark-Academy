@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { LogIn, UserPlus, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { LogIn, UserPlus, AlertCircle, Eye, EyeOff, ShieldCheck, Instagram, Facebook, Youtube, Linkedin } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 
 export default function Login() {
@@ -15,7 +15,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || '/';
-  const { logoUrl } = useSettings();
+  const { logoUrl, socialInstagram, socialFacebook, socialYoutube, socialLinkedin } = useSettings();
 
   const isLoggingIn = React.useRef(false);
 
@@ -256,6 +256,32 @@ export default function Login() {
             <span>•</span>
             <Link to="/terms" className="hover:text-pink-600 transition-colors">Terms of Service</Link>
           </div>
+
+          {/* Social Links */}
+          {(socialInstagram || socialFacebook || socialYoutube || socialLinkedin) && (
+            <div className="flex items-center justify-center gap-5 pt-2 text-gray-400">
+              {socialInstagram && (
+                <a href={socialInstagram} target="_blank" rel="noopener noreferrer" className="hover:text-pink-600 transition-colors" title="Instagram">
+                  <Instagram className="w-5 h-5" />
+                </a>
+              )}
+              {socialFacebook && (
+                <a href={socialFacebook} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors" title="Facebook">
+                  <Facebook className="w-5 h-5" />
+                </a>
+              )}
+              {socialYoutube && (
+                <a href={socialYoutube} target="_blank" rel="noopener noreferrer" className="hover:text-red-600 transition-colors" title="YouTube">
+                  <Youtube className="w-5 h-5" />
+                </a>
+              )}
+              {socialLinkedin && (
+                <a href={socialLinkedin} target="_blank" rel="noopener noreferrer" className="hover:text-blue-700 transition-colors" title="LinkedIn">
+                  <Linkedin className="w-5 h-5" />
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <div className="flex-grow"></div>

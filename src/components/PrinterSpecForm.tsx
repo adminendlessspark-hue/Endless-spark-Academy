@@ -152,6 +152,7 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
                   <td className="p-2">
                     <div className="flex items-center justify-center gap-1">
                       <button 
+                        type="button"
                         onClick={() => insertBarcodeRow(idx)}
                         className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                         title="Insert Row Below"
@@ -159,6 +160,7 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
                         <PlusCircle className="w-4 h-4" />
                       </button>
                       <button 
+                        type="button"
                         onClick={() => {
                           const newBc = projectForm.printerSpec.barcodes.filter((_: any, i: number) => i !== idx);
                           setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, barcodes: newBc}});
@@ -175,7 +177,7 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
             </tbody>
           </table>
         </div>
-        <button onClick={() => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, barcodes: [...projectForm.printerSpec.barcodes, {codeType:'', codeNumber:'', codeColour:'', bwr:'', magnification:'', narrowBar:''}]}})} className="text-xs font-bold text-pink-600 mt-2 hover:text-pink-700">+ Add Barcode Row</button>
+        <button type="button" onClick={() => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, barcodes: [...projectForm.printerSpec.barcodes, {codeType:'', codeNumber:'', codeColour:'', bwr:'', magnification:'', narrowBar:''}]}})} className="text-xs font-bold text-pink-600 mt-2 hover:text-pink-700">+ Add Barcode Row</button>
       </div>
 
       {/* Color Rotation Details */}
@@ -206,6 +208,7 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
                   <td className="p-2">
                     <div className="flex items-center justify-center gap-1.5">
                       <button 
+                        type="button"
                         disabled={idx === 0}
                         onClick={() => moveColorRowUp(idx)}
                         className="p-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-500 transition-colors"
@@ -214,6 +217,7 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
                         <ArrowUp className="w-4 h-4" />
                       </button>
                       <button 
+                        type="button"
                         disabled={idx === projectForm.printerSpec.colorRotation.length - 1}
                         onClick={() => moveColorRowDown(idx)}
                         className="p-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-gray-500 transition-colors"
@@ -222,6 +226,7 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
                         <ArrowDown className="w-4 h-4" />
                       </button>
                       <button 
+                        type="button"
                         onClick={() => insertColorRow(idx)}
                         className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                         title="Insert Row Below"
@@ -229,6 +234,7 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
                         <PlusCircle className="w-4 h-4" />
                       </button>
                       <button 
+                        type="button"
                         onClick={() => {
                           const newCr = projectForm.printerSpec.colorRotation.filter((_: any, i: number) => i !== idx);
                           setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, colorRotation: newCr}});
@@ -245,7 +251,7 @@ export default function PrinterSpecForm({ projectForm, setProjectForm }: { proje
             </tbody>
           </table>
         </div>
-        <button onClick={() => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, colorRotation: [...projectForm.printerSpec.colorRotation, {colorName:'', lineScreen:'', lpi:'', dotType:'', angle:'', new:''}]}})} className="text-xs font-bold text-pink-600 mt-2 hover:text-pink-700">+ Add Color Row</button>
+        <button type="button" onClick={() => setProjectForm({...projectForm, printerSpec: {...projectForm.printerSpec, colorRotation: [...projectForm.printerSpec.colorRotation, {colorName:'', lineScreen:'', lpi:'', dotType:'', angle:'', new:''}]}})} className="text-xs font-bold text-pink-600 mt-2 hover:text-pink-700">+ Add Color Row</button>
       </div>
 
       {/* Print Method */}

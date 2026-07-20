@@ -3,7 +3,7 @@ import AdminWhatsAppSettings from '../components/AdminWhatsAppSettings';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Users, BookOpen, GraduationCap, CheckCircle, XCircle, Upload, Plus, Trash2, Video, Clock, ShieldCheck, Calendar, UserCheck, X, Download, FileText, Map, FileSpreadsheet, HelpCircle, Eye, Check, ExternalLink, User as UserIcon, PhoneCall, MapPin, Edit2, Edit, IndianRupee, Image, MoreVertical, Key, Ban, RefreshCw, Briefcase, Calculator, Bot, Loader2, FolderKanban, Copy, UserPlus, AlertCircle, FileCheck, ChevronDown, ChevronUp, Sparkles, Printer, Wind, Cloud, Layers, Wallet, CheckSquare, Globe, MessageCircle, Info, ChevronLeft, ChevronRight, Award } from 'lucide-react';
+import { Users, BookOpen, GraduationCap, CheckCircle, XCircle, Upload, Plus, Trash2, Video, Clock, ShieldCheck, Calendar, UserCheck, X, Download, FileText, Map, FileSpreadsheet, HelpCircle, Eye, Check, ExternalLink, User as UserIcon, PhoneCall, MapPin, Edit2, Edit, IndianRupee, Image, MoreVertical, Key, Ban, RefreshCw, Briefcase, Calculator, Bot, Loader2, FolderKanban, Copy, UserPlus, AlertCircle, FileCheck, ChevronDown, ChevronUp, Sparkles, Printer, Wind, Cloud, Layers, Wallet, CheckSquare, Globe, MessageCircle, Info, ChevronLeft, ChevronRight, Award, Search, Instagram, Facebook, Youtube, Linkedin } from 'lucide-react';
 import { User, CourseModule, QuizQuestion, CourseType, TopicScore, Holiday, ApplicationData, TeamMember, TrainingPlanRow } from '../types';
 import { DEFAULT_TRAINING_PLANS } from '../defaultTrainingPlans';
 import { cn, compressImage, calculateSLADate, formatCourseName, getScoreKey, getOrdinalSuffix } from '../utils';
@@ -319,6 +319,8 @@ export default function AdminPanel() {
     }
     return defaultCourseModules;
   }, [financialSettings]);
+
+
   const [showCreateSessionModal, setShowCreateSessionModal] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
   const [newSessionFacultyId, setNewSessionFacultyId] = useState('');
@@ -343,7 +345,37 @@ export default function AdminPanel() {
   const [selectedStudentForMarks, setSelectedStudentForMarks] = useState<string | null>(null);
   const [selectedCourseForMarks, setSelectedCourseForMarks] = useState<CourseType>('production-art-engineer');
   const [viewingFacultySchedule, setViewingFacultySchedule] = useState<User | null>(null);
-  const [staffSubTab, setStaffSubTab] = useState<'faculty' | 'qc' | 'accounts' | 'telecaller' | 'marketing'>('faculty');
+  const [staffSubTab, setStaffSubTab] = useState<'all' | 'faculty' | 'qc' | 'accounts' | 'telecaller' | 'marketing'>('all');
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [staffRoleFilter, setStaffRoleFilter] = useState('all');
+
+  const allEmployees = useMemo(() => {
+    return [
+      ...faculty.map(u => ({ ...u, displayRole: 'Faculty', role: 'faculty' })),
+      ...qcReviewers.map(u => ({ ...u, displayRole: 'QC Reviewer', role: 'qc' })),
+      ...accountsExecutives.map(u => ({ ...u, displayRole: 'Accounts', role: 'accounts_executive' })),
+      ...telecallers.map(u => ({ ...u, displayRole: 'Sales (Telecaller)', role: 'telecaller' })),
+      ...marketings.map(u => ({ ...u, displayRole: 'Marketing', role: 'marketing' })),
+    ];
+  }, [faculty, qcReviewers, accountsExecutives, telecallers, marketings]);
+
+  const allEmployeesFiltered = useMemo(() => {
+    return allEmployees.filter(emp => {
+      // Role filter
+      if (staffRoleFilter !== 'all' && emp.role !== staffRoleFilter) return false;
+      
+      // Search query filter
+      if (staffSearchQuery.trim()) {
+        const query = staffSearchQuery.toLowerCase();
+        return (
+          emp.name.toLowerCase().includes(query) ||
+          emp.email.toLowerCase().includes(query) ||
+          emp.username.toLowerCase().includes(query)
+        );
+      }
+      return true;
+    });
+  }, [allEmployees, staffRoleFilter, staffSearchQuery]);
   const [adminSignature, setAdminSignature] = useState<string>('');
   const [logoUrl, setLogoUrl] = useState<string>('/logo.png');
   const [cloudServerBaseUrl, setCloudServerBaseUrl] = useState<string>('files.yourserver.com');
@@ -377,6 +409,10 @@ export default function AdminPanel() {
   const [wellnessVideoUrl, setWellnessVideoUrl] = useState<string>('');
   const [brandGuidelineUrl, setBrandGuidelineUrl] = useState<string>('');
   const [legalMandateUrl, setLegalMandateUrl] = useState<string>('');
+  const [socialInstagram, setSocialInstagram] = useState<string>('');
+  const [socialFacebook, setSocialFacebook] = useState<string>('');
+  const [socialYoutube, setSocialYoutube] = useState<string>('');
+  const [socialLinkedin, setSocialLinkedin] = useState<string>('');
   const [enableDocumentDownloads, setEnableDocumentDownloads] = useState<boolean>(false);
   const [qcErrorCategories, setQcErrorCategories] = useState<string[]>(['Typography', 'Color', 'Layout', 'Bleed/Trim', 'Other']);
   const [aiKnowledgeBase, setAiKnowledgeBase] = useState<string>('');
@@ -714,7 +750,12 @@ export default function AdminPanel() {
     // Listen to modules
     const unsubModules = onSnapshot(collection(db, 'course_modules'), (snapshot) => {
       const allModules = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CourseModule));
-      allModules.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+      allModules.sort((a, b) => {
+        const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
+        const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.title || '').localeCompare(b.title || '');
+      });
       setAllRegisteredModules(allModules);
       setProductionArtModules(allModules.filter(m => m.category === 'production-art-engineer'));
       setPrintReadyModules(allModules.filter(m => m.category === 'print-ready-engineer'));
@@ -747,6 +788,10 @@ export default function AdminPanel() {
         setWellnessVideoUrl(data.wellnessVideoUrl || 'https://www.youtube.com/embed/-GHd77C4brk?si=lnvBe-_P2fXxAeaW');
         setBrandGuidelineUrl(data.brandGuidelineUrl || '');
         setLegalMandateUrl(data.legalMandateUrl || '');
+        setSocialInstagram(data.socialInstagram || '');
+        setSocialFacebook(data.socialFacebook || '');
+        setSocialYoutube(data.socialYoutube || '');
+        setSocialLinkedin(data.socialLinkedin || '');
         if (data.enableDocumentDownloads !== undefined) {
           setEnableDocumentDownloads(data.enableDocumentDownloads);
         }
@@ -2841,9 +2886,27 @@ export default function AdminPanel() {
         wellnessVideoUrl,
         enableDocumentDownloads,
         qcErrorCategories,
-        landingPageStats
+        landingPageStats,
+        socialInstagram,
+        socialFacebook,
+        socialYoutube,
+        socialLinkedin
       }, { merge: true });
       alert('Settings saved successfully.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'settings/admin');
+    }
+  };
+
+  const handleSaveSocialLinks = async () => {
+    try {
+      await setDoc(doc(db, 'settings', 'admin'), { 
+        socialInstagram,
+        socialFacebook,
+        socialYoutube,
+        socialLinkedin
+      }, { merge: true });
+      alert('Social media links saved successfully.');
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'settings/admin');
     }
@@ -4667,7 +4730,7 @@ export default function AdminPanel() {
                           </button>
 
                           {activeDropdownId === student.id && (
-                            <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 animate-in fade-in zoom-in duration-200 text-left">
+                            <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 w-56 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-right-2 duration-200 text-left">
                               <button 
                                 onClick={() => { handleResetPassword(student.id); setActiveDropdownId(null); }}
                                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-pink-600 flex items-center gap-2"
@@ -7285,8 +7348,8 @@ export default function AdminPanel() {
             </div>
 
             {/* Sub-tabs for staff types */}
-            <div className="flex gap-2 mb-8 bg-gray-100 p-1.5 rounded-2xl w-fit">
-              {(['faculty', 'qc', 'accounts', 'telecaller', 'marketing'] as const).map((role) => (
+            <div className="flex gap-2 mb-8 bg-gray-100 p-1.5 rounded-2xl w-fit flex-wrap">
+              {(['all', 'faculty', 'qc', 'accounts', 'telecaller', 'marketing'] as const).map((role) => (
                 <button
                   key={role}
                   onClick={() => setStaffSubTab(role)}
@@ -7297,7 +7360,7 @@ export default function AdminPanel() {
                       : "text-gray-500 hover:text-gray-700"
                   )}
                 >
-                  {role === 'qc' ? 'QC Reviewers' : role === 'accounts' ? 'Accounts Team' : role === 'telecaller' ? 'Sales Team (Telecallers)' : role === 'marketing' ? 'Marketing Team' : role.charAt(0).toUpperCase() + role.slice(1)}
+                  {role === 'all' ? 'All Employees' : role === 'qc' ? 'QC Reviewers' : role === 'accounts' ? 'Accounts Team' : role === 'telecaller' ? 'Sales Team (Telecallers)' : role === 'marketing' ? 'Marketing Team' : role.charAt(0).toUpperCase() + role.slice(1)}
                 </button>
               ))}
             </div>
@@ -7313,6 +7376,127 @@ export default function AdminPanel() {
                 </p>
               </div>
             </div>
+
+            {/* All Employees Section */}
+            {staffSubTab === 'all' && (
+              <div className="animate-in fade-in duration-300">
+                <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+                  <div className="relative flex-1 max-w-md w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type="text"
+                      placeholder="Search employees by name, email, or username..."
+                      className="pl-10 pr-4 py-2.5 w-full bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm font-medium"
+                      value={staffSearchQuery}
+                      onChange={(e) => setStaffSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Filter Role:</span>
+                    <select
+                      className="p-2.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm font-semibold text-gray-700"
+                      value={staffRoleFilter}
+                      onChange={(e) => setStaffRoleFilter(e.target.value)}
+                    >
+                      <option value="all">All Roles</option>
+                      <option value="faculty">Faculty</option>
+                      <option value="qc">QC Reviewer</option>
+                      <option value="accounts_executive">Accounts Executive</option>
+                      <option value="telecaller">Sales (Telecaller)</option>
+                      <option value="marketing">Marketing</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto custom-scrollbar bg-white rounded-3xl border border-gray-100 p-2 shadow-sm">
+                  <table className="w-full text-left min-w-[800px]">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="px-6 pb-4 pt-2 font-bold text-xs text-gray-400 uppercase tracking-wider">Employee Name</th>
+                        <th className="px-6 pb-4 pt-2 font-bold text-xs text-gray-400 uppercase tracking-wider">Role / Access Level</th>
+                        <th className="px-6 pb-4 pt-2 font-bold text-xs text-gray-400 uppercase tracking-wider">Username</th>
+                        <th className="px-6 pb-4 pt-2 font-bold text-xs text-gray-400 uppercase tracking-wider">Email Address</th>
+                        <th className="px-6 pb-4 pt-2 font-bold text-xs text-gray-400 uppercase tracking-wider text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {allEmployeesFiltered.map((emp) => (
+                        <tr key={emp.id} className="group hover:bg-gray-50/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-pink-50 text-pink-600 flex items-center justify-center text-sm font-bold border border-pink-100">
+                                {emp.name.charAt(0)}
+                              </div>
+                              <span className="font-semibold text-gray-900 text-sm">{emp.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={cn(
+                              "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                              emp.role === 'faculty' ? "bg-pink-100 text-pink-700" :
+                              emp.role === 'qc' ? "bg-blue-100 text-blue-700" :
+                              emp.role === 'accounts_executive' ? "bg-green-100 text-green-700" :
+                              emp.role === 'telecaller' ? "bg-purple-100 text-purple-700" :
+                              "bg-orange-100 text-orange-700"
+                            )}>
+                              {emp.displayRole}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-mono font-bold text-gray-600">{emp.username}</td>
+                          <td className="px-6 py-4 text-sm text-gray-500">{emp.email}</td>
+                          <td className="px-6 py-4 text-right whitespace-nowrap">
+                            <button 
+                              onClick={() => handleDemoteToStudent(emp.id)}
+                              className="px-3 py-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors mr-1.5"
+                              title="Demote Employee to Student"
+                            >
+                              Demote
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                try {
+                                  await updateDoc(doc(db, 'users', emp.id), { mustChangePassword: true });
+                                  alert(`${emp.name} will be prompted to change their password on next login.`);
+                                } catch (err) {
+                                  handleFirestoreError(err, OperationType.UPDATE, `users/${emp.id}`);
+                                }
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors mr-1.5"
+                              title="Force password change on next login"
+                            >
+                              Reset Pass
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                if (window.confirm(`Are you sure you want to delete this ${emp.displayRole} account?`)) {
+                                  try {
+                                    await deleteDoc(doc(db, 'users', emp.id));
+                                    alert('Employee account deleted successfully.');
+                                  } catch (err) {
+                                    handleFirestoreError(err, OperationType.DELETE, `users/${emp.id}`);
+                                  }
+                                }
+                              }}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors inline-flex items-center"
+                              title="Permanently delete employee account"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {allEmployeesFiltered.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="py-12 text-center text-gray-400 italic text-sm">
+                            No employees found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Faculty Section */}
             {staffSubTab === 'faculty' && (
@@ -8428,6 +8612,78 @@ export default function AdminPanel() {
                 >
                   Save Document Settings
                 </button>
+              </div>
+
+              <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100">
+                <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-pink-600" />
+                  Social Media Link Settings
+                </h4>
+                <p className="text-xs text-gray-500 mb-6 font-semibold">
+                  Configure the social media platform links (Instagram, Facebook, YouTube, LinkedIn) for students to follow.
+                </p>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Instagram className="w-4 h-4 text-pink-600" />
+                      Instagram Profile URL
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., https://instagram.com/endlessspark"
+                      className="w-full p-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm font-semibold"
+                      value={socialInstagram}
+                      onChange={(e) => setSocialInstagram(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Facebook className="w-4 h-4 text-blue-600" />
+                      Facebook Page URL
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., https://facebook.com/endlessspark"
+                      className="w-full p-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm font-semibold"
+                      value={socialFacebook}
+                      onChange={(e) => setSocialFacebook(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Youtube className="w-4 h-4 text-red-600" />
+                      YouTube Channel URL
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., https://youtube.com/@endlessspark"
+                      className="w-full p-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm font-semibold"
+                      value={socialYoutube}
+                      onChange={(e) => setSocialYoutube(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Linkedin className="w-4 h-4 text-blue-700" />
+                      LinkedIn Company URL
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., https://linkedin.com/company/endless-spark"
+                      className="w-full p-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm font-semibold"
+                      value={socialLinkedin}
+                      onChange={(e) => setSocialLinkedin(e.target.value)}
+                    />
+                  </div>
+                  <button 
+                    onClick={handleSaveSocialLinks}
+                    className="w-full py-3 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors shadow-sm active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Globe className="w-4 h-4" />
+                    <span>Save Social Media Links</span>
+                  </button>
+                </div>
               </div>
 
               <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100">

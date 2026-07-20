@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, UserPlus, FileText, Video, GraduationCap, BookOpen, LogOut, ShieldCheck, UserCheck, Menu, X, PhoneCall, MessageCircle, DollarSign, FolderKanban, Zap, FileQuestion, UserSquare2, Sparkles } from 'lucide-react';
+import { LayoutDashboard, UserPlus, FileText, Video, GraduationCap, BookOpen, LogOut, ShieldCheck, UserCheck, Menu, X, PhoneCall, MessageCircle, DollarSign, FolderKanban, Zap, FileQuestion, UserSquare2, Sparkles, Instagram, Facebook, Youtube, Linkedin } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../utils';
 import { useAuth } from '../AuthContext';
@@ -44,12 +44,12 @@ export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const { user, logout, isAdmin, isQC } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { logoUrl, wellnessEnabled } = useSettings();
+  const { logoUrl, wellnessEnabled, socialInstagram, socialFacebook, socialYoutube, socialLinkedin } = useSettings();
 
   const filteredNavItems = navItems.filter(item => {
-    // If it's Morning Routine, only show if wellness is enabled
+    // If it's Morning Routine, show for all students and admins so they can practice wellness whenever they want
     if (item.path === '/morning-routine') {
-      return !!wellnessEnabled && (user?.role === 'student' || isAdmin);
+      return user?.role === 'student' || isAdmin;
     }
 
     // If it's Entrance Test, allow student access if assigned, evaluated or submitted
@@ -208,6 +208,32 @@ export default function Layout({ children }: LayoutProps) {
                   Sign Up
                 </Link>
               </div>
+            </div>
+          )}
+
+          {/* Social Links Row */}
+          {(socialInstagram || socialFacebook || socialYoutube || socialLinkedin) && (
+            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-center gap-4 text-gray-400">
+              {socialInstagram && (
+                <a href={socialInstagram} target="_blank" rel="noopener noreferrer" className="hover:text-pink-600 transition-colors" title="Follow us on Instagram">
+                  <Instagram className="w-5 h-5" />
+                </a>
+              )}
+              {socialFacebook && (
+                <a href={socialFacebook} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors" title="Follow us on Facebook">
+                  <Facebook className="w-5 h-5" />
+                </a>
+              )}
+              {socialYoutube && (
+                <a href={socialYoutube} target="_blank" rel="noopener noreferrer" className="hover:text-red-600 transition-colors" title="Subscribe to our YouTube Channel">
+                  <Youtube className="w-5 h-5" />
+                </a>
+              )}
+              {socialLinkedin && (
+                <a href={socialLinkedin} target="_blank" rel="noopener noreferrer" className="hover:text-blue-700 transition-colors" title="Follow us on LinkedIn">
+                  <Linkedin className="w-5 h-5" />
+                </a>
+              )}
             </div>
           )}
         </div>

@@ -369,6 +369,34 @@ export default function PublicQcPanel() {
   // Extract unique students who have projects in the list
   const uniqueStudents = Array.from(new Set(projects.map(p => p.studentName).filter(Boolean))).sort();
 
+  // Get filtered counts for tab headers
+  const pendingCount = projects.filter(p => {
+    if (selectedStudent !== 'all' && p.studentName !== selectedStudent) return false;
+    const matchesSearch = !searchQuery || 
+      p.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.studentName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.projectCode?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch && p.status === 'qc';
+  }).length;
+
+  const activeCount = projects.filter(p => {
+    if (selectedStudent !== 'all' && p.studentName !== selectedStudent) return false;
+    const matchesSearch = !searchQuery || 
+      p.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.studentName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.projectCode?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch && p.status !== 'qc' && p.status !== 'approved';
+  }).length;
+
+  const approvedCount = projects.filter(p => {
+    if (selectedStudent !== 'all' && p.studentName !== selectedStudent) return false;
+    const matchesSearch = !searchQuery || 
+      p.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.studentName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.projectCode?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch && p.status === 'approved';
+  }).length;
+
   // Filter projects by current tab and search query
   const filteredProjects = projects.filter(project => {
     if (selectedStudent !== 'all' && project.studentName !== selectedStudent) return false;
@@ -621,7 +649,7 @@ export default function PublicQcPanel() {
                       : "text-gray-500 hover:text-gray-900"
                   )}
                 >
-                  Pending QC ({projects.filter(p => p.status === 'qc').length})
+                  Pending QC ({pendingCount})
                 </button>
                 <button
                   onClick={() => { setCurrentTab('active'); setExpandedProjectId(null); }}
@@ -632,7 +660,7 @@ export default function PublicQcPanel() {
                       : "text-gray-500 hover:text-gray-900"
                   )}
                 >
-                  Active Workloads ({projects.filter(p => p.status !== 'qc' && p.status !== 'approved').length})
+                  Active Workloads ({activeCount})
                 </button>
                 <button
                   onClick={() => { setCurrentTab('approved'); setExpandedProjectId(null); }}
@@ -643,7 +671,7 @@ export default function PublicQcPanel() {
                       : "text-gray-500 hover:text-gray-900"
                   )}
                 >
-                  Approved & Done ({projects.filter(p => p.status === 'approved').length})
+                  Approved & Done ({approvedCount})
                 </button>
               </div>
 

@@ -34,6 +34,10 @@ export function useSettings() {
   const [wellnessVideoUrl, setWellnessVideoUrl] = useState<string>('');
   const [brandGuidelineUrl, setBrandGuidelineUrl] = useState<string>('');
   const [legalMandateUrl, setLegalMandateUrl] = useState<string>('');
+  const [socialInstagram, setSocialInstagram] = useState<string>('');
+  const [socialFacebook, setSocialFacebook] = useState<string>('');
+  const [socialYoutube, setSocialYoutube] = useState<string>('');
+  const [socialLinkedin, setSocialLinkedin] = useState<string>('');
   const [founderVideoUrl, setFounderVideoUrl] = useState<string>('https://www.youtube.com/embed/dQw4w9WgXcQ');
   const [founderVideoUrlTamil, setFounderVideoUrlTamil] = useState<string>('');
   const [overviewVideoUrl, setOverviewVideoUrl] = useState<string>('https://www.youtube.com/embed/dQw4w9WgXcQ');
@@ -111,6 +115,10 @@ export function useSettings() {
         } else {
           setLegalMandateUrl('');
         }
+        setSocialInstagram(data.socialInstagram || '');
+        setSocialFacebook(data.socialFacebook || '');
+        setSocialYoutube(data.socialYoutube || '');
+        setSocialLinkedin(data.socialLinkedin || '');
         if (data.founderVideoUrl) {
           setFounderVideoUrl(data.founderVideoUrl);
         } else {
@@ -274,6 +282,10 @@ export function useSettings() {
     wellnessVideoUrl,
     brandGuidelineUrl,
     legalMandateUrl,
+    socialInstagram,
+    socialFacebook,
+    socialYoutube,
+    socialLinkedin,
     founderVideoUrl,
     founderVideoUrlTamil,
     overviewVideoUrl,

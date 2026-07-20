@@ -108,7 +108,12 @@ export default function CourseModules() {
   }, [user]);
 
   // Derived filtered modules and available categories
-  const filteredModules = modules.filter(m => m.category === category).sort((a, b) => (Number(a.order || 0)) - (Number(b.order || 0)));
+  const filteredModules = modules.filter(m => m.category === category).sort((a, b) => {
+    const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
+    const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
+    if (orderA !== orderB) return orderA - orderB;
+    return (a.title || '').localeCompare(b.title || '');
+  });
   
   // Available course categories from financial settings or modules
   const availableCategories = financialSettings?.coursesConfig?.map((c: any) => c.courseId) || Array.from(new Set(modules.map(m => m.category)));

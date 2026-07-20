@@ -19,6 +19,7 @@ interface SecurePdfViewerProps {
   externalPageNumber?: number;
   onPageChange?: (page: number) => void;
   isSecure?: boolean;
+  userRole?: string;
 }
 
 export default function SecurePdfViewer({ 
@@ -29,8 +30,11 @@ export default function SecurePdfViewer({
   isFullscreen = false,
   externalPageNumber,
   onPageChange,
-  isSecure = true
+  isSecure = true,
+  userRole
 }: SecurePdfViewerProps) {
+  const isAdmin = userRole !== 'student';
+  const isAssignment = url.toLowerCase().includes('assignment_papers') || (title && title.toLowerCase().includes('assignment'));
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
@@ -207,7 +211,7 @@ export default function SecurePdfViewer({
       <div className="w-full bg-gray-800 text-white p-3 flex items-center justify-between">
         <div className="font-medium truncate max-w-[200px] md:max-w-md">{title || 'Document Viewer'}</div>
         <div className="flex items-center gap-4">
-          {!isSecure && (
+          {(!isSecure || isAdmin) && !isAssignment && (
             <a 
               href={`/api/download?url=${encodeURIComponent(getDirectDownloadUrl(url))}&title=${encodeURIComponent(title || 'document')}`} 
               target="_blank" 
@@ -241,30 +245,52 @@ export default function SecurePdfViewer({
             <div className="w-16 h-16 bg-pink-50 rounded-full flex items-center justify-center text-pink-500 mb-5">
               <AlertTriangle className="w-8 h-8" />
             </div>
-            <h4 className="text-xl font-bold text-gray-900 mb-2">Secure Viewer Connection Notice</h4>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">
+              {isSecure && !isAdmin ? 'Secure Document Notice' : 'Secure Viewer Connection Notice'}
+            </h4>
             <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-              We encountered a connection constraint or secure CORS policy while rendering this document inside the integrated player. Don't worry, you can still view or download it directly using the links below:
+              {isSecure && !isAdmin 
+                ? 'This is a secure document. Direct downloading, printing, and sharing have been restricted by the administrator. However, you can still view it below:' 
+                : 'We encountered a connection constraint or secure CORS policy while rendering this document inside the integrated player. Don\'t worry, you can still view or download it directly using the links below:'}
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
-              <a 
-                href={url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                View Original Link
-              </a>
-              <a 
-                href={`/api/download?url=${encodeURIComponent(getDirectDownloadUrl(url))}&title=${encodeURIComponent(title || 'document')}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="px-5 py-3 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
-              >
-                <Download className="w-4 h-4" />
-                Download Directly
-              </a>
-            </div>
+            {isAssignment ? (
+              <div className="bg-pink-50 border border-pink-100 text-pink-700 p-4 rounded-xl text-sm font-semibold max-w-md mx-auto">
+                Due to strict data security policies, downloading and direct viewing of this assignment document are restricted. Please view it inside this secure window.
+              </div>
+            ) : (!isSecure || isAdmin) ? (
+              <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+                <a 
+                  href={url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Original Link
+                </a>
+                <a 
+                  href={`/api/download?url=${encodeURIComponent(getDirectDownloadUrl(url))}&title=${encodeURIComponent(title || 'document')}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="px-5 py-3 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Directly
+                </a>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+                <a 
+                  href={url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="px-5 py-3 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Document
+                </a>
+              </div>
+            )}
           </div>
         ) : isImage && pdfData ? (
           <div className="relative inline-block overflow-auto max-w-full">

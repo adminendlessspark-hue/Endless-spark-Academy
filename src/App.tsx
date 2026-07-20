@@ -27,6 +27,7 @@ import AccountsPanel from './pages/AccountsPanel';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import Landing from './pages/Landing';
+import PrintingBlog from './pages/PrintingBlog';
 import VirtualClassroom from './pages/VirtualClassroom';
 import ClassroomClean from './pages/ClassroomClean';
 import InterviewRoom from './pages/InterviewRoom';
@@ -208,6 +209,7 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/printing-blog" element={<PrintingBlog />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/inquiry" element={<LeadCapture />} />

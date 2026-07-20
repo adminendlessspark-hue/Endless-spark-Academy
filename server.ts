@@ -232,6 +232,9 @@ async function startServer() {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+    res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
     if (req.method === "OPTIONS") {
       return res.sendStatus(200);
     }
@@ -244,13 +247,51 @@ async function startServer() {
   }
   ensureAssignmentPdfExists();
   await activateRazorpay();
-  app.use("/uploads", express.static(localUploadsDir, {
-    setHeaders: (res) => {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  app.use("/uploads", async (req: any, res: any, next: any) => {
+    // Remove leading slash and decode
+    const decodedPath = decodeURIComponent(req.path); // e.g. "/course_modules/assignment_papers/xyz.pdf"
+    const filePathOnDisk = path.join(localUploadsDir, decodedPath);
+
+    // Set CORS headers
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(200);
     }
-  }));
+
+    if (fs.existsSync(filePathOnDisk)) {
+      return res.sendFile(filePathOnDisk);
+    }
+
+    // If not on disk, check GCS/Firebase Storage
+    let gcsPath = decodedPath;
+    if (gcsPath.startsWith("/")) {
+      gcsPath = gcsPath.substring(1);
+    }
+
+    console.warn(`Static uploads fallback: File not found on disk at ${filePathOnDisk}, checking Firebase Storage at path: ${gcsPath}`);
+    try {
+      const bucketName = firebaseConfig.storageBucket || `${firebaseConfig.projectId}.firebasestorage.app`;
+      const file = admin.storage().bucket(bucketName).file(gcsPath);
+      const [exists] = await file.exists();
+      if (exists) {
+        console.log(`Static uploads fallback: Found file in GCS: ${gcsPath}`);
+        const [metadata] = await file.getMetadata();
+        const [fileBuffer] = await file.download();
+        res.setHeader("Content-Type", metadata.contentType || "application/octet-stream");
+        return res.send(fileBuffer);
+      }
+    } catch (gcsErr: any) {
+      console.error("Static uploads fallback: GCS check failed:", gcsErr.message);
+    }
+
+    // If file is absolutely not found, return 404 instead of letting it fall through to React's index.html
+    console.error(`Static uploads fallback: File not found: ${gcsPath}`);
+    return res.status(404).send("The requested file was not found on the server or in Cloud Storage.");
+  });
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
   if (!apiKey) {
@@ -740,6 +781,42 @@ async function startServer() {
     }
   });
 
+  // Helper to parse GCS / Firebase Storage URLs and extract bucket & file name
+  function parseGcsUrl(urlStr: string): { bucketName: string; fileName: string } | null {
+    if (!urlStr) return null;
+    try {
+      const decodedUrl = decodeURIComponent(urlStr);
+      
+      // 1. Firebase Storage URL format:
+      // https://firebasestorage.googleapis.com/v0/b/{bucketName}/o/{fileName}?alt=media...
+      if (decodedUrl.includes("firebasestorage.googleapis.com")) {
+        // Regex to extract bucket and path from the URL
+        const match = urlStr.match(/\/b\/([^/]+)\/o\/([^?#]+)/);
+        if (match) {
+          const bucketName = match[1];
+          const fileName = decodeURIComponent(match[2]);
+          return { bucketName, fileName };
+        }
+      }
+      
+      // 2. Google Cloud Storage URL format:
+      // https://storage.googleapis.com/{bucketName}/{fileName}
+      if (decodedUrl.includes("storage.googleapis.com")) {
+        const u = new URL(urlStr);
+        const pathname = u.pathname; // /{bucketName}/{fileName}
+        const parts = pathname.split('/').filter(Boolean);
+        if (parts.length >= 2) {
+          const bucketName = parts[0];
+          const fileName = parts.slice(1).join('/');
+          return { bucketName, fileName };
+        }
+      }
+    } catch (err) {
+      console.error("Failed to parse GCS/Firebase Storage URL:", err);
+    }
+    return null;
+  }
+
   // API Route to proxy external PDF files (bypassing CORS extremely fast and securely)
   app.get("/api/proxy-pdf", async (req: any, res: any) => {
     const targetUrl = req.query.url as string;
@@ -749,6 +826,69 @@ async function startServer() {
     }
 
     try {
+      // Handle Firebase / GCS Storage links specially
+      const gcsInfo = parseGcsUrl(targetUrl);
+      if (gcsInfo) {
+        console.log(`Backend PDF Proxy: Fetching GCS/Firebase Storage file directly via Admin SDK: Bucket=${gcsInfo.bucketName}, File=${gcsInfo.fileName}`);
+        try {
+          const file = admin.storage().bucket(gcsInfo.bucketName).file(gcsInfo.fileName);
+          const [metadata] = await file.getMetadata();
+          const [fileBuffer] = await file.download();
+
+          res.setHeader("Content-Type", metadata.contentType || "application/pdf");
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+          res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+          res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+          return res.send(fileBuffer);
+        } catch (gcsErr: any) {
+          console.error("Backend PDF Proxy: Direct GCS fetch failed, falling back to fetch proxy:", gcsErr.message);
+        }
+      }
+
+      // Handle relative or absolute local files
+      const isLocalPath = targetUrl.startsWith("/") || targetUrl.startsWith("uploads/") || !/^(f|ht)tps?:\/\//i.test(targetUrl);
+      if (isLocalPath) {
+        let relativePath = targetUrl;
+        if (relativePath.startsWith("/")) {
+          relativePath = relativePath.substring(1);
+        }
+        
+        if (relativePath.startsWith("uploads/")) {
+          const filePathOnDisk = path.join(localUploadsDir, relativePath.substring("uploads/".length));
+          if (fs.existsSync(filePathOnDisk)) {
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+            res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+            res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+            return res.sendFile(filePathOnDisk);
+          } else {
+            console.warn(`Backend PDF Proxy: File not found on disk at ${filePathOnDisk}, checking Firebase Storage...`);
+            // Attempt to search Firebase Storage for the same path
+            const gcsPath = relativePath.substring("uploads/".length); // e.g. course_modules/assignment_papers/1780421409366_Color_Fundamental.pdf
+            try {
+              const bucketName = firebaseConfig.storageBucket || `${firebaseConfig.projectId}.firebasestorage.app`;
+              const file = admin.storage().bucket(bucketName).file(gcsPath);
+              const [exists] = await file.exists();
+              if (exists) {
+                console.log(`Backend PDF Proxy: Found missing local file in GCS: ${gcsPath}`);
+                const [metadata] = await file.getMetadata();
+                const [fileBuffer] = await file.download();
+                res.setHeader("Content-Type", metadata.contentType || "application/pdf");
+                res.setHeader("Access-Control-Allow-Origin", "*");
+                res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+                res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+                res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+                return res.send(fileBuffer);
+              }
+            } catch (gcsErr: any) {
+              console.error("Backend PDF Proxy: GCS check/fetch failed for missing local file:", gcsErr.message);
+            }
+          }
+        }
+      }
+
       // Handle Google Drive links specially
       if (targetUrl.includes("drive.google.com")) {
         let fileId: string | null = null;
@@ -771,10 +911,29 @@ async function startServer() {
             res.setHeader("Access-Control-Allow-Origin", "*");
             res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
             res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+            res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
             return res.send(Buffer.from(driveResponse.data as any));
           } catch (driveErr: any) {
-            console.warn("Backend PDF Proxy: Google Drive API failed, falling back to direct uc redirect:", driveErr.message);
-            return res.redirect(`https://drive.google.com/uc?export=download&id=${fileId}`);
+            console.warn("Backend PDF Proxy: Google Drive API failed, falling back to backend direct fetch of uc:", driveErr.message);
+            try {
+              const ucUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+              const ucResponse = await fetch(ucUrl);
+              if (!ucResponse.ok) {
+                throw new Error(`Failed to fetch from ucUrl (Status ${ucResponse.status})`);
+              }
+              const contentType = ucResponse.headers.get("content-type") || "application/pdf";
+              res.setHeader("Content-Type", contentType);
+              res.setHeader("Access-Control-Allow-Origin", "*");
+              res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+              res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+              res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+              
+              const buffer = await ucResponse.arrayBuffer();
+              return res.send(Buffer.from(buffer));
+            } catch (err: any) {
+              console.error("Backend PDF Proxy fallback failed, falling back to direct redirect:", err);
+              return res.redirect(`https://drive.google.com/uc?export=download&id=${fileId}`);
+            }
           }
         }
       }
@@ -790,6 +949,7 @@ async function startServer() {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 
       const buffer = await response.arrayBuffer();
       res.send(Buffer.from(buffer));
@@ -1290,6 +1450,43 @@ async function startServer() {
         return res.status(400).send("No valid file URL provided");
       }
 
+      // Enforce strict assignment download security
+      const isAssignment = fileUrl.toLowerCase().includes("assignment_papers") || 
+                           (requestedTitle && requestedTitle.toLowerCase().includes("assignment")) ||
+                           fileUrl.toLowerCase().includes("assignment");
+      if (isAssignment) {
+        console.warn(`Block security download attempt for assignment file: ${fileUrl}`);
+        return res.status(403).send("Downloading assignment papers is strictly disabled for data security.");
+      }
+
+      // Check if it's a GCS/Firebase Storage URL
+      const gcsInfo = parseGcsUrl(fileUrl);
+      if (gcsInfo) {
+        console.log(`Backend Download: Fetching GCS/Firebase Storage file directly via Admin SDK: Bucket=${gcsInfo.bucketName}, File=${gcsInfo.fileName}`);
+        try {
+          const file = admin.storage().bucket(gcsInfo.bucketName).file(gcsInfo.fileName);
+          const [metadata] = await file.getMetadata();
+          const [fileBuffer] = await file.download();
+
+          const contentType = metadata.contentType || "application/octet-stream";
+          res.setHeader("Content-Type", contentType);
+
+          let finalName = requestedTitle || path.basename(gcsInfo.fileName);
+          if (!finalName.toLowerCase().includes('.')) {
+            const ext = metadata.contentType === "application/pdf" ? ".pdf" : path.extname(gcsInfo.fileName);
+            if (ext) {
+              finalName = `${finalName}${ext}`;
+            } else {
+              finalName = `${finalName}.zip`;
+            }
+          }
+          res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
+          return res.send(fileBuffer);
+        } catch (gcsErr: any) {
+          console.error("Backend Download: Direct GCS download failed, trying standard proxy fallback:", gcsErr.message);
+        }
+      }
+
       // Check if it's a Google Drive link
       const isDriveLink = fileUrl.includes("drive.google.com");
       
@@ -1360,12 +1557,31 @@ async function startServer() {
               return res.send(Buffer.from(driveResponse.data as any));
             }
           } catch (driveErr: any) {
-            console.warn("Google Drive API download failed, falling back to direct browser redirection:", driveErr.message);
-            // Fallback: Redirect to the direct Google Drive download/view URL
-            if (isFolder) {
-              return res.redirect(fileUrl);
-            } else {
-              return res.redirect(`https://drive.google.com/uc?export=download&id=${fileId}`);
+            console.warn("Google Drive API download failed, trying direct ucUrl fetch first:", driveErr.message);
+            try {
+              const ucUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+              const ucResponse = await fetch(ucUrl);
+              if (!ucResponse.ok) {
+                throw new Error(`Failed to fetch from ucUrl (Status ${ucResponse.status})`);
+              }
+              const contentType = ucResponse.headers.get("content-type") || "application/octet-stream";
+              res.setHeader("Content-Type", contentType);
+              
+              let finalName = requestedTitle || "document.pdf";
+              if (!finalName.toLowerCase().includes('.')) {
+                finalName = `${finalName}.pdf`;
+              }
+              res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
+              
+              const buffer = await ucResponse.arrayBuffer();
+              return res.send(Buffer.from(buffer));
+            } catch (err: any) {
+              console.error("Google Drive direct download fetch failed, redirecting browser directly:", err.message);
+              if (isFolder) {
+                return res.redirect(fileUrl);
+              } else {
+                return res.redirect(`https://drive.google.com/uc?export=download&id=${fileId}`);
+              }
             }
           }
         }
@@ -1388,14 +1604,42 @@ async function startServer() {
             }
             res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
             return res.sendFile(filePathOnDisk);
+          } else {
+            console.warn(`Backend Download: File not found on disk at ${filePathOnDisk}, checking Firebase Storage...`);
+            // Attempt to search Firebase Storage for the same path
+            const gcsPath = relativePath.substring("uploads/".length); // e.g. course_modules/assignment_papers/...
+            try {
+              const bucketName = firebaseConfig.storageBucket || `${firebaseConfig.projectId}.firebasestorage.app`;
+              const file = admin.storage().bucket(bucketName).file(gcsPath);
+              const [exists] = await file.exists();
+              if (exists) {
+                console.log(`Backend Download: Found missing local file in GCS: ${gcsPath}`);
+                const [metadata] = await file.getMetadata();
+                const [fileBuffer] = await file.download();
+
+                const contentType = metadata.contentType || "application/octet-stream";
+                res.setHeader("Content-Type", contentType);
+
+                let finalName = requestedTitle || path.basename(gcsPath);
+                if (!finalName.toLowerCase().includes('.')) {
+                  const ext = metadata.contentType === "application/pdf" ? ".pdf" : path.extname(gcsPath);
+                  if (ext) {
+                    finalName = `${finalName}${ext}`;
+                  } else {
+                    finalName = `${finalName}.zip`;
+                  }
+                }
+                res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
+                return res.send(fileBuffer);
+              }
+            } catch (gcsErr: any) {
+              console.error("Backend Download: GCS fallback check failed for local upload path:", gcsErr.message);
+            }
           }
         }
         
-        // If it's not on disk but is a relative URL, redirect to correct absolute URL
-        const hostname = req.get("host");
-        const protocol = req.protocol;
-        const absoluteRedirectUrl = `${protocol}://${hostname}/${relativePath}`;
-        return res.redirect(absoluteRedirectUrl);
+        // If it's not on disk and not found in GCS, return a 404 instead of a redirect which would download index.html as a corrupted file
+        return res.status(404).send("Requested file not found on server or in cloud storage.");
       }
 
       // Standard remote URL download (e.g. Firebase Storage, external links)

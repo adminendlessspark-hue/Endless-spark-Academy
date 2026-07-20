@@ -6,14 +6,102 @@ import {
   GraduationCap, MessageCircle, PhoneCall, Mail, ChevronLeft, 
   ChevronRight, MapPin, Zap, Sparkles, Calendar, Clock, 
   CreditCard, CheckCircle2, User, Phone, Check, ChevronDown, 
-  Globe, Rocket, TrendingUp, Megaphone, Target, ArrowRight, Sparkle
+  Globe, Rocket, TrendingUp, Megaphone, Target, ArrowRight, Sparkle,
+  Instagram, Facebook, Youtube, Linkedin, X
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 
+const packagingBlogPosts = [
+  {
+    id: 'eco-smart-packaging',
+    title: 'The Future of Eco-Friendly Smart Packaging',
+    category: 'Sustainable Design',
+    categoryColor: 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100',
+    date: 'July 15, 2026',
+    readTime: '5 min read',
+    author: 'Dr. Arul Kumar',
+    authorRole: 'Head of Packaging Tech',
+    image: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600',
+    excerpt: 'Exploring biodegradable substrates, water-soluble inks, and active barrier layers that prolong shelf-life without microplastics.',
+    content: `
+      The packaging industry is undergoing a seismic shift. The convergence of strict environmental regulations and high consumer demand for sustainable products is pushing brands to rethink their packaging architectures. We are moving beyond simple "recyclability" into the era of Eco-Friendly Smart Packaging.
+
+      ### Biodegradable Substrates
+      Traditional plastics are being replaced by bio-based polymers derived from agricultural byproducts, seaweed, and fungi mycelium. These materials offer comparable structural integrity and water resistance but decompose naturally in compost environments within weeks.
+
+      ### Water-Soluble and Soy Inks
+      Petroleum-based inks release volatile organic compounds (VOCs) and contaminate paper recycling streams. Modern printing operations are shifting to soy-based and water-soluble inks, which provide brilliant high-fidelity colors while maintaining a clean, chemical-free de-inking process during recycling.
+
+      ### Active & Smart Barrier Layers
+      Smart packaging isn't just about eco-friendly materials; it's also about performance. Integrated natural antimicrobial agents and oxygen scavengers built directly into the substrate help preserve food freshness. When paired with printed NFC tags and heat-sensitive visual indicators, consumers can verify product quality and source history with a single tap of their phone.
+
+      ### Conclusion
+      Integrating eco-friendly smart substrates with modern flexographic and digital printing is no longer a luxury—it's a critical requirement for next-generation packaging engineering.
+    `
+  },
+  {
+    id: 'prepress-mastery',
+    title: 'Prepress Mastery: Vector File Prep for High-Speed Press',
+    category: 'Prepress Engineering',
+    categoryColor: 'bg-pink-50 text-pink-700 border-pink-100 hover:bg-pink-100',
+    date: 'July 08, 2026',
+    readTime: '8 min read',
+    author: 'Sarah Jenkins',
+    authorRole: 'Senior Print Engineer',
+    image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=600',
+    excerpt: 'A comprehensive guide to flawless trapping, bleed allowances, ink-density limits (TAC/TIL), and custom ICC color-profile conversions.',
+    content: `
+      In high-speed offset and gravure printing, a single error in file preparation can ruin thousands of meters of expensive substrate. Prepress engineering is the crucial shield that ensures what you see on screen matches the final physical printed surface perfectly.
+
+      ### 1. Perfect Trapping and Bleeds
+      When printing on high-speed presses, slight mechanical vibrations can cause minute shifts in registration. To prevent unsightly white gaps between adjacent colors, prepress engineers apply trapping—a tiny overlap of lighter colors under darker ones. Additionally, a strict minimum of 3mm (or 1/8 inch) of bleed must extend beyond the trim line to account for minor cutting tolerances.
+
+      ### 2. Understanding Ink Density (TAC/TIL)
+      Total Area Coverage (TAC), or Total Ink Limit (TIL), defines the maximum combined percentage of Cyan, Magenta, Yellow, and Black (CMYK) ink in the darkest shadow areas. For high-speed web presses, exceeding a TAC of 300% leads to slow drying, ink smearing, and paper tearing. Proper conversion using standard profiles (like GRACoL or FOGRA) automatically compresses these values safely.
+
+      ### 3. Vectorization and Font Embedding
+      To prevent pixelated lines and fuzzy barcodes, all artwork must remain as resolution-independent vector shapes. Text must be fully outlined (converted to paths) or verified as fully embedded. Barcodes should always be constructed with clean black vectors (K:100%) to ensure perfect scanning readability.
+
+      ### Actionable Checklist
+      - Convert color space to CMYK or designated spot colors.
+      - Apply custom ICC profiles tailored to the specific substrate (coated vs. uncoated).
+      - Set black text to "Overprint" to avoid alignment halos.
+    `
+  },
+  {
+    id: 'holographic-cold-foil',
+    title: 'Elevating Brands with Holographic Cold Foil Tech',
+    category: 'Brand Finishing',
+    categoryColor: 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100',
+    date: 'June 28, 2026',
+    readTime: '6 min read',
+    author: 'Rajasekar V',
+    authorRole: 'Brand & Finishes Consultant',
+    image: 'https://images.unsplash.com/photo-1507208773393-40d9fc670acf?auto=format&fit=crop&q=80&w=600',
+    excerpt: 'How digital cold foil inline application elevates packaging luxury, optimizes production costs, and delivers breathtaking metallic textures.',
+    content: `
+      In a crowded retail environment, products have less than two seconds to capture a customer's eye. Packaging finishes have become the ultimate differentiator, and holographic cold foil is leading the revolution in luxury brand finishing.
+
+      ### What is Cold Foil?
+      Unlike traditional hot foil stamping, which requires custom metal dies and separate offline steps, cold foil is applied inline during the standard printing process. An UV-curable adhesive is printed onto the substrate in the exact shape of the metallic design. The foil film is then pressed against the substrate, adhering only to the adhesive, followed by instant UV curing.
+
+      ### Creative Freedom & Gradients
+      Because cold foil is printed using high-resolution offset or flexo plates, designers can create extremely fine lines, half-tone gradients, and microscopic textures that are impossible with hot stamping. Overprinting the foil with translucent inks yields an infinite spectrum of custom metallic colors and shimmering effects.
+
+      ### Cost-Effectiveness & Speed
+      By running inline at maximum press speeds, cold foil cuts production time by 50% compared to traditional hot stamping methods. It also eliminates the tooling cost of heavy brass dies, making luxury finishes economically viable even for short-run promotional packaging.
+
+      ### Summary
+      Holographic cold foil is a game-changer for brand owners, offering an eco-friendly (readily recyclable), affordable, and visually stunning way to stand out on the shelves.
+    `
+  }
+];
+
 export default function Landing() {
-  const { logoUrl, landingPageTitleImageUrl, branches, banners, landingPageStats, financialSettings, loading } = useSettings();
+  const { logoUrl, landingPageTitleImageUrl, branches, banners, landingPageStats, financialSettings, loading, socialInstagram, socialFacebook, socialYoutube, socialLinkedin } = useSettings();
   const [selectedCourse, setSelectedCourse] = useState<'printing' | 'marketing' | null>(null);
   const [currentBanner, setCurrentBanner] = useState(0);
+  const [selectedBlogPost, setSelectedBlogPost] = useState<typeof packagingBlogPosts[0] | null>(null);
 
   const defaultCourses = [
     { courseId: 'packaging-engineer', title: 'Diploma in Packaging Engineer' },
@@ -123,6 +211,14 @@ export default function Landing() {
               >
                 Change Course
               </button>
+            )}
+            {selectedCourse === 'printing' && (
+              <Link 
+                to="/printing-blog" 
+                className="text-xs font-extrabold text-pink-600 hover:text-pink-700 transition-all border border-pink-200 px-3.5 py-2 rounded-xl bg-pink-50"
+              >
+                Printing Blog
+              </Link>
             )}
             <Link to="/login" className="text-sm font-bold text-slate-600 hover:text-pink-600 transition-colors px-2">
               Log In
@@ -578,6 +674,205 @@ export default function Landing() {
                 </div>
               </div>
             </section>
+
+            {/* Blog Posts Section */}
+            <section className="py-24 bg-white border-t border-slate-100">
+              <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="text-center mb-16">
+                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-pink-600 bg-pink-50 px-3.5 py-1.5 rounded-full">
+                    Technical Publications
+                  </span>
+                  <h2 className="text-4xl font-black text-slate-900 mt-4 mb-4">Printing & Packaging Insights</h2>
+                  <p className="text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed font-semibold">
+                    Explore professional articles, guidelines, and breakthroughs curated by our academic instructors and industry veterans.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {packagingBlogPosts.map((post) => (
+                    <article 
+                      key={post.id} 
+                      className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col cursor-pointer group"
+                      onClick={() => setSelectedBlogPost(post)}
+                    >
+                      <div className="h-52 w-full overflow-hidden relative">
+                        <img 
+                          src={post.image} 
+                          alt={post.title} 
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          referrerPolicy="no-referrer"
+                        />
+                        <span className={`absolute top-4 left-4 px-3 py-1 rounded-full text-xs font-bold border ${post.categoryColor} shadow-sm`}>
+                          {post.category}
+                        </span>
+                      </div>
+                      
+                      <div className="p-8 flex-grow flex flex-col">
+                        <div className="flex items-center gap-3 text-xs text-slate-400 font-bold mb-4">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            {post.date}
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {post.readTime}
+                          </span>
+                        </div>
+                        
+                        <h3 className="text-xl font-extrabold text-slate-900 mb-3 group-hover:text-pink-600 transition-colors leading-snug">
+                          {post.title}
+                        </h3>
+                        
+                        <p className="text-slate-600 text-sm leading-relaxed mb-6 flex-grow line-clamp-3">
+                          {post.excerpt}
+                        </p>
+                        
+                        <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200">
+                              {post.author.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">{post.author}</p>
+                              <p className="text-[10px] text-slate-400 font-semibold">{post.authorRole}</p>
+                            </div>
+                          </div>
+                          
+                          <span className="text-xs font-extrabold text-pink-600 flex items-center gap-1.5 group-hover:translate-x-1.5 transition-transform">
+                            <span>Read</span>
+                            <ArrowRight className="w-4 h-4" />
+                          </span>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            {/* Blog Post Modal Detail */}
+            <AnimatePresence>
+              {selectedBlogPost && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 md:p-10">
+                  {/* Backdrop */}
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setSelectedBlogPost(null)}
+                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                  />
+
+                  {/* Modal Container */}
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                    transition={{ type: "spring", duration: 0.5 }}
+                    className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-3xl overflow-hidden relative z-10 flex flex-col max-h-[85vh]"
+                  >
+                    {/* Close Button */}
+                    <button 
+                      onClick={() => setSelectedBlogPost(null)}
+                      className="absolute top-5 right-5 z-25 p-2.5 rounded-full bg-white/95 text-slate-800 hover:text-pink-600 shadow-md transition-colors border border-slate-100 cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+
+                    {/* Scrollable Content */}
+                    <div className="overflow-y-auto flex-grow">
+                      {/* Image Header */}
+                      <div className="h-64 sm:h-80 w-full relative">
+                        <img 
+                          src={selectedBlogPost.image} 
+                          alt={selectedBlogPost.title} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
+                        
+                        <div className="absolute bottom-6 left-6 right-6 text-white">
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold border border-white/20 bg-white/10 backdrop-blur-md text-white mb-3 inline-block`}>
+                            {selectedBlogPost.category}
+                          </span>
+                          <h1 className="text-2xl sm:text-3xl font-black text-white leading-tight">
+                            {selectedBlogPost.title}
+                          </h1>
+                        </div>
+                      </div>
+
+                      {/* Article Details */}
+                      <div className="p-6 sm:p-8 md:p-10">
+                        {/* Meta Row */}
+                        <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-slate-100 mb-8">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-full bg-pink-50 flex items-center justify-center text-pink-600 font-extrabold border border-pink-100">
+                              {selectedBlogPost.author.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-900">{selectedBlogPost.author}</p>
+                              <p className="text-xs text-slate-500 font-semibold">{selectedBlogPost.authorRole}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4 text-xs font-bold text-slate-400">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {selectedBlogPost.date}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" />
+                              {selectedBlogPost.readTime}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Article Text Content */}
+                        <div className="text-slate-700 leading-relaxed text-sm sm:text-base space-y-6 font-medium">
+                          {selectedBlogPost.content.split('\n\n').map((paragraph, index) => {
+                            const trimmed = paragraph.trim();
+                            if (!trimmed) return null;
+                            if (trimmed.startsWith('###')) {
+                              return (
+                                <h3 key={index} className="text-lg sm:text-xl font-extrabold text-slate-900 pt-4">
+                                  {trimmed.replace('###', '').trim()}
+                                </h3>
+                              );
+                            }
+                            if (trimmed.startsWith('-')) {
+                              return (
+                                <ul key={index} className="list-disc pl-6 space-y-2">
+                                  {trimmed.split('\n').map((li, liIdx) => (
+                                    <li key={liIdx} className="text-slate-700">{li.replace('-', '').trim()}</li>
+                                  ))}
+                                </ul>
+                              );
+                            }
+                            return (
+                              <p key={index} className="text-slate-600">
+                                {trimmed}
+                              </p>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer Close Button */}
+                    <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                      <button
+                        onClick={() => setSelectedBlogPost(null)}
+                        className="px-6 py-2.5 bg-slate-900 hover:bg-pink-600 text-white rounded-xl text-sm font-bold transition-colors cursor-pointer"
+                      >
+                        Close Article
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
           </motion.div>
         ) : (
           
@@ -857,6 +1152,32 @@ export default function Landing() {
                 </span>
                 <span className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Admissions Open — 2026 Batch</span>
               </div>
+
+              {/* Social Media Links */}
+              {(socialInstagram || socialFacebook || socialYoutube || socialLinkedin) && (
+                <div className="flex items-center gap-4 pt-2 text-slate-400">
+                  {socialInstagram && (
+                    <a href={socialInstagram} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl bg-slate-800/50 hover:bg-pink-600 hover:text-white transition-all duration-300 border border-slate-700/50" title="Follow us on Instagram">
+                      <Instagram className="w-5 h-5" />
+                    </a>
+                  )}
+                  {socialFacebook && (
+                    <a href={socialFacebook} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl bg-slate-800/50 hover:bg-blue-600 hover:text-white transition-all duration-300 border border-slate-700/50" title="Follow us on Facebook">
+                      <Facebook className="w-5 h-5" />
+                    </a>
+                  )}
+                  {socialYoutube && (
+                    <a href={socialYoutube} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl bg-slate-800/50 hover:bg-red-600 hover:text-white transition-all duration-300 border border-slate-700/50" title="Subscribe to our YouTube Channel">
+                      <Youtube className="w-5 h-5" />
+                    </a>
+                  )}
+                  {socialLinkedin && (
+                    <a href={socialLinkedin} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl bg-slate-800/50 hover:bg-blue-700 hover:text-white transition-all duration-300 border border-slate-700/50" title="Follow us on LinkedIn">
+                      <Linkedin className="w-5 h-5" />
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Column 2: Academies */}

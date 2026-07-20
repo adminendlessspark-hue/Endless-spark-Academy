@@ -127,6 +127,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /printing_blog_posts/{postId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /test/{documentId} {
       allow read: if true;
     }

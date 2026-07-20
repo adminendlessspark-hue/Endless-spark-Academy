@@ -592,7 +592,7 @@ export default function CourseModules() {
                     </h4>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => handleOpenDocument(activeModule.assignmentPaperUrl!, `Assignment: ${activeModule.title}`, false)}
+                        onClick={() => handleOpenDocument(activeModule.assignmentPaperUrl!, `Assignment: ${activeModule.title}`, true)}
                         className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left"
                       >
                         <div className="flex items-center gap-3">
@@ -606,17 +606,6 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {(enableDocumentDownloads || user?.role !== 'student') && (
-                        <a 
-                          href={`/api/download?url=${encodeURIComponent(activeModule.assignmentPaperUrl!)}&title=${encodeURIComponent(`Assignment - ${activeModule.title}`)}`} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center"
-                          title="Download Assignment"
-                        >
-                          <Download className="w-5 h-5" />
-                        </a>
-                      )}
                     </div>
                   </div>
                 )}
@@ -638,7 +627,7 @@ export default function CourseModules() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => handleOpenDocument(activeModule.mindMapUrl!, `Mind Map: ${activeModule.title}`, false)}
+                        onClick={() => handleOpenDocument(activeModule.mindMapUrl!, `Mind Map: ${activeModule.title}`, true)}
                         className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left"
                       >
                         <div className="flex items-center gap-3">
@@ -652,7 +641,7 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {(enableDocumentDownloads || user?.role !== 'student') && (
+                      {user?.role !== 'student' && (
                         <a 
                           href={`/api/download?url=${encodeURIComponent(activeModule.mindMapUrl!)}&title=${encodeURIComponent(`Mind Map - ${activeModule.title}`)}`} 
                           target="_blank" 
@@ -675,7 +664,7 @@ export default function CourseModules() {
                     </h4>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => handleOpenDocument(activeModule.worksheetUrl!, `Worksheet: ${activeModule.title}`, false)}
+                        onClick={() => handleOpenDocument(activeModule.worksheetUrl!, `Worksheet: ${activeModule.title}`, true)}
                         className="flex-1 flex items-center justify-between p-4 bg-orange-50 border border-orange-100 rounded-xl hover:bg-orange-100 transition-colors group text-left"
                       >
                         <div className="flex items-center gap-3">
@@ -689,7 +678,7 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-orange-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {(enableDocumentDownloads || user?.role !== 'student') && (
+                      {user?.role !== 'student' && (
                         <a 
                           href={`/api/download?url=${encodeURIComponent(activeModule.worksheetUrl!)}&title=${encodeURIComponent(`Worksheet - ${activeModule.title}`)}`} 
                           target="_blank" 
@@ -712,7 +701,7 @@ export default function CourseModules() {
                     </h4>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => handleOpenDocument(activeModule.referenceMaterialUrl!, `Reference Material: ${activeModule.title}`, false)}
+                        onClick={() => handleOpenDocument(activeModule.referenceMaterialUrl!, `Reference Material: ${activeModule.title}`, true)}
                         className="flex-1 flex items-center justify-between p-4 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 transition-colors group text-left"
                       >
                         <div className="flex items-center gap-3">
@@ -726,7 +715,7 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-purple-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {(enableDocumentDownloads || user?.role !== 'student') && (
+                      {user?.role !== 'student' && (
                         <a 
                           href={`/api/download?url=${encodeURIComponent(activeModule.referenceMaterialUrl!)}&title=${encodeURIComponent(`Reference Material - ${activeModule.title}`)}`} 
                           target="_blank" 
@@ -750,7 +739,7 @@ export default function CourseModules() {
                     {activeModule.additionalReferenceMaterials.map((material, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <button 
-                          onClick={() => handleOpenDocument(material.url, material.title, false)}
+                          onClick={() => handleOpenDocument(material.url, material.title, true)}
                           className="flex-1 flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 transition-colors group text-left"
                         >
                           <div className="flex items-center gap-3">
@@ -764,7 +753,7 @@ export default function CourseModules() {
                           </div>
                           <ArrowRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-1 transition-transform" />
                         </button>
-                        {(enableDocumentDownloads || user?.role !== 'student') && (
+                        {user?.role !== 'student' && (
                           <a 
                             href={`/api/download?url=${encodeURIComponent(material.url)}&title=${encodeURIComponent(material.title)}`} 
                             target="_blank" 
@@ -788,7 +777,7 @@ export default function CourseModules() {
                     </h4>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={() => handleOpenDocument(activeModule.projectTemplateUrl!, `Project Template: ${activeModule.title}`, false)}
+                        onClick={() => handleOpenDocument(activeModule.projectTemplateUrl!, `Project Template: ${activeModule.title}`, true)}
                         className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left"
                       >
                         <div className="flex items-center gap-3">
@@ -802,7 +791,7 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {(enableDocumentDownloads || user?.role !== 'student') && (
+                      {user?.role !== 'student' && (
                         <a 
                           href={`/api/download?url=${encodeURIComponent(activeModule.projectTemplateUrl!)}&title=${encodeURIComponent(`Project Template - ${activeModule.title}`)}`} 
                           target="_blank" 
@@ -1600,6 +1589,7 @@ export default function CourseModules() {
                 userId={user?.studentId || user?.id}
                 isFullscreen={isPdfFullscreen}
                 isSecure={viewingPdf.isSecure}
+                userRole={user?.role}
               />
             </div>
           </div>

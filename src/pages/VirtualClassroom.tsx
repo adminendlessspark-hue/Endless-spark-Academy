@@ -16,17 +16,20 @@ import {
   Play, 
   BookOpen
 } from 'lucide-react';
-import { collection, query, where, getDocs, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, onSnapshot, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import ScreenRecorder from '../components/ScreenRecorder';
 import SecurePdfViewer from '../components/SecurePdfViewer';
 import { useSettings } from '../hooks/useSettings';
+import { getDirectDownloadUrl } from '../utils';
 
 export default function VirtualClassroom() {
   const { roomId } = useParams();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const { jitsiServer } = useSettings();
+  
+  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
   
   const [isAllowed, setIsAllowed] = useState<boolean | null>(null);
   const [bandwidthStatus, setBandwidthStatus] = useState<'checking' | 'good' | 'low' | null>('checking');
@@ -79,7 +82,7 @@ export default function VirtualClassroom() {
         
         if (querySnapshot.empty) {
           // Fallback if no specific database record exists, allow admins/marketing
-          if (user.role === 'admin' || user.role === 'marketing') {
+          if (isAdmin || user.role === 'admin' || user.role === 'marketing') {
             setIsAllowed(true);
           } else {
             setIsAllowed(false);
@@ -94,7 +97,7 @@ export default function VirtualClassroom() {
         const initialSession = docSnapshot.data();
         let allowed = false;
         
-        if (user.role === 'admin' || user.role === 'marketing') {
+        if (isAdmin || user.role === 'admin' || user.role === 'marketing') {
           allowed = true;
         } else if (user.role === 'faculty') {
           allowed = initialSession.facultyId === user.id;
@@ -147,7 +150,7 @@ export default function VirtualClassroom() {
       }
     };
     
-    if (user?.role === 'admin' || user?.role === 'marketing' || user?.role === 'faculty') {
+    if (isAdmin || user?.role === 'admin' || user?.role === 'marketing' || user?.role === 'faculty') {
       fetchCourseModules();
     }
   }, [user]);
@@ -279,17 +282,48 @@ export default function VirtualClassroom() {
   const activeSlidesTitle = sessionData?.activeModuleTitle || 'Class Presentation';
   const activeSlidesPage = sessionData?.activeSlidesPage || 1;
 
-  const isPdf = activeSlidesUrl.toLowerCase().endsWith('.pdf') || (activeSlidesUrl.includes('/course_modules/') && !activeSlidesUrl.includes('.ppt') && !activeSlidesUrl.includes('.pptx'));
-  
-  const parsedEmbedUrl = activeSlidesUrl 
-    ? (activeSlidesUrl.includes('docs.google.com/presentation') 
-        ? (activeSlidesUrl.includes('/pub') 
-            ? activeSlidesUrl.replace('/pub?', '/embed?') 
-            : activeSlidesUrl)
-        : `https://docs.google.com/gview?url=${encodeURIComponent(activeSlidesUrl)}&embedded=true`)
-    : '';
+  // Extract path portion to clean any query parameters/tokens (e.g., Firebase Storage URLs)
+  const getCleanPath = (u: string) => {
+    if (!u) return '';
+    try {
+      const partBeforeQuery = u.split('?')[0];
+      return partBeforeQuery.toLowerCase();
+    } catch {
+      return u.toLowerCase();
+    }
+  };
 
-  const isPresenter = user?.role === 'admin' || user?.role === 'faculty';
+  const cleanSlidesUrl = getCleanPath(activeSlidesUrl);
+  const isPdf = cleanSlidesUrl.endsWith('.pdf') || 
+                activeSlidesUrl.toLowerCase().includes('.pdf') || 
+                activeSlidesTitle.toLowerCase().includes('.pdf') ||
+                (activeSlidesUrl.includes('/course_modules/') && !activeSlidesUrl.includes('.ppt') && !activeSlidesUrl.includes('.pptx'));
+  
+  let parsedEmbedUrl = '';
+  if (activeSlidesUrl) {
+    if (activeSlidesUrl.includes('drive.google.com')) {
+      const driveMatch = activeSlidesUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || activeSlidesUrl.match(/id=([a-zA-Z0-9_-]+)/);
+      if (driveMatch && driveMatch[1]) {
+        parsedEmbedUrl = `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
+      } else {
+        parsedEmbedUrl = activeSlidesUrl;
+      }
+    } else if (activeSlidesUrl.includes('docs.google.com/presentation')) {
+      if (activeSlidesUrl.includes('/pub')) {
+        parsedEmbedUrl = activeSlidesUrl.replace('/pub?', '/embed?');
+      } else if (activeSlidesUrl.includes('/edit')) {
+        parsedEmbedUrl = activeSlidesUrl.split('/edit')[0] + '/embed';
+      } else {
+        parsedEmbedUrl = activeSlidesUrl;
+      }
+    } else {
+      // Use direct URL for gview to support robust downloads
+      const directUrl = getDirectDownloadUrl(activeSlidesUrl);
+      parsedEmbedUrl = `https://docs.google.com/gview?url=${encodeURIComponent(directUrl)}&embedded=true`;
+    }
+  }
+
+  const isPresenter = isAdmin || user?.role === 'admin' || user?.role === 'faculty';
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col text-slate-100 overflow-hidden">
@@ -386,6 +420,24 @@ export default function VirtualClassroom() {
         </div>
       </div>
 
+      {isIframe && (
+        <div className="bg-amber-950/40 border-b border-amber-900/30 px-6 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-300 z-10">
+          <span className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 animate-pulse" />
+            <span><strong>Editor Preview Security Note:</strong> Browser security restricts camera/mic/frame access in nested iframes. If the meeting does not load or start, click <strong>"Open Call Separately"</strong> to launch the live classroom in a dedicated secure tab.</span>
+          </span>
+          <a 
+            href={jitsiUrl} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl flex items-center gap-1 transition-colors text-xs shrink-0 shadow-sm"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Open Call Separately
+          </a>
+        </div>
+      )}
+
       {/* Presenter controls box (only seen by faculty/admin) */}
       {isPresenter && (
         <div className="bg-slate-950/60 border-b border-slate-850 px-6 py-3 flex flex-wrap items-center justify-between gap-4 z-10 transition-all text-sm">
@@ -400,7 +452,7 @@ export default function VirtualClassroom() {
               <option value="">-- Choose Module Slide Deck --</option>
               {courseModules.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.course.toUpperCase()} - {m.title}
+                  {((m.course as string) || 'Module').toUpperCase()} - {m.title}
                 </option>
               ))}
             </select>
@@ -613,6 +665,7 @@ export default function VirtualClassroom() {
                             updatePresenterPage(page);
                           }
                         }}
+                        userRole={user?.role}
                       />
                     </div>
                   ) : (

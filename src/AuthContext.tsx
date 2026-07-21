@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, [user, pauseRunningProjects]);
 
-  const isAdmin = user?.role === 'admin' || (auth.currentUser?.email && ADMIN_EMAILS.includes(auth.currentUser.email)) || false;
+  const isAdmin = user?.role === 'admin' || (auth.currentUser?.email && ADMIN_EMAILS.includes(auth.currentUser.email)) || (user?.email && ADMIN_EMAILS.includes(user.email)) || false;
   const isQC = user?.role === 'qc';
   const isElevated = isAdmin || isQC;
 

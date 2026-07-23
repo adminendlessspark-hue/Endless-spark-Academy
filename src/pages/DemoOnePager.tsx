@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CompanyLogo from '../components/CompanyLogo';
 import { motion, AnimatePresence } from 'motion/react';
@@ -51,21 +51,66 @@ import {
   Type,
   RefreshCw,
   Calculator,
-  Building
+  Building,
+  Edit,
+  Upload,
+  Image as ImageIcon,
+  Filter,
+  Tag
 } from 'lucide-react';
 import { cn } from '../utils';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { generateGeminiContent } from '../services/gemini';
-import { collection, query, orderBy, onSnapshot, where, doc, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, doc, setDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { useSettings } from '../hooks/useSettings';
 import { useAuth } from '../AuthContext';
 import { getProjectsForCourse, getCapstoneProjectForCourse } from '../data/courseProjects';
 import StudentAIAgent from '../components/StudentAIAgent';
 import ProgramOutcomes from '../components/ProgramOutcomes';
 
-// Predefined Mock Projects for Showcase
-const DEMO_PROJECTS = [
+// Image Presets for Artwork Replacement
+const ARTWORK_IMAGE_PRESETS = [
   {
+    url: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600',
+    label: 'Corrugated Packaging'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1523293182086-7651a899d37f?auto=format&fit=crop&q=80&w=600',
+    label: 'Cosmetic Box'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=600',
+    label: 'Marketing Brochure'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&q=80&w=600',
+    label: 'Flexible Pouch'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?auto=format&fit=crop&q=80&w=600',
+    label: 'Label Roll'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&q=80&w=600',
+    label: 'Offset Press Plate'
+  }
+];
+
+// Course Categories for Live Artwork View
+const ARTWORK_COURSE_CATEGORIES = [
+  'All',
+  'Packaging Specialist',
+  'Print Ready Engineer',
+  'Digital Prepress Specialist',
+  'Quality Control Engineer',
+  'Colour Retouching Engineer',
+  'Brand Finishing & Die-Cutting'
+];
+
+// Default Projects for Live Artwork Showcase
+const DEFAULT_ARTWORK_PROJECTS = [
+  {
+    id: 'art_1',
     title: 'Precision Corrugated Packaging',
     type: 'Packaging Design',
     category: 'Packaging Specialist',
@@ -78,6 +123,7 @@ const DEMO_PROJECTS = [
     score: 98
   },
   {
+    id: 'art_2',
     title: 'Premium Cosmetic Box Die-Cut',
     type: 'Die-line Layout',
     category: 'Packaging Specialist',
@@ -90,6 +136,7 @@ const DEMO_PROJECTS = [
     score: 95
   },
   {
+    id: 'art_3',
     title: 'High-Density Marketing Brochure',
     type: 'Multi-page Layout',
     category: 'Print Ready Engineer',
@@ -100,6 +147,32 @@ const DEMO_PROJECTS = [
     status: 'Failed Preflight',
     feedback: 'Critical issues: Layout is in RGB. Color shifting will occur during plate production. No bleed is provided.',
     score: 42
+  },
+  {
+    id: 'art_4',
+    title: 'Flexible Barrier Pouch Trapping Proof',
+    type: 'Flexible Packaging',
+    category: 'Digital Prepress Specialist',
+    image: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&q=80&w=600',
+    bleed: '4mm Bleed Margin',
+    colors: 'CMYK + White Layer',
+    fonts: 'Outlined',
+    status: 'Certified Pass',
+    feedback: 'White opacity backing channel set properly. Trapping tolerances prevent white keying.',
+    score: 94
+  },
+  {
+    id: 'art_5',
+    title: 'Pharma Label Barcode ANSI Verification',
+    type: 'Label Finishing',
+    category: 'Quality Control Engineer',
+    image: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?auto=format&fit=crop&q=80&w=600',
+    bleed: '2mm Die Margin',
+    colors: 'CMYK Spot Black',
+    fonts: 'Outlined',
+    status: 'Certified Pass',
+    feedback: 'Passed ISO/IEC 15416 print quality grade A. Quiet zone margins fully compliant.',
+    score: 99
   }
 ];
 
@@ -171,6 +244,182 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
   const [selectedProjectIdx, setSelectedProjectIdx] = useState<number>(0);
   const [courseModules, setCourseModules] = useState<any[]>([]);
   const [studentProjects, setStudentProjects] = useState<any[]>([]);
+  const [firestoreMasterProjects, setFirestoreMasterProjects] = useState<any[]>([]);
+
+  // Sub-tab for Tab 4 Interactive Project Portfolio
+  const [portfolioSubTab, setPortfolioSubTab] = useState<'live_master' | 'live_student' | 'sample'>('live_master');
+
+  // Modal state for quick adding live master project
+  const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [newProjectTitle, setNewProjectTitle] = useState('');
+  const [newProjectCourse, setNewProjectCourse] = useState('production-art-engineer');
+  const [newProjectDetails, setNewProjectDetails] = useState('');
+  const [newProjectDriveLink, setNewProjectDriveLink] = useState('');
+  const [newProjectFileName, setNewProjectFileName] = useState('');
+  const [newProjectBrand, setNewProjectBrand] = useState('');
+  const [newProjectPackType, setNewProjectPackType] = useState('');
+  const [newProjectPrintingMethod, setNewProjectPrintingMethod] = useState('');
+  const [isSavingLiveProject, setIsSavingLiveProject] = useState(false);
+
+  // Live Project Artwork Management State
+  const [artworkProjects, setArtworkProjects] = useState<any[]>(DEFAULT_ARTWORK_PROJECTS);
+  const [artworkFilterCategory, setArtworkFilterCategory] = useState<string>('All');
+  const [isArtworkModalOpen, setIsArtworkModalOpen] = useState(false);
+  const [editingArtwork, setEditingArtwork] = useState<any | null>(null);
+
+  // Artwork Modal Form fields
+  const [artTitle, setArtTitle] = useState('');
+  const [artCategory, setArtCategory] = useState('Packaging Specialist');
+  const [artType, setArtType] = useState('Packaging Design');
+  const [artImage, setArtImage] = useState('');
+  const [artScore, setArtScore] = useState<number>(95);
+  const [artStatus, setArtStatus] = useState('Certified Pass');
+  const [artBleed, setArtBleed] = useState('3mm Offset');
+  const [artColors, setArtColors] = useState('CMYK (Fogra 39)');
+  const [artFonts, setArtFonts] = useState('Outlined');
+  const [artFeedback, setArtFeedback] = useState('');
+  const [isSavingArtwork, setIsSavingArtwork] = useState(false);
+
+  // Firestore listener for artwork_projects
+  useEffect(() => {
+    const unsubArtwork = onSnapshot(collection(db, 'artwork_projects'), (snapshot) => {
+      if (!snapshot.empty) {
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setArtworkProjects(docs);
+      } else {
+        setArtworkProjects(DEFAULT_ARTWORK_PROJECTS);
+      }
+    }, (err) => {
+      console.warn("Could not fetch artwork_projects from Firestore:", err.message);
+      setArtworkProjects(DEFAULT_ARTWORK_PROJECTS);
+    });
+    return () => unsubArtwork();
+  }, []);
+
+  const resetArtworkForm = () => {
+    setEditingArtwork(null);
+    setArtTitle('');
+    setArtCategory('Packaging Specialist');
+    setArtType('Packaging Design');
+    setArtImage('https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600');
+    setArtScore(95);
+    setArtStatus('Certified Pass');
+    setArtBleed('3mm Offset');
+    setArtColors('CMYK (Fogra 39)');
+    setArtFonts('Outlined');
+    setArtFeedback('Excellent folding tolerances and registration calibration.');
+  };
+
+  const handleOpenEditArtwork = (proj: any) => {
+    setEditingArtwork(proj);
+    setArtTitle(proj.title || '');
+    setArtCategory(proj.category || 'Packaging Specialist');
+    setArtType(proj.type || 'Packaging Design');
+    setArtImage(proj.image || '');
+    setArtScore(proj.score ?? 90);
+    setArtStatus(proj.status || 'Certified Pass');
+    setArtBleed(proj.bleed || '3mm Offset');
+    setArtColors(proj.colors || 'CMYK (Fogra 39)');
+    setArtFonts(proj.fonts || 'Outlined');
+    setArtFeedback(proj.feedback || '');
+    setIsArtworkModalOpen(true);
+  };
+
+  const handleOpenCreateArtwork = () => {
+    resetArtworkForm();
+    setIsArtworkModalOpen(true);
+  };
+
+  const handleArtworkImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert("Image size should be less than 8MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setArtImage(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveArtworkProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!artTitle.trim()) {
+      alert("Please enter a project title.");
+      return;
+    }
+    setIsSavingArtwork(true);
+    try {
+      const docData = {
+        title: artTitle.trim(),
+        category: artCategory,
+        type: artType.trim() || 'Packaging Design',
+        image: artImage.trim() || 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600',
+        score: Number(artScore) || 90,
+        status: artStatus,
+        bleed: artBleed.trim() || '3mm Offset',
+        colors: artColors.trim() || 'CMYK (Fogra 39)',
+        fonts: artFonts.trim() || 'Outlined',
+        feedback: artFeedback.trim() || 'Preflight verification completed successfully.',
+        updatedAt: new Date().toISOString()
+      };
+
+      const targetId = editingArtwork?.id;
+      if (targetId) {
+        await setDoc(doc(db, 'artwork_projects', targetId), docData, { merge: true });
+      } else {
+        const newDocRef = doc(collection(db, 'artwork_projects'));
+        await setDoc(newDocRef, {
+          ...docData,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      setArtworkProjects(prev => {
+        if (targetId) {
+          return prev.map(p => p.id === targetId ? { ...p, ...docData } : p);
+        } else {
+          return [{ id: `art_${Date.now()}`, ...docData }, ...prev];
+        }
+      });
+
+      setIsArtworkModalOpen(false);
+      resetArtworkForm();
+    } catch (err) {
+      console.error("Error saving artwork project:", err);
+      alert("Failed to save artwork project. Please check network/permissions.");
+    } finally {
+      setIsSavingArtwork(false);
+    }
+  };
+
+  const handleDeleteArtworkProject = async (id: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (!id) return;
+    if (!window.confirm("Are you sure you want to delete this live project artwork?")) {
+      return;
+    }
+
+    setArtworkProjects(prev => prev.filter(p => p.id !== id));
+
+    try {
+      await deleteDoc(doc(db, 'artwork_projects', id));
+    } catch (err) {
+      console.warn("Artwork project removed locally. Note from backend:", err);
+    }
+  };
+
+  const filteredArtworkProjects = useMemo(() => {
+    if (artworkFilterCategory === 'All') return artworkProjects;
+    return artworkProjects.filter(p => p.category === artworkFilterCategory);
+  }, [artworkProjects, artworkFilterCategory]);
 
   useEffect(() => {
     setSelectedProjectIdx(0);
@@ -205,9 +454,46 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
   const selectedCourseCapstone = getCapstoneProjectForCourse(selectedCourse.id);
 
   const getDisplayProjects = (courseId: string) => {
-    // Only show the Master Projects that we provide. Do not add student projects here.
-    const masterProjects = getProjectsForCourse(courseId);
-    return masterProjects.map((proj, idx) => {
+    // 1. Live Master Projects from Firestore created by Admins/Faculty
+    const liveProjects = firestoreMasterProjects
+      .filter((mp: any) => !mp.courseId || mp.courseId === courseId || courseId === 'all')
+      .map((mp: any, idx: number) => {
+        const brief = mp.clientBrief || {};
+        const codePrefix = courseId === 'packaging-engineer' ? 'PE' :
+                           courseId === 'production-art-engineer' ? 'PA' :
+                           courseId === 'print-ready-engineer' ? 'PR' :
+                           courseId === 'plate-ready-engineer' ? 'PL' :
+                           courseId === 'colour-retouching-engineer' ? 'CR' :
+                           courseId === 'quality-control-engineer' ? 'QC' : 'CC';
+        
+        const specsText = [
+          brief.brandName ? `Brand: ${brief.brandName}` : null,
+          brief.packType ? `Pack: ${brief.packType}` : null,
+          brief.printingMethod ? `Print: ${brief.printingMethod}` : null,
+          brief.dimensions ? `Size: ${brief.dimensions}` : null,
+          mp.cloudPath ? `File Attached` : null,
+          mp.googleDriveLink ? `Drive Link` : null
+        ].filter(Boolean).join(' | ') || (mp.details ? mp.details.slice(0, 75) : 'Live Industrial Client Brief');
+
+        return {
+          id: mp.id,
+          title: mp.title || brief.brandName || 'Live Master Project',
+          projectCode: mp.projectCode || brief.projectNumber || `${codePrefix}_LIVE_0${idx + 1}`,
+          studentName: '',
+          courseName: coursesList.find((c: any) => c.id === (mp.courseId || courseId))?.title || '',
+          filename: brief.fileName || mp.cloudPath || `${mp.title || 'master_project'}.ai`,
+          specs: specsText,
+          desc: mp.details || brief.specialInstructions || 'Live master project added from Admin Project Library.',
+          badge: 'Live Firestore Project',
+          activeStudents: (mp.studentAssignments?.length) || 1,
+          googleDriveLink: mp.googleDriveLink || brief.googleDriveLink || '',
+          cloudPath: mp.cloudPath || '',
+          isLive: true
+        };
+      });
+
+    // 2. Default static built-in master projects spec
+    const staticProjects = getProjectsForCourse(courseId).map((proj, idx) => {
       const codePrefix = courseId === 'packaging-engineer' ? 'PE' :
                          courseId === 'production-art-engineer' ? 'PA' :
                          courseId === 'print-ready-engineer' ? 'PR' :
@@ -215,17 +501,88 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
                          courseId === 'colour-retouching-engineer' ? 'CR' :
                          courseId === 'quality-control-engineer' ? 'QC' : 'CC';
       return {
+        id: `static_${idx}`,
         title: proj.title,
         projectCode: `${codePrefix}_0${idx + 1}`,
-        studentName: '', // Do not show student name for master projects provided by us
+        studentName: '',
         courseName: coursesList.find((c: any) => c.id === courseId)?.title || '',
         filename: proj.filename,
         specs: proj.specs,
         desc: proj.desc,
         badge: proj.badge || 'Master Project Spec',
-        activeStudents: proj.activeStudents || 1
+        activeStudents: proj.activeStudents || 1,
+        googleDriveLink: '',
+        cloudPath: '',
+        isLive: false
       };
     });
+
+    return [...liveProjects, ...staticProjects];
+  };
+
+  useEffect(() => {
+    const unsubMaster = onSnapshot(collection(db, 'master_projects'), (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setFirestoreMasterProjects(docs);
+    }, (err) => {
+      console.warn("Could not fetch live master projects from Firestore:", err.message);
+      setFirestoreMasterProjects([]);
+    });
+    return () => unsubMaster();
+  }, []);
+
+  const handleSaveLiveProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectTitle.trim()) {
+      alert("Please enter a project title.");
+      return;
+    }
+    setIsSavingLiveProject(true);
+    try {
+      const now = new Date().toISOString();
+      const codePrefix = newProjectCourse === 'packaging-engineer' ? 'PE' :
+                         newProjectCourse === 'production-art-engineer' ? 'PA' :
+                         newProjectCourse === 'print-ready-engineer' ? 'PR' :
+                         newProjectCourse === 'plate-ready-engineer' ? 'PL' :
+                         newProjectCourse === 'colour-retouching-engineer' ? 'CR' :
+                         newProjectCourse === 'quality-control-engineer' ? 'QC' : 'CC';
+      const projectCode = `${codePrefix}_LIVE_${Math.floor(100 + Math.random() * 900)}`;
+
+      await addDoc(collection(db, 'master_projects'), {
+        title: newProjectTitle.trim(),
+        courseId: newProjectCourse,
+        details: newProjectDetails.trim(),
+        googleDriveLink: newProjectDriveLink.trim(),
+        cloudPath: newProjectFileName.trim(),
+        projectCode,
+        clientBrief: {
+          brandName: newProjectBrand.trim() || newProjectTitle.trim(),
+          packType: newProjectPackType.trim() || 'Folding Carton',
+          printingMethod: newProjectPrintingMethod.trim() || 'Flexo / Offset',
+          fileName: newProjectFileName.trim() || `${newProjectTitle.trim().replace(/\s+/g, '_')}.ai`,
+          specialInstructions: newProjectDetails.trim(),
+          projectNumber: projectCode
+        },
+        createdAt: now,
+        updatedAt: now
+      });
+
+      alert("🎉 Live Project successfully added to Course Demonstration Demo Center!");
+      setShowAddProjectModal(false);
+      setNewProjectTitle('');
+      setNewProjectDetails('');
+      setNewProjectDriveLink('');
+      setNewProjectFileName('');
+      setNewProjectBrand('');
+      setNewProjectPackType('');
+      setNewProjectPrintingMethod('');
+    } catch (err) {
+      console.error("Failed to add live project:", err);
+      handleFirestoreError(err, OperationType.CREATE, 'master_projects');
+      alert("Error adding live project: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsSavingLiveProject(false);
+    }
   };
 
   useEffect(() => {
@@ -1727,39 +2084,100 @@ Question: ${text}`
                                     </select>
                                   </div>
                                 </div>
-                                <span className="text-xs font-semibold text-slate-400">
-                                  Showing {activeProjects.length} projects
-                                </span>
+                                <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                                  <span className="text-xs font-semibold text-slate-400">
+                                    Showing {activeProjects.length} projects
+                                  </span>
+                                  <button
+                                    onClick={() => setShowAddProjectModal(true)}
+                                    className="px-3 py-1.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    Add Live Project
+                                  </button>
+                                </div>
                               </div>
  
-                              {/* Projects List - Line by Line matching 2nd snap */}
+                              {/* Projects List */}
                               <div className="space-y-3">
                                 {activeProjects.length > 0 ? (
                                   activeProjects.map((proj, idx) => (
                                     <div 
                                       key={idx}
-                                      className="p-3.5 bg-slate-50/70 hover:bg-slate-50 rounded-2xl border border-slate-150 transition-colors flex items-center gap-4"
+                                      className={cn(
+                                        "p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4",
+                                        proj.isLive 
+                                          ? "bg-pink-50/40 border-pink-200/80 hover:bg-pink-50/70" 
+                                          : "bg-slate-50/70 hover:bg-slate-50 border-slate-150"
+                                      )}
                                     >
-                                      <span className="w-6 h-6 rounded-lg bg-pink-100 text-pink-700 text-xs font-bold flex items-center justify-center shrink-0">
-                                        {String(idx + 1).padStart(2, '0')}
-                                      </span>
-                                      <h4 className="font-bold text-xs sm:text-sm text-slate-800 tracking-tight break-words min-w-0 flex-1">
-                                        {proj.projectCode ? `${proj.projectCode} - ${proj.title}` : proj.title}
-                                      </h4>
+                                      <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
+                                        <span className={cn(
+                                          "w-7 h-7 rounded-xl text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 sm:mt-0",
+                                          proj.isLive ? "bg-pink-600 text-white" : "bg-pink-100 text-pink-700"
+                                        )}>
+                                          {String(idx + 1).padStart(2, '0')}
+                                        </span>
+                                        <div className="min-w-0 flex-1 space-y-1">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <h4 className="font-bold text-xs sm:text-sm text-slate-800 tracking-tight break-words">
+                                              {proj.projectCode ? `${proj.projectCode} - ${proj.title}` : proj.title}
+                                            </h4>
+                                            {proj.isLive ? (
+                                              <span className="px-2 py-0.5 bg-pink-600 text-white text-[9px] font-black uppercase rounded-full shadow-xs flex items-center gap-1">
+                                                <Sparkles className="w-2.5 h-2.5" /> Live Project
+                                              </span>
+                                            ) : (
+                                              <span className="px-2 py-0.5 bg-slate-200 text-slate-700 text-[9px] font-bold rounded-full">
+                                                Master Spec
+                                              </span>
+                                            )}
+                                          </div>
+                                          {proj.specs && (
+                                            <p className="text-[11px] text-slate-500 leading-relaxed">
+                                              {proj.specs}
+                                            </p>
+                                          )}
+                                          {proj.desc && (
+                                            <p className="text-[10px] text-slate-400 italic">
+                                              {proj.desc}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                        {proj.googleDriveLink && (
+                                          <a
+                                            href={proj.googleDriveLink.startsWith('http') ? proj.googleDriveLink : `https://${proj.googleDriveLink}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                                          >
+                                            <Download className="w-3.5 h-3.5" /> View / Download
+                                          </a>
+                                        )}
+                                        <button
+                                          onClick={() => navigate('/master-library')}
+                                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                                        >
+                                          Manage
+                                        </button>
+                                      </div>
                                     </div>
                                   ))
                                 ) : (
                                   <div className="p-8 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center">
                                     <FolderOpen className="w-8 h-8 text-slate-300 mb-2" />
-                                    <p className="text-xs text-slate-600 font-bold mb-1">No Student Projects Found</p>
+                                    <p className="text-xs text-slate-600 font-bold mb-1">No Projects Found</p>
                                     <p className="text-[11px] text-slate-500 max-w-md mx-auto mb-4">
-                                      Student projects must be picked up directly from the database. Please go to **Admin Control Panel &gt; Student Projects** to create and assign projects.
+                                      Add your live project directly into the database to feature it in the Course Demonstration Demo Center.
                                     </p>
                                     <button
-                                      onClick={() => navigate('/admin')}
-                                      className="text-[11px] font-bold bg-pink-600 text-white px-3.5 py-1.5 rounded-lg hover:bg-pink-700 transition-colors shadow-sm cursor-pointer"
+                                      onClick={() => setShowAddProjectModal(true)}
+                                      className="text-[11px] font-bold bg-pink-600 text-white px-3.5 py-1.5 rounded-lg hover:bg-pink-700 transition-colors shadow-sm cursor-pointer flex items-center gap-1"
                                     >
-                                      Go to Admin Control Panel
+                                      <Plus className="w-3.5 h-3.5" /> Add Live Project Now
                                     </button>
                                   </div>
                                 )}
@@ -3783,82 +4201,399 @@ Question: ${text}`
             >
               <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-150 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-1">Verified Capstone Portfolios</h3>
-                  <p className="text-xs text-slate-500">
-                    Explore mock sample projects completed by certified Endless Spark students, complete with full technical details.
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2.5 py-0.5 bg-pink-100 text-pink-700 text-[10px] font-black uppercase rounded-md tracking-wider">
+                      Interactive Project Portfolio
+                    </span>
+                    <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase rounded-md tracking-wider">
+                      {firestoreMasterProjects.length} Live Database Projects
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">Live Project Portfolio & Capstone Showcase</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Explore live industrial projects from our database, active student submissions, and verified capstone samples.
                   </p>
                 </div>
-                <button 
-                  onClick={() => navigate('/book-consultation')}
-                  className="px-5 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setShowAddProjectModal(true)}
+                    className="px-4 py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Live Project
+                  </button>
+                  <button 
+                    onClick={() => navigate('/master-library')}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                  >
+                    Master Library
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-tab Navigation */}
+              <div className="flex border-b border-slate-200 bg-white rounded-2xl p-1.5 gap-1 shadow-xs">
+                <button
+                  onClick={() => setPortfolioSubTab('live_master')}
+                  className={cn(
+                    "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                    portfolioSubTab === 'live_master'
+                      ? "bg-pink-600 text-white shadow-xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  )}
                 >
-                  Schedule Live Review Call
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Live Master Projects ({firestoreMasterProjects.length})
+                </button>
+                <button
+                  onClick={() => setPortfolioSubTab('live_student')}
+                  className={cn(
+                    "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                    portfolioSubTab === 'live_student'
+                      ? "bg-pink-600 text-white shadow-xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  )}
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  Live Student Submissions ({studentProjects.length})
+                </button>
+                <button
+                  onClick={() => setPortfolioSubTab('sample')}
+                  className={cn(
+                    "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                    portfolioSubTab === 'sample'
+                      ? "bg-pink-600 text-white shadow-xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  )}
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  Live Project Artwork Showcase ({filteredArtworkProjects.length})
                 </button>
               </div>
 
-              <div className="grid md:grid-cols-3 gap-6">
-                {DEMO_PROJECTS.map((proj, idx) => (
-                  <div key={idx} className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                    <div>
-                      <div className="aspect-video relative overflow-hidden bg-slate-950">
-                        <img 
-                          src={proj.image} 
-                          alt={proj.title}
-                          className="w-full h-full object-cover opacity-90 hover:scale-105 transition-transform duration-300"
-                        />
-                        <span className={cn(
-                          "absolute top-3 right-3 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-md text-white shadow-sm",
-                          proj.score >= 90 ? "bg-emerald-600" : "bg-rose-600"
-                        )}>
-                          Score: {proj.score}/100
-                        </span>
-                        <div className="absolute bottom-2 left-2 bg-slate-900/80 text-white px-2.5 py-0.5 rounded text-[10px] font-mono">
-                          {proj.type}
-                        </div>
-                      </div>
+              {/* LIVE MASTER PROJECTS GRID */}
+              {portfolioSubTab === 'live_master' && (
+                <div className="space-y-4">
+                  {firestoreMasterProjects.length > 0 ? (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {firestoreMasterProjects.map((proj, idx) => {
+                        const brief = proj.clientBrief || {};
+                        const courseMatch = coursesList.find((c: any) => c.id === proj.courseId);
+                        return (
+                          <div key={proj.id || idx} className="bg-white border border-pink-200/80 rounded-3xl p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-pink-500/5 rounded-full blur-xl pointer-events-none" />
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="px-2.5 py-1 bg-pink-100 text-pink-700 text-[9px] font-black uppercase rounded-md">
+                                  {proj.projectCode || `LIVE_${idx + 1}`}
+                                </span>
+                                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-extrabold rounded-md flex items-center gap-1">
+                                  <Sparkles className="w-2.5 h-2.5" /> Live Project
+                                </span>
+                              </div>
 
-                      <div className="p-5 space-y-4">
-                        <div>
-                          <span className="text-[10px] text-indigo-600 uppercase font-black tracking-widest">{proj.category}</span>
-                          <h4 className="font-bold text-sm text-slate-900 mt-1">{proj.title}</h4>
-                        </div>
+                              <div>
+                                <h4 className="font-bold text-base text-slate-900 leading-snug">
+                                  {proj.title || brief.brandName || 'Live Industrial Project'}
+                                </h4>
+                                <span className="text-[11px] font-medium text-slate-500 block mt-0.5">
+                                  Course: {courseMatch?.title || proj.courseId || 'General Packaging & Printing'}
+                                </span>
+                              </div>
 
-                        <div className="grid grid-cols-2 gap-2 text-[10px] bg-slate-50 p-2.5 rounded-xl border border-slate-150 font-mono">
-                          <div>
-                            <span className="text-slate-400 block uppercase">Bleed margin</span>
-                            <span className="text-slate-800 font-bold">{proj.bleed}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block uppercase">Outlines</span>
-                            <span className="text-slate-800 font-bold">{proj.fonts}</span>
-                          </div>
-                          <div className="col-span-2 border-t border-slate-200/50 pt-2 mt-2">
-                            <span className="text-slate-400 block uppercase">Colorspace</span>
-                            <span className="text-slate-800 font-bold">{proj.colors}</span>
-                          </div>
-                        </div>
+                              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-150 space-y-1.5 text-xs">
+                                <div className="flex justify-between text-[11px]">
+                                  <span className="text-slate-400 font-medium">Brand / Client:</span>
+                                  <span className="font-bold text-slate-700">{brief.brandName || 'Industrial Brief'}</span>
+                                </div>
+                                <div className="flex justify-between text-[11px]">
+                                  <span className="text-slate-400 font-medium">Pack Style:</span>
+                                  <span className="font-bold text-slate-700">{brief.packType || 'Folding Carton'}</span>
+                                </div>
+                                <div className="flex justify-between text-[11px]">
+                                  <span className="text-slate-400 font-medium">Printing Standard:</span>
+                                  <span className="font-bold text-slate-700">{brief.printingMethod || 'FOGRA39 / CMYK'}</span>
+                                </div>
+                                {proj.cloudPath && (
+                                  <div className="flex justify-between text-[11px] border-t border-slate-200/60 pt-1.5 mt-1.5">
+                                    <span className="text-slate-400 font-medium">Master File:</span>
+                                    <span className="font-bold text-pink-600 truncate max-w-[150px]">{proj.cloudPath}</span>
+                                  </div>
+                                )}
+                              </div>
 
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-bold text-slate-700 block">Faculty Review Feedback:</span>
-                          <p className="text-[11px] text-slate-500 leading-relaxed italic">
-                            "{proj.feedback}"
-                          </p>
-                        </div>
-                      </div>
+                              {proj.details && (
+                                <p className="text-xs text-slate-500 line-clamp-3 leading-relaxed italic">
+                                  "{proj.details}"
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="border-t border-slate-100 pt-3 flex items-center justify-between gap-2">
+                              {proj.googleDriveLink ? (
+                                <a
+                                  href={proj.googleDriveLink.startsWith('http') ? proj.googleDriveLink : `https://${proj.googleDriveLink}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3.5 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+                                >
+                                  <Download className="w-3.5 h-3.5" /> View Project Asset
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 font-mono">No external link</span>
+                              )}
+                              <button
+                                onClick={() => navigate('/master-library')}
+                                className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors"
+                              >
+                                Edit in Library &rarr;
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-
-                    <div className="p-5 border-t border-slate-100 bg-slate-50/40 flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{proj.status}</span>
-                      <button 
-                        onClick={() => navigate('/book-consultation')}
-                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1"
+                  ) : (
+                    <div className="bg-white border border-dashed border-slate-200 rounded-3xl p-10 text-center space-y-3">
+                      <FolderOpen className="w-12 h-12 text-slate-300 mx-auto" />
+                      <h4 className="font-bold text-slate-800 text-sm">No Live Master Projects in Database Yet</h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Click the button below to quickly add your live project specs, artwork files, or Google Drive links to feature them in the Course Demonstration Demo Center.
+                      </p>
+                      <button
+                        onClick={() => setShowAddProjectModal(true)}
+                        className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm inline-flex items-center gap-2"
                       >
-                        Book Demo Session &rarr;
+                        <Plus className="w-4 h-4" /> Add Your Live Project Now
                       </button>
                     </div>
+                  )}
+                </div>
+              )}
+
+              {/* LIVE STUDENT PROJECTS GRID */}
+              {portfolioSubTab === 'live_student' && (
+                <div className="space-y-4">
+                  {studentProjects.length > 0 ? (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {studentProjects.map((sp, idx) => (
+                        <div key={sp.id || idx} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="px-2.5 py-1 bg-indigo-100 text-indigo-700 text-[9px] font-black uppercase rounded-md">
+                                {sp.projectCode || `STUDENT_${idx + 1}`}
+                              </span>
+                              <span className={cn(
+                                "px-2.5 py-1 text-[9px] font-black uppercase rounded-md",
+                                sp.status === 'verified' || sp.status === 'completed' 
+                                  ? "bg-emerald-100 text-emerald-800" 
+                                  : "bg-amber-100 text-amber-800"
+                              )}>
+                                {sp.status || 'In Progress'}
+                              </span>
+                            </div>
+
+                            <div>
+                              <h4 className="font-bold text-base text-slate-900">
+                                {sp.title || sp.projectName || 'Student Project Submission'}
+                              </h4>
+                              <p className="text-xs text-slate-500">Student ID: {sp.studentId || 'Enrolled Student'}</p>
+                            </div>
+
+                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-150 space-y-1 text-xs font-mono">
+                              <div><span className="text-slate-400">Course:</span> {sp.courseId || 'Pre-press Specialization'}</div>
+                              <div><span className="text-slate-400">File:</span> {sp.fileName || sp.cloudPath || 'Submission.pdf'}</div>
+                            </div>
+                          </div>
+
+                          <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
+                            <button
+                              onClick={() => navigate('/admin')}
+                              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                            >
+                              Review in Admin Panel &rarr;
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-dashed border-slate-200 rounded-3xl p-10 text-center space-y-3">
+                      <FolderOpen className="w-12 h-12 text-slate-300 mx-auto" />
+                      <h4 className="font-bold text-slate-800 text-sm">No Active Student Submissions Found</h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Student projects submitted via the Student Portal or Admin Control Panel will automatically sync here.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* LIVE PROJECT ARTWORK SHOWCASE GRID */}
+              {portfolioSubTab === 'sample' && (
+                <div className="space-y-6">
+                  {/* Course Filter Bar & Actions */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-150 pb-3">
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                          <Filter className="w-4 h-4 text-pink-600" />
+                          <span>Filter Live Artwork by Course Type</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          Select a course discipline below to view or edit corresponding certified artwork, die-line layouts, and preflight specs.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={handleOpenCreateArtwork}
+                          className="px-3.5 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add New Artwork</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Category Filter Pills */}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {ARTWORK_COURSE_CATEGORIES.map((cat) => {
+                        const count = cat === 'All' 
+                          ? artworkProjects.length 
+                          : artworkProjects.filter(p => p.category === cat).length;
+                        const isSelected = artworkFilterCategory === cat;
+                        return (
+                          <button
+                            key={cat}
+                            onClick={() => setArtworkFilterCategory(cat)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 border",
+                              isSelected
+                                ? "bg-pink-600 text-white border-pink-600 shadow-xs"
+                                : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                            )}
+                          >
+                            <span>{cat}</span>
+                            <span className={cn(
+                              "px-1.5 py-0.2 rounded-full text-[10px]",
+                              isSelected ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                            )}>
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  {/* Artwork Cards Grid */}
+                  {filteredArtworkProjects.length > 0 ? (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {filteredArtworkProjects.map((proj, idx) => (
+                        <div key={proj.id || idx} className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between group relative">
+                          <div>
+                            {/* Artwork Image Container */}
+                            <div className="aspect-video relative overflow-hidden bg-slate-950">
+                              <img 
+                                src={proj.image} 
+                                alt={proj.title}
+                                className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-300"
+                              />
+                              
+                              {/* Score Badge */}
+                              <span className={cn(
+                                "absolute top-3 right-3 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-md text-white shadow-sm z-10",
+                                proj.score >= 90 ? "bg-emerald-600" : proj.score >= 70 ? "bg-amber-600" : "bg-rose-600"
+                              )}>
+                                Score: {proj.score}/100
+                              </span>
+
+                              {/* Layout / Pack Type Badge */}
+                              <div className="absolute bottom-2 left-2 bg-slate-900/80 text-white px-2.5 py-0.5 rounded text-[10px] font-mono z-10">
+                                {proj.type}
+                              </div>
+
+                              {/* Manager Quick Action Buttons */}
+                              <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5">
+                                <button
+                                  onClick={() => handleOpenEditArtwork(proj)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-white/95 text-slate-800 hover:bg-pink-50 hover:text-pink-600 shadow-md border border-slate-200/80 transition-all cursor-pointer flex items-center gap-1.5 text-[11px] font-extrabold"
+                                  title="Edit Project Details & Replace Image"
+                                >
+                                  <Edit className="w-3.5 h-3.5 text-pink-600" />
+                                  <span>Edit / Replace Image</span>
+                                </button>
+                                <button
+                                  onClick={(e) => handleDeleteArtworkProject(proj.id, e)}
+                                  className="p-1.5 rounded-xl bg-white/95 text-red-600 hover:bg-red-50 hover:text-red-700 shadow-md border border-red-100 transition-colors cursor-pointer"
+                                  title="Delete Artwork Project"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Details Content */}
+                            <div className="p-5 space-y-4">
+                              <div>
+                                <span className="text-[10px] text-pink-600 uppercase font-black tracking-widest block">{proj.category}</span>
+                                <h4 className="font-bold text-sm text-slate-900 mt-0.5">{proj.title}</h4>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 text-[10px] bg-slate-50 p-2.5 rounded-xl border border-slate-150 font-mono">
+                                <div>
+                                  <span className="text-slate-400 block uppercase">Bleed margin</span>
+                                  <span className="text-slate-800 font-bold">{proj.bleed}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block uppercase">Outlines</span>
+                                  <span className="text-slate-800 font-bold">{proj.fonts}</span>
+                                </div>
+                                <div className="col-span-2 border-t border-slate-200/50 pt-2 mt-2">
+                                  <span className="text-slate-400 block uppercase">Colorspace</span>
+                                  <span className="text-slate-800 font-bold">{proj.colors}</span>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <span className="text-[10px] font-bold text-slate-700 block">Faculty Review Feedback:</span>
+                                <p className="text-[11px] text-slate-500 leading-relaxed italic">
+                                  "{proj.feedback}"
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-5 border-t border-slate-100 bg-slate-50/40 flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{proj.status}</span>
+                            <button 
+                              onClick={() => handleOpenEditArtwork(proj)}
+                              className="text-xs font-bold text-pink-600 hover:text-pink-800 transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                              Edit Details &rarr;
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-dashed border-slate-200 rounded-3xl p-10 text-center space-y-3">
+                      <FolderOpen className="w-12 h-12 text-slate-300 mx-auto" />
+                      <h4 className="font-bold text-slate-800 text-sm">No Artwork Projects in "{artworkFilterCategory}"</h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        No projects match this course type filter yet. Click below to add a new project for this course category.
+                      </p>
+                      <button
+                        onClick={handleOpenCreateArtwork}
+                        className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm inline-flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" /> Add Artwork for {artworkFilterCategory}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -4504,6 +5239,441 @@ Question: ${text}`
             </div>
           </div>
         </section>
+
+        {/* Quick Add Live Master Project Modal */}
+        {showAddProjectModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl border border-slate-150 space-y-6 my-8"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 bg-pink-100 text-pink-700 rounded-2xl">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Add Live Project to Demo Center</h3>
+                    <p className="text-xs text-slate-500">Save project details directly into the master database</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowAddProjectModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveLiveProject} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Project Title <span className="text-pink-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Royal Organic Cashew Primary Folding Carton"
+                    value={newProjectTitle}
+                    onChange={(e) => setNewProjectTitle(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">Associated Course</label>
+                    <select
+                      value={newProjectCourse}
+                      onChange={(e) => setNewProjectCourse(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium"
+                    >
+                      {coursesList.map((course: any) => (
+                        <option key={course.id} value={course.id}>
+                          {course.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">Brand / Client Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Royal Foods Ltd"
+                      value={newProjectBrand}
+                      onChange={(e) => setNewProjectBrand(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">Pack Style / Type</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Reverse Tuck End Carton"
+                      value={newProjectPackType}
+                      onChange={(e) => setNewProjectPackType(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">Printing Method / Spec</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 5-Color Offset FOGRA39 + Spot UV"
+                      value={newProjectPrintingMethod}
+                      onChange={(e) => setNewProjectPrintingMethod(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">Master Artwork File Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Royal_Cashew_Box_v1.ai"
+                      value={newProjectFileName}
+                      onChange={(e) => setNewProjectFileName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">Google Drive Asset Link</label>
+                    <input
+                      type="url"
+                      placeholder="https://drive.google.com/..."
+                      value={newProjectDriveLink}
+                      onChange={(e) => setNewProjectDriveLink(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">Details & Special Brief Instructions</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Provide additional technical specifications, dieline parameters, bleed requirements, or student guidelines..."
+                    value={newProjectDetails}
+                    onChange={(e) => setNewProjectDetails(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium resize-none"
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddProjectModal(false)}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingLiveProject}
+                    className="px-6 py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSavingLiveProject ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Saving to Database...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        Save Live Project
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* EDIT / REPLACE IMAGE & ARTWORK DETAILS MODAL */}
+        {isArtworkModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-8"
+            >
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-pink-500/20 text-pink-400 rounded-2xl border border-pink-500/30">
+                    <Edit className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold">
+                      {editingArtwork ? 'Edit Live Artwork & Replace Image' : 'Add New Live Artwork Project'}
+                    </h3>
+                    <p className="text-xs text-slate-300">
+                      Update artwork image, technical parameters, and course classification.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsArtworkModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Modal Form */}
+              <form onSubmit={handleSaveArtworkProject} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+                
+                {/* Course Type / Discipline Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-pink-600" />
+                    <span>Course Type / Discipline Category <span className="text-pink-600">*</span></span>
+                  </label>
+                  <select
+                    value={artCategory}
+                    onChange={(e) => setArtCategory(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  >
+                    {ARTWORK_COURSE_CATEGORIES.filter(c => c !== 'All').map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Project Title & Layout Type */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      Project Title <span className="text-pink-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Precision Corrugated Packaging"
+                      value={artTitle}
+                      onChange={(e) => setArtTitle(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      Layout / Pack Type
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Die-line Layout, Packaging Design"
+                      value={artType}
+                      onChange={(e) => setArtType(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* Cover Graphic / Image Selection & Replacement Section */}
+                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <ImageIcon className="w-4 h-4 text-pink-600" />
+                      <span>Cover Graphic / Artwork Image Selection <span className="text-pink-600">*</span></span>
+                    </label>
+                    <span className="text-[10px] text-slate-500">Upload or choose preset</span>
+                  </div>
+
+                  {/* Image Live Preview */}
+                  {artImage && (
+                    <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-300 bg-slate-900 group">
+                      <img src={artImage} alt="Artwork preview" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <label className="px-3 py-1.5 bg-white text-slate-900 rounded-xl text-xs font-bold shadow-md cursor-pointer hover:bg-slate-100 transition-colors flex items-center gap-1.5">
+                          <Upload className="w-3.5 h-3.5 text-pink-600" />
+                          <span>Replace Image</span>
+                          <input type="file" accept="image/*" onChange={handleArtworkImageUpload} className="hidden" />
+                        </label>
+                      </div>
+                      <span className="absolute bottom-2 right-2 px-2 py-0.5 bg-slate-950/80 text-white rounded text-[9px] font-mono">
+                        Active Image Preview
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Image Source Controls */}
+                  <div className="space-y-2">
+                    <div className="flex flex-col sm:flex-row items-center gap-2">
+                      <label className="w-full sm:w-auto px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer shrink-0">
+                        <Upload className="w-4 h-4" />
+                        <span>Upload Local Image</span>
+                        <input type="file" accept="image/*" onChange={handleArtworkImageUpload} className="hidden" />
+                      </label>
+
+                      <input
+                        type="url"
+                        placeholder="or paste image URL (https://...)"
+                        value={artImage}
+                        onChange={(e) => setArtImage(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-mono"
+                      />
+                    </div>
+
+                    {/* Image Presets Selector */}
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Quick Presets:</span>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                        {ARTWORK_IMAGE_PRESETS.map((preset, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setArtImage(preset.url)}
+                            className={cn(
+                              "aspect-video rounded-lg overflow-hidden border-2 transition-all cursor-pointer relative group",
+                              artImage === preset.url ? "border-pink-600 ring-2 ring-pink-500/30 scale-105" : "border-slate-200 hover:border-slate-400 opacity-80 hover:opacity-100"
+                            )}
+                            title={preset.label}
+                          >
+                            <img src={preset.url} alt={preset.label} className="w-full h-full object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Technical Specifications */}
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 block">Bleed Margin</label>
+                    <input
+                      type="text"
+                      value={artBleed}
+                      onChange={(e) => setArtBleed(e.target.value)}
+                      placeholder="e.g. 3mm Offset"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 block">Colorspace</label>
+                    <input
+                      type="text"
+                      value={artColors}
+                      onChange={(e) => setArtColors(e.target.value)}
+                      placeholder="e.g. CMYK (Fogra 39)"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 block">Fonts Outlines</label>
+                    <input
+                      type="text"
+                      value={artFonts}
+                      onChange={(e) => setArtFonts(e.target.value)}
+                      placeholder="e.g. Outlined"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Audit Score & Status */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 block">Audit Score (0-100)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={artScore}
+                      onChange={(e) => setArtScore(Number(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700 block">Preflight Pass Status</label>
+                    <select
+                      value={artStatus}
+                      onChange={(e) => setArtStatus(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    >
+                      <option value="Certified Pass">Certified Pass</option>
+                      <option value="Conditional Approval">Conditional Approval</option>
+                      <option value="Failed Preflight">Failed Preflight</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Faculty Feedback */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">Faculty Review Feedback & Notes</label>
+                  <textarea
+                    rows={2}
+                    value={artFeedback}
+                    onChange={(e) => setArtFeedback(e.target.value)}
+                    placeholder="Enter review feedback regarding folding tolerance, traps, or die-lines..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500 font-medium resize-none"
+                  />
+                </div>
+
+                {/* Modal Footer Controls */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                  {editingArtwork ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        handleDeleteArtworkProject(editingArtwork.id, e);
+                        setIsArtworkModalOpen(false);
+                      }}
+                      className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Artwork</span>
+                    </button>
+                  ) : <div />}
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsArtworkModalOpen(false)}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingArtwork}
+                      className="px-6 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-md flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSavingArtwork ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Saving Artwork...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          <span>{editingArtwork ? 'Save Changes' : 'Create Artwork'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+              </form>
+            </motion.div>
+          </div>
+        )}
 
       </main>
 

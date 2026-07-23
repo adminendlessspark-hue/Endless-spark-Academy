@@ -49,6 +49,7 @@ export default function BookConsultation() {
   });
   const [bookingDate, setBookingDate] = useState<string>('');
   const [bookingTime, setBookingTime] = useState<string>('');
+  const [selectedFeeAmount, setSelectedFeeAmount] = useState<number>(100);
   const [showBookingPayment, setShowBookingPayment] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [lastBookingId, setLastBookingId] = useState('');
@@ -149,7 +150,7 @@ export default function BookConsultation() {
         date: bookingDate,
         time: bookingTime,
         topic: consultantForm.topic,
-        amountPaid: 500,
+        amountPaid: selectedFeeAmount,
         paymentId: paymentId,
         status: 'paid',
         feeReduced: false,
@@ -170,7 +171,7 @@ export default function BookConsultation() {
           preferredDate: bookingDate,
           preferredTime: bookingTime,
           mode: 'online',
-          feePaid: 500,
+          feePaid: selectedFeeAmount,
           paymentId: paymentId,
           topic: consultantForm.topic,
           completed: false,
@@ -217,7 +218,7 @@ export default function BookConsultation() {
             {
               id: `sys-${Date.now()}-${Math.random().toString(36).substring(2,6)}`,
               date: new Date().toISOString(),
-              text: `Autopilot Demo Booking (Paid consultation ₹500, Payment: ${paymentId}) registered and scheduled. Room ID: ${roomId}. Assigned Faculty: ${facultyName}.`,
+              text: `Autopilot Demo Booking (Paid commitment deposit ₹${selectedFeeAmount}, Payment: ${paymentId}) registered and scheduled. Room ID: ${roomId}. Assigned Faculty: ${facultyName}.`,
               authorId: 'system',
               authorName: 'System'
             }
@@ -310,7 +311,7 @@ export default function BookConsultation() {
 
               {/* Live Classroom Widget */}
               {(() => {
-                const classroomUrl = `${window.location.origin}/classroom/${scheduledRoomId}`;
+                const classroomUrl = `https://endlesssparkcreativehub.in/classroom/${scheduledRoomId}`;
                 const handleCopy = () => {
                   navigator.clipboard.writeText(classroomUrl);
                   setCopied(true);
@@ -690,13 +691,73 @@ Endless Spark School of Printing and Packaging Admissions Team`);
                     </div>
                   )}
 
+                  {/* Step 4: Choose Deposit Fee Type */}
+                  <div className="space-y-4 pt-4 border-t border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                      <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-xs font-mono">4</span>
+                      Select Slot Commitment Deposit Type
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFeeAmount(100)}
+                        className={cn(
+                          "p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between cursor-pointer",
+                          selectedFeeAmount === 100
+                            ? "border-pink-600 bg-pink-50/50 ring-2 ring-pink-500/20"
+                            : "border-slate-200 hover:border-slate-300 bg-white"
+                        )}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-extrabold text-pink-700 uppercase tracking-wider">Demo Slot Deposit</span>
+                            {selectedFeeAmount === 100 && <CheckCircle2 className="w-4 h-4 text-pink-600" />}
+                          </div>
+                          <div className="text-2xl font-black text-slate-900">₹100 <span className="text-xs font-semibold text-slate-500">Rupees</span></div>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                            Standard commitment deposit for live demo class. Prevents missed scheduled hours & 100% reduced from course fee.
+                          </p>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFeeAmount(500)}
+                        className={cn(
+                          "p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between cursor-pointer",
+                          selectedFeeAmount === 500
+                            ? "border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20"
+                            : "border-slate-200 hover:border-slate-300 bg-white"
+                        )}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-extrabold text-indigo-700 uppercase tracking-wider">Consultation & Credits</span>
+                            {selectedFeeAmount === 500 && <CheckCircle2 className="w-4 h-4 text-indigo-600" />}
+                          </div>
+                          <div className="text-2xl font-black text-slate-900">₹500 <span className="text-xs font-semibold text-slate-500">Credits</span></div>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                            Extended 1-on-1 career strategy & full syllabus roadmap consultation. 100% credited towards tuition fee.
+                          </p>
+                        </div>
+                      </button>
+                    </div>
+
+                    <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-amber-900 text-xs font-semibold flex items-start gap-2">
+                      <Clock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <span>
+                        Note: Because unconfirmed applicants frequently missed scheduled hours in the past, a nominal ₹{selectedFeeAmount} deposit is required upon demo sign-in. This deposit is <strong>100% reduced from your course fees</strong> upon enrollment!
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Pricing Notice & Submit */}
                   <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-6">
                     <div>
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest block">Slot Fee</span>
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest block">Selected Deposit Fee</span>
                       <div className="flex items-baseline gap-2 mt-1">
-                        <span className="text-3xl font-extrabold text-slate-900">₹500</span>
-                        <span className="text-xs text-slate-500 font-medium">(100% adjustable from course fees)</span>
+                        <span className="text-3xl font-extrabold text-slate-900">₹{selectedFeeAmount}</span>
+                        <span className="text-xs text-emerald-600 font-bold">(100% reduced from course fee)</span>
                       </div>
                     </div>
                     <button
@@ -704,7 +765,7 @@ Endless Spark School of Printing and Packaging Admissions Team`);
                       className="w-full sm:w-auto px-8 py-4 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 hover:scale-102 transition-all shadow-lg shadow-pink-200 text-sm flex items-center justify-center gap-2 shrink-0 cursor-pointer"
                       id="secure-slot-btn"
                     >
-                      <CreditCard className="w-4 h-4" /> Secure Slot & Pay ₹500
+                      <CreditCard className="w-4 h-4" /> Secure Slot & Pay ₹{selectedFeeAmount}
                     </button>
                   </div>
                 </form>
@@ -726,8 +787,8 @@ Endless Spark School of Printing and Packaging Admissions Team`);
               <X className="w-6 h-6" />
             </button>
             <DigitalPaymentGateway
-              amount={500}
-              description={`1-on-1 Consultation: ${consultantForm.topic} with Student ${consultantForm.name}`}
+              amount={selectedFeeAmount}
+              description={`1-on-1 Consultation & Demo Slot Deposit (₹${selectedFeeAmount}): ${consultantForm.topic} with Student ${consultantForm.name}`}
               studentName={consultantForm.name}
               studentEmail={consultantForm.email}
               onSuccess={handleBookingPaymentSuccess}

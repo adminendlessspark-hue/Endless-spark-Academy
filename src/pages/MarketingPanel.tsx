@@ -14,6 +14,13 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { 
+  DEFAULT_GENERAL_TEMPLATE, 
+  DEFAULT_COURSE_PROMO_TEMPLATE, 
+  DEFAULT_WEBINAR_TEMPLATE, 
+  DEFAULT_REMOTE_LEARNING_TEMPLATE, 
+  resolveTemplateText 
+} from '../utils/whatsappTemplates';
+import { 
   Video, 
   Users, 
   Laptop, 
@@ -66,7 +73,8 @@ interface Lead {
 
 export default function MarketingPanel() {
   const { user } = useAuth();
-  const { logoUrl: hookLogoUrl, landingPageTitleImageUrl: hookTitleImg } = useSettings();
+  const { logoUrl: hookLogoUrl, landingPageTitleImageUrl: hookTitleImg, whatsappSettings } = useSettings();
+  const promoVideoUrl = whatsappSettings?.coursePromotionVideoUrl || 'https://youtu.be/vMl8FHK75HM';
 
   // Active Tab: leads, customization, whatsapp-templates, schedules
   const [activePanelTab, setActivePanelTab] = useState<'leads' | 'customize' | 'templates' | 'schedules'>('leads');
@@ -109,8 +117,28 @@ export default function MarketingPanel() {
   ]);
   const [newBenefitText, setNewBenefitText] = useState('');
 
-  // Loaded from Firebase settings/marketing document
+  // Courses state
+  const [courses, setCourses] = useState<{ id: string; title: string }[]>([]);
+
+  // Check URL search parameters for active tab (e.g. ?tab=templates)
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'templates' || tabParam === 'whatsapp' || tabParam === 'whatsapp-templates') {
+      setActivePanelTab('templates');
+    }
+  }, []);
+
+  // Loaded from Firebase settings/marketing document & courses collection
+  useEffect(() => {
+    const unsubCourses = onSnapshot(collection(db, 'courses'), (snapshot) => {
+      const fetched = snapshot.docs.map(doc => ({
+        id: doc.id,
+        title: doc.data().title || doc.data().name || 'Engineering Course'
+      }));
+      setCourses(fetched);
+    });
+
     const unsubMarketing = onSnapshot(doc(db, 'settings', 'marketing'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -134,6 +162,7 @@ export default function MarketingPanel() {
     });
 
     return () => {
+      unsubCourses();
       unsubMarketing();
       unsubAdmin();
     };
@@ -487,13 +516,14 @@ export default function MarketingPanel() {
         <button
           onClick={() => setActivePanelTab('templates')}
           className={cn(
-            "px-5 py-3 border-b-2 font-bold text-xs uppercase tracking-widest whitespace-nowrap transition-all",
+            "px-5 py-3 border-b-2 font-bold text-xs uppercase tracking-widest whitespace-nowrap transition-all flex items-center gap-2",
             activePanelTab === 'templates' 
-              ? "border-pink-600 text-pink-600" 
+              ? "border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl" 
               : "border-transparent text-gray-500 hover:text-gray-700"
           )}
         >
-          WhatsApp Share Templates
+          <MessageCircle className="w-4 h-4 text-emerald-600" />
+          WhatsApp Marketing Templates
         </button>
         <button
           onClick={() => setActivePanelTab('schedules')}
@@ -936,71 +966,256 @@ export default function MarketingPanel() {
       )}
 
       {activePanelTab === 'templates' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
-          
-          {/* Template Card 1 */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-            <span className="text-[9px] bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded uppercase font-black tracking-widest">
-              Direct Invite Template (Sales Oriented)
-            </span>
-            <h4 className="font-extrabold text-[#0D0D0D] text-sm leading-tight">Masterclass Seat Allocation Trigger</h4>
-            <div className="bg-slate-50 p-4 rounded-2xl font-mono text-[10px] text-slate-700 whitespace-pre-wrap leading-relaxed border border-slate-100">
-{`*Endless Spark School Admission Invitation!* 👋 
-
-Hello [Name]! 
-
-Congratulations, your live webcast pass for *${webinarCustomTitle}* is ready.
-
-🗓️ Batch Date: *${webinarCustomDate}*
-⏰ Live Stream: *${webinarCustomTime}*
-🎟️ Secure ticket: *[TicketID]*
-
-💡 *How our customized app environment helps you learn online:*
-- Visual preflight simulator directly inside your browser
-- Instant offset digital production color matching tool
-- Daily technical puzzles and pre-press validation checklist
-
-Reply with "YES" to schedule your live app setup walkthrough with our specialists.
-
-📞 Or reach us directly on Call / WhatsApp: *+91 90428 21999*`}
+        <div className="space-y-6 max-w-6xl">
+          {/* Header & Active Video Banner */}
+          <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-3xl p-6 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="bg-white/20 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border border-white/20">
+                  Central Marketing Hub
+                </span>
+                <span className="text-xs text-emerald-100 font-medium">WhatsApp Marketing & Social Templates</span>
+              </div>
+              <h3 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-emerald-200" /> WhatsApp Marketing Templates
+              </h3>
+              <p className="text-emerald-100 text-xs max-w-2xl">
+                Ready-to-use WhatsApp copy for promotional campaigns, inquiry replies, and video walkthroughs. Includes active course promo links & dynamic catalog items.
+              </p>
             </div>
             
-            <button
-              onClick={() => triggerCopyTemplate(`*Endless Spark School Admission Invitation!* 👋 \n\nHello [Name]!\n\nCongratulations, your live webcast pass for *${webinarCustomTitle}* is ready.\n\n🗓️ Batch Date: *${webinarCustomDate}*\n⏰ Live Stream: *${webinarCustomTime}*\n🎟️ Secure ticket: *[TicketCode]*\n\n💡 *How our customized app environment helps you learn online:*\n- Visual preflight simulator directly inside your browser\n- Instant offset digital production color matching tool\n- Daily technical puzzles and pre-press validation checklist\n\nReply with "YES" to schedule your live app setup walkthrough with our specialists.\n\n📞 Or reach us directly on Call / WhatsApp: *+91 90428 21999*`)}
-              className="w-full bg-slate-950 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-slate-850 transition duration-300 flex items-center justify-center gap-1.5"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              <span>Copy Template Copy</span>
-            </button>
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 p-3.5 rounded-2xl flex items-center gap-3 shrink-0">
+              <div className="p-2 bg-white text-emerald-700 rounded-xl">
+                <Video className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-emerald-100 uppercase block">Active Course Promo Video</span>
+                <a href={promoVideoUrl} target="_blank" rel="noopener noreferrer" className="text-white font-mono text-xs font-bold underline hover:text-emerald-200 transition">
+                  {promoVideoUrl}
+                </a>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(promoVideoUrl);
+                  alert('Course Promotion Video URL copied!');
+                }}
+                className="px-3 py-1.5 bg-white text-emerald-800 font-bold text-xs rounded-lg hover:bg-emerald-50 transition cursor-pointer shrink-0 ml-1"
+              >
+                Copy Link
+              </button>
+            </div>
           </div>
 
-          {/* Template Card 2 */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-            <span className="text-[9px] bg-indigo-50 text-indigo-850 border border-indigo-100 px-2 py-0.5 rounded uppercase font-black tracking-widest">
-              Follow-up Advantage Template (Technical Oriented)
-            </span>
-            <h4 className="font-extrabold text-[#0D0D0D] text-sm leading-tight">App-Based Hybrid Digital Learning Benefits</h4>
-            <div className="bg-slate-50 p-4 rounded-2xl font-mono text-[10px] text-slate-700 whitespace-pre-wrap leading-relaxed border border-slate-100">
-{`*Learn Printing & Packaging Engineering remotely* 🚀
+          {/* Templates Grid (2x2) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Template 1: General Inquiry & Course Overview */}
+            {(() => {
+              const text1 = resolveTemplateText(
+                whatsappSettings?.customGeneralTemplate,
+                DEFAULT_GENERAL_TEMPLATE,
+                { promoVideoUrl, courses }
+              );
+              return (
+                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full uppercase font-black tracking-widest">
+                        Template 1 • General Inquiry & Course Overview
+                      </span>
+                      <span className="text-[10px] text-gray-400 font-mono">Includes Promo Video</span>
+                    </div>
+                    <h4 className="font-black text-gray-900 text-base leading-snug">Full Course Inquiry & App Features Walkthrough</h4>
+                    <div className="bg-slate-50 p-4 rounded-2xl font-mono text-[11px] text-slate-700 whitespace-pre-wrap leading-relaxed border border-slate-100 max-h-72 overflow-y-auto custom-scrollbar">
+                      {text1}
+                    </div>
+                  </div>
 
-Our school companion app replaces dry theory with live engineering action:
+                  <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                    <button
+                      onClick={() => {
+                        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text1)}`, '_blank');
+                      }}
+                      className="flex-1 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-3 rounded-xl transition duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Share Directly on WhatsApp</span>
+                    </button>
+                    <button
+                      onClick={() => triggerCopyTemplate(text1)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold py-3 px-4 rounded-xl transition duration-300 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                      title="Copy text to clipboard"
+                    >
+                      <Copy className="w-4 h-4 text-slate-600" />
+                      <span className="hidden sm:inline">Copy Text</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
-1. *Interactive Lab walkthroughs* — Master pre-press layout prep visually on any mobile screen.
-2. *Real-time digital audits* — Submit work files directly inside of our preflight tracker.
-3. *Expert Pre-Press guidance* — Access live Q&As whenever you encounter production blockers.
+            {/* Template 2: Masterclass Direct Invite */}
+            {(() => {
+              const text2 = resolveTemplateText(
+                whatsappSettings?.customWebinarTemplate,
+                DEFAULT_WEBINAR_TEMPLATE,
+                { 
+                  promoVideoUrl, 
+                  webinarTitle: webinarCustomTitle, 
+                  webinarDate: webinarCustomDate, 
+                  webinarTime: webinarCustomTime,
+                  name: '[Name]',
+                  ticketCode: '[TicketCode]'
+                }
+              );
+              return (
+                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] bg-blue-50 text-blue-800 border border-blue-200 px-2.5 py-1 rounded-full uppercase font-black tracking-widest">
+                        Template 2 • Masterclass Direct Invite
+                      </span>
+                      <span className="text-[10px] text-gray-400 font-mono">Webinar Seat Pass</span>
+                    </div>
+                    <h4 className="font-black text-gray-900 text-base leading-snug">Masterclass Seat Allocation Trigger</h4>
+                    <div className="bg-slate-50 p-4 rounded-2xl font-mono text-[11px] text-slate-700 whitespace-pre-wrap leading-relaxed border border-slate-100 max-h-72 overflow-y-auto custom-scrollbar">
+                      {text2}
+                    </div>
+                  </div>
 
-Join the admission webinar on *${webinarCustomDate}* to explore these tools in action!
+                  <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                    <button
+                      onClick={() => {
+                        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text2)}`, '_blank');
+                      }}
+                      className="flex-1 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-3 rounded-xl transition duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Share Directly on WhatsApp</span>
+                    </button>
+                    <button
+                      onClick={() => triggerCopyTemplate(text2)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold py-3 px-4 rounded-xl transition duration-300 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                      title="Copy text to clipboard"
+                    >
+                      <Copy className="w-4 h-4 text-slate-600" />
+                      <span className="hidden sm:inline">Copy Text</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
-📞 Contact / WhatsApp: *+91 90428 21999*`}
+            {/* Template 3: Hybrid Learning Benefits */}
+            {(() => {
+              const text3 = resolveTemplateText(
+                whatsappSettings?.customRemoteLearningTemplate,
+                DEFAULT_REMOTE_LEARNING_TEMPLATE,
+                { promoVideoUrl, webinarDate: webinarCustomDate }
+              );
+              return (
+                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] bg-indigo-50 text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded-full uppercase font-black tracking-widest">
+                        Template 3 • Hybrid Learning Benefits
+                      </span>
+                      <span className="text-[10px] text-gray-400 font-mono">App Tech Highlights</span>
+                    </div>
+                    <h4 className="font-black text-gray-900 text-base leading-snug">App-Based Remote Engineering Learning</h4>
+                    <div className="bg-slate-50 p-4 rounded-2xl font-mono text-[11px] text-slate-700 whitespace-pre-wrap leading-relaxed border border-slate-100 max-h-72 overflow-y-auto custom-scrollbar">
+                      {text3}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                    <button
+                      onClick={() => {
+                        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text3)}`, '_blank');
+                      }}
+                      className="flex-1 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-3 rounded-xl transition duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Share Directly on WhatsApp</span>
+                    </button>
+                    <button
+                      onClick={() => triggerCopyTemplate(text3)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold py-3 px-4 rounded-xl transition duration-300 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                      title="Copy text to clipboard"
+                    >
+                      <Copy className="w-4 h-4 text-slate-600" />
+                      <span className="hidden sm:inline">Copy Text</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Template 4: Dedicated Course Promotion Video */}
+            {(() => {
+              const text4 = resolveTemplateText(
+                whatsappSettings?.customCoursePromoTemplate,
+                DEFAULT_COURSE_PROMO_TEMPLATE,
+                { promoVideoUrl }
+              );
+              return (
+                <div className="bg-white p-6 rounded-3xl border border-pink-200 shadow-sm space-y-4 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] bg-pink-100 text-pink-700 font-black px-2.5 py-1 rounded-full uppercase tracking-widest border border-pink-200">
+                        Template 4 • Course Promotion Video
+                      </span>
+                      <span className="text-[10px] text-pink-600 font-bold font-mono">Video Campaign</span>
+                    </div>
+                    <h4 className="font-black text-gray-900 text-base leading-snug">Dedicated Course Promo & Video Walkthrough</h4>
+                    <div className="bg-slate-50 p-4 rounded-2xl font-mono text-[11px] text-slate-700 whitespace-pre-wrap leading-relaxed border border-slate-100 max-h-72 overflow-y-auto custom-scrollbar">
+                      {text4}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                    <button
+                      onClick={() => {
+                        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text4)}`, '_blank');
+                      }}
+                      className="flex-1 w-full bg-pink-600 hover:bg-pink-700 text-white text-xs font-extrabold py-3 rounded-xl transition duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Share Directly on WhatsApp</span>
+                    </button>
+                    <button
+                      onClick={() => triggerCopyTemplate(text4)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold py-3 px-4 rounded-xl transition duration-300 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                      title="Copy text to clipboard"
+                    >
+                      <Copy className="w-4 h-4 text-slate-600" />
+                      <span className="hidden sm:inline">Copy Text</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+          </div>
+
+          {/* Integration & Setup Quick Card */}
+          <div className="p-5 bg-emerald-50/60 border border-emerald-100 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-widest bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                Automated WhatsApp Bot API (CallMeBot)
+              </span>
+              <h5 className="font-bold text-gray-900 text-sm">Need Automated WhatsApp Alerts for New Inquiries?</h5>
+              <p className="text-xs text-gray-600">
+                Save <strong>+34 644 41 87 20</strong> in your phone contacts as CallMeBot and configure your API key in Admin Settings.
+              </p>
             </div>
-
-            <button
-              onClick={() => triggerCopyTemplate(`*Learn Printing & Packaging Engineering remotely* 🚀\n\nOur school companion app replaces dry theory with live engineering action:\n\n1. *Interactive Lab walkthroughs* — Master pre-press layout prep visually on any mobile screen.\n2. *Real-time digital audits* — Submit work files directly inside of our preflight tracker.\n3. *Expert Pre-Press guidance* — Access live Q&As whenever you encounter production blockers.\n\nJoin the admission webinar on *${webinarCustomDate}* to explore these tools in action!\n\n📞 Contact / WhatsApp: *+91 90428 21999*`)}
-              className="w-full bg-slate-950 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-slate-850 transition duration-300 flex items-center justify-center gap-1.5"
+            <a
+              href="/admin"
+              className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-1.5 shrink-0"
             >
-              <Copy className="w-3.5 h-3.5" />
-              <span>Copy Template Copy</span>
-            </button>
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Configure WhatsApp Settings in Admin</span>
+            </a>
           </div>
 
         </div>
@@ -1077,7 +1292,7 @@ Join the admission webinar on *${webinarCustomDate}* to explore these tools in a
               {liveSessions.map((session) => {
                 const isLive = session.status === 'live';
                 const isCompleted = session.status === 'completed';
-                const shareText = `*Webinar Invitation: ${session.title}* 🚀\n\nJoin our live masterclass stream guided by presenter *${session.facultyName}*!\n\n📅 Date/Time: *${new Date(session.scheduledFor).toLocaleString()}*\n💻 Access Live Room directly (Zero Install): ${window.location.origin}/classroom/${session.roomId}\n\nSupported on all Windows, macOS, Android, and iOS Safari screens! Join us!`;
+                const shareText = `*Webinar Invitation: ${session.title}* 🚀\n\nJoin our live masterclass stream guided by presenter *${session.facultyName}*!\n\n📅 Date/Time: *${new Date(session.scheduledFor).toLocaleString()}*\n💻 Access Live Room directly (Zero Install): https://endlesssparkcreativehub.in/classroom/${session.roomId}\n\nSupported on all Windows, macOS, Android, and iOS Safari screens! Join us!`;
 
                 return (
                   <div key={session.id} className="p-6 hover:bg-gray-50/40 transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-6">

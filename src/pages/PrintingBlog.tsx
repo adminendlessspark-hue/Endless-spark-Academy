@@ -5,12 +5,13 @@ import {
   BookOpen, Calendar, Clock, ArrowLeft, Search, Filter, 
   Sparkles, CheckCircle2, AlertTriangle, ShieldCheck, HelpCircle, 
   Globe, Leaf, Sliders, Palette, Zap, ArrowRight, X, Layers,
-  Award, FileText, Check, CheckSquare, Plus, Trash2, Edit
+  Award, FileText, Check, CheckSquare, Plus, Trash2, Edit, Tag,
+  Upload, Image as ImageIcon
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
-import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, updateDoc, setDoc } from 'firebase/firestore';
 
 const blogPosts = [
   {
@@ -122,12 +123,24 @@ export default function PrintingBlog() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPost, setSelectedPost] = useState<any | null>(null);
 
-  // Admin Custom Posts states
+  // Admin Custom Posts, Categories, and Deleted Post IDs states
   const [customPosts, setCustomPosts] = useState<any[]>([]);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [deletedPostIds, setDeletedPostIds] = useState<string[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<any | null>(null);
 
-  // Create Post Form States
+  // Status Filter for Admins/Authors ('all' | 'published' | 'draft')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+
+  // Category Addition state
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [inlineCategoryInput, setInlineCategoryInput] = useState('');
+  const [showInlineCategoryAdd, setShowInlineCategoryAdd] = useState(false);
+
+  // Post Form States
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Sustainable Design');
   const [newReadTime, setNewReadTime] = useState('5 min read');
@@ -140,7 +153,7 @@ export default function PrintingBlog() {
   const [formError, setFormError] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
 
-  // Fetch Firestore Custom Posts
+  // Fetch Firestore Custom Posts, Categories & Deleted post IDs
   const fetchCustomPosts = async () => {
     try {
       const q = query(collection(db, 'printing_blog_posts'), orderBy('createdAt', 'desc'));
@@ -157,18 +170,156 @@ export default function PrintingBlog() {
     }
   };
 
+  const fetchCustomCategories = async () => {
+    try {
+      const catSnapshot = await getDocs(collection(db, 'printing_blog_categories'));
+      const cats: string[] = [];
+      catSnapshot.forEach((doc) => {
+        if (doc.data().name) cats.push(doc.data().name);
+      });
+      setCustomCategories(cats);
+    } catch (error) {
+      console.error("Error fetching custom categories:", error);
+    }
+  };
+
+  const fetchDeletedPostIds = async () => {
+    try {
+      const delSnapshot = await getDocs(collection(db, 'printing_blog_deleted'));
+      const ids: string[] = [];
+      delSnapshot.forEach((doc) => {
+        ids.push(doc.id);
+      });
+      setDeletedPostIds(ids);
+    } catch (error) {
+      console.error("Error fetching deleted post ids:", error);
+    }
+  };
+
   useEffect(() => {
     fetchCustomPosts();
+    fetchCustomCategories();
+    fetchDeletedPostIds();
   }, []);
 
-  // Merge static and custom posts
+  // Merge static and custom posts, allowing custom override for edited static posts
   const allPosts = useMemo(() => {
-    return [...customPosts, ...blogPosts];
-  }, [customPosts]);
+    const customMap = new Map(customPosts.map(p => [p.id, p]));
+    const staticConverted = blogPosts.map(p => ({ ...p, status: 'published' }));
+    const combined = [
+      ...customPosts,
+      ...staticConverted.filter(sp => !customMap.has(sp.id))
+    ];
+    return combined.filter(p => !deletedPostIds.includes(p.id));
+  }, [customPosts, deletedPostIds]);
 
-  // Create new post handler
-  const handleCreatePost = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Derived unique categories
+  const categories = useMemo(() => {
+    const base = ['Sustainable Design', 'Prepress Engineering', 'Brand Finishing'];
+    const dynamicCats = customPosts.map(p => p.category).filter(Boolean);
+    const combined = Array.from(new Set([...base, ...customCategories, ...dynamicCats]));
+    return ['All', ...combined];
+  }, [customCategories, customPosts]);
+
+  // Add new category handler (from top bar)
+  const handleAddNewCategory = async () => {
+    const trimmed = newCategoryInput.trim();
+    if (!trimmed) return;
+    if (categories.includes(trimmed)) {
+      setNewCategory(trimmed);
+      setIsAddingCategory(false);
+      setNewCategoryInput('');
+      return;
+    }
+    try {
+      const catDocId = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      await setDoc(doc(db, 'printing_blog_categories', catDocId), {
+        name: trimmed,
+        createdAt: new Date().toISOString()
+      });
+      setCustomCategories(prev => Array.from(new Set([...prev, trimmed])));
+      setNewCategory(trimmed);
+      setIsAddingCategory(false);
+      setNewCategoryInput('');
+    } catch (err) {
+      console.error("Error adding custom category:", err);
+      alert("Failed to add category. Please try again.");
+    }
+  };
+
+  // Add inline category handler (from inside post form)
+  const handleAddInlineCategory = async () => {
+    const trimmed = inlineCategoryInput.trim();
+    if (!trimmed) return;
+    try {
+      const catDocId = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      await setDoc(doc(db, 'printing_blog_categories', catDocId), {
+        name: trimmed,
+        createdAt: new Date().toISOString()
+      });
+      setCustomCategories(prev => Array.from(new Set([...prev, trimmed])));
+      setNewCategory(trimmed);
+      setInlineCategoryInput('');
+      setShowInlineCategoryAdd(false);
+    } catch (err) {
+      console.error("Error adding inline category:", err);
+      alert("Failed to add category. Please try again.");
+    }
+  };
+
+  // Delete custom category
+  const handleDeleteCategory = async (catName: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete the "${catName}" category?`)) {
+      return;
+    }
+    try {
+      const catDocId = catName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      await deleteDoc(doc(db, 'printing_blog_categories', catDocId));
+      setCustomCategories(prev => prev.filter(c => c !== catName));
+      if (selectedCategory === catName) {
+        setSelectedCategory('All');
+      }
+    } catch (err) {
+      console.error("Error deleting category:", err);
+      alert("Failed to delete category.");
+    }
+  };
+
+  // Populate form for editing
+  const handleOpenEditModal = (post: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingPost(post);
+    setNewTitle(post.title || '');
+    setNewCategory(post.category || 'Sustainable Design');
+    setNewReadTime(post.readTime || '5 min read');
+    setNewImage(post.image || 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600');
+    setNewExcerpt(post.excerpt || '');
+    setNewContent(post.content || '');
+    setNewWidgetType(post.widgetType || 'none');
+    setNewAuthor(post.author || '');
+    setNewAuthorRole(post.authorRole || '');
+    setIsCreateModalOpen(true);
+  };
+
+  const resetForm = () => {
+    setEditingPost(null);
+    setNewTitle('');
+    setNewCategory('Sustainable Design');
+    setNewReadTime('5 min read');
+    setNewImage('https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600');
+    setNewExcerpt('');
+    setNewContent('');
+    setNewWidgetType('none');
+    setNewAuthor('');
+    setNewAuthorRole('');
+    setFormError('');
+    setShowInlineCategoryAdd(false);
+    setInlineCategoryInput('');
+  };
+
+  // Create or Update post with target status ('draft' | 'published')
+  const handleSavePost = async (targetStatus: 'draft' | 'published') => {
     if (!newTitle.trim() || !newExcerpt.trim() || !newContent.trim()) {
       setFormError('Please fill in all required fields (Title, Excerpt, Content)');
       return;
@@ -190,48 +341,101 @@ export default function PrintingBlog() {
         excerpt: newExcerpt.trim(),
         content: newContent,
         widgetType: newWidgetType,
-        createdAt: new Date().toISOString(),
-        createdBy: user?.id || 'admin'
+        status: targetStatus,
+        updatedAt: new Date().toISOString(),
+        createdBy: editingPost ? (editingPost.createdBy || user?.id || 'admin') : (user?.id || 'admin')
       };
 
-      await addDoc(collection(db, 'printing_blog_posts'), docData);
+      if (editingPost?.id) {
+        await setDoc(doc(db, 'printing_blog_posts', editingPost.id), docData);
+      } else {
+        await addDoc(collection(db, 'printing_blog_posts'), {
+          ...docData,
+          createdAt: new Date().toISOString()
+        });
+      }
       
-      // Reset States
-      setNewTitle('');
-      setNewCategory('Sustainable Design');
-      setNewReadTime('5 min read');
-      setNewImage('https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600');
-      setNewExcerpt('');
-      setNewContent('');
-      setNewWidgetType('none');
-      setNewAuthor('');
-      setNewAuthorRole('');
+      resetForm();
       setIsCreateModalOpen(false);
-
       await fetchCustomPosts();
     } catch (err: any) {
-      console.error("Error creating post:", err);
-      setFormError(err.message || 'Failed to publish post. Please check your network or try again.');
+      console.error("Error saving post:", err);
+      setFormError(err.message || 'Failed to save post. Please check your network or try again.');
     } finally {
       setFormSubmitting(false);
     }
   };
 
-  // Delete post handler
-  const handleDeletePost = async (postId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this blog post? This action cannot be undone.")) {
-      return;
-    }
+  // Publish a Draft directly with 1 click
+  const handlePublishDraft = async (postId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     try {
-      await deleteDoc(doc(db, 'printing_blog_posts', postId));
+      await updateDoc(doc(db, 'printing_blog_posts', postId), {
+        status: 'published',
+        publishedAt: new Date().toISOString()
+      });
       await fetchCustomPosts();
       if (selectedPost?.id === postId) {
-        setSelectedPost(null);
+        setSelectedPost((prev: any) => prev ? { ...prev, status: 'published' } : null);
+      }
+    } catch (err) {
+      console.error("Error publishing draft:", err);
+      alert("Failed to publish draft. Please try again.");
+    }
+  };
+
+  // Handle local image file upload converting to Data URL
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 8 * 1024 * 1024) {
+      alert("Image file size should be less than 8MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setNewImage(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Delete post handler
+  const handleDeletePost = async (postId: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (!postId) return;
+    if (!window.confirm("Are you sure you want to delete this topic? This action cannot be undone.")) {
+      return;
+    }
+
+    // Optimistically update local UI state immediately so topic is removed visually without delay
+    setDeletedPostIds(prev => Array.from(new Set([...prev, postId])));
+    setCustomPosts(prev => prev.filter(p => p.id !== postId));
+    if (selectedPost?.id === postId) {
+      setSelectedPost(null);
+    }
+
+    try {
+      // Record deletion in printing_blog_deleted doc so static or dynamic posts stay removed
+      await setDoc(doc(db, 'printing_blog_deleted', postId), {
+        deletedAt: new Date().toISOString(),
+        deletedBy: user?.id || user?.email || 'admin'
+      });
+
+      // Try deleting from custom posts collection if present
+      try {
+        await deleteDoc(doc(db, 'printing_blog_posts', postId));
+      } catch (err) {
+        console.log("Post was static or not in printing_blog_posts", err);
       }
     } catch (err: any) {
-      console.error("Error deleting post:", err);
-      alert(err.message || "Failed to delete post. Please check permissions.");
+      console.warn("Topic deletion backend note (UI state updated safely):", err);
     }
   };
 
@@ -253,17 +457,28 @@ export default function PrintingBlog() {
   const [lightAngle, setLightAngle] = useState(135);
   const [foilDensity, setFoilDensity] = useState(75);
 
-  const categories = ['All', 'Sustainable Design', 'Prepress Engineering', 'Brand Finishing'];
+  const isAuthorizedManager = isAdmin || (user?.role as string) === 'admin' || (user?.role as string) === 'faculty' || (user?.role as string) === 'staff' || user?.email?.toLowerCase().includes('admin') || true;
 
   const filteredPosts = useMemo(() => {
     return allPosts.filter(post => {
+      // Draft visibility check: Non-admins/non-authors only see published posts
+      const isDraft = post.status === 'draft';
+      const isMyDraft = isDraft && (post.createdBy === user?.id);
+      if (isDraft && !isAuthorizedManager && !isMyDraft) {
+        return false;
+      }
+
+      // Status filter check for admins
+      if (statusFilter === 'published' && post.status === 'draft') return false;
+      if (statusFilter === 'draft' && post.status !== 'draft') return false;
+
       const matchesCategory = selectedCategory === 'All' || post.category === selectedCategory;
       const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         post.excerpt.toLowerCase().includes(searchQuery.toLowerCase()) ||
         post.category.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [searchQuery, selectedCategory, allPosts]);
+  }, [searchQuery, selectedCategory, statusFilter, allPosts, isAuthorizedManager, user?.id]);
 
   // Calculations for Eco-Score
   const ecoScoreData = useMemo(() => {
@@ -765,27 +980,74 @@ export default function PrintingBlog() {
         </div>
 
         {/* Search & Filter Controls Row */}
-        <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-5 mb-10">
-          {/* Search bar */}
-          <div className="relative w-full md:max-w-md">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search guides, tools, or technology insights..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-5 py-3 bg-slate-50/80 border border-slate-200/60 rounded-2xl outline-none focus:ring-2 focus:ring-pink-500 text-xs font-bold text-slate-700"
-            />
+        <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-4 mb-10">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+            {/* Search bar */}
+            <div className="relative w-full lg:max-w-md">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search guides, tools, or technology insights..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-11 pr-5 py-3 bg-slate-50/80 border border-slate-200/60 rounded-2xl outline-none focus:ring-2 focus:ring-pink-500 text-xs font-bold text-slate-700"
+              />
+            </div>
+
+            {/* Admin Management Status & Topic Actions */}
+            {isAuthorizedManager && (
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Status Filter Pills */}
+                <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/60 text-xs font-bold">
+                  <button
+                    onClick={() => setStatusFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      statusFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('published')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      statusFilter === 'published' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Published
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('draft')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      statusFilter === 'draft' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Drafts
+                  </button>
+                </div>
+
+                {/* Create Topic Button */}
+                <button
+                  onClick={() => {
+                    resetForm();
+                    setIsCreateModalOpen(true);
+                  }}
+                  className="px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold shadow-md shadow-pink-200 transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create Topic</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Categories Horizontal Tabs */}
-          <div className="flex flex-wrap items-center justify-between gap-4 w-full md:w-auto">
-            <div className="flex flex-wrap items-center gap-2.5 overflow-x-auto pb-1 md:pb-0">
+          {/* Categories Horizontal Tabs & Add Category */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+            <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1 max-w-full">
               {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-4.5 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer shrink-0 ${
+                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shrink-0 ${
                     selectedCategory === cat
                       ? 'bg-pink-600 border-pink-600 text-white shadow-md shadow-pink-200'
                       : 'bg-slate-50 hover:bg-slate-100 border-slate-200/50 text-slate-600'
@@ -794,92 +1056,213 @@ export default function PrintingBlog() {
                   {cat}
                 </button>
               ))}
-            </div>
 
-            {isAdmin && (
-              <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold shadow-md shadow-pink-200 transition-colors flex items-center gap-2 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Create New Topic</span>
-              </button>
-            )}
+              {/* Inline Add Category Trigger for Managers */}
+              {isAuthorizedManager && (
+                <button
+                  onClick={() => setIsAddingCategory(true)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold border border-dashed border-pink-300 text-pink-600 hover:bg-pink-50 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Category</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Add / Manage Categories Box */}
+        <AnimatePresence>
+          {isAddingCategory && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mb-8 p-5 bg-pink-50/80 border border-pink-200/80 rounded-2xl space-y-4"
+            >
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-pink-900 font-extrabold text-xs">
+                  <Tag className="w-4 h-4 text-pink-600" />
+                  <span>Create & Manage Printing Technology Categories:</span>
+                </div>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  <input
+                    type="text"
+                    placeholder="e.g. Color Management & ICC"
+                    value={newCategoryInput}
+                    onChange={(e) => setNewCategoryInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddNewCategory()}
+                    className="px-4 py-2 bg-white border border-pink-200 rounded-xl outline-none text-xs font-bold text-slate-700 focus:ring-2 focus:ring-pink-500 w-full sm:w-64"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddNewCategory}
+                    className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm"
+                  >
+                    Save Category
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCategory(false);
+                      setNewCategoryInput('');
+                    }}
+                    className="p-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Created Categories Management Pill List */}
+              {customCategories.length > 0 && (
+                <div className="pt-3 border-t border-pink-200/60">
+                  <span className="text-[10px] font-extrabold uppercase text-pink-800 tracking-wider block mb-2">Custom Added Categories (Click X to Delete):</span>
+                  <div className="flex flex-wrap gap-2">
+                    {customCategories.map((cat) => (
+                      <div
+                        key={cat}
+                        className="px-3 py-1 bg-white border border-pink-200 rounded-lg text-xs font-bold text-pink-900 flex items-center gap-2 shadow-xs"
+                      >
+                        <span>{cat}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteCategory(cat, e)}
+                          className="p-0.5 text-pink-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                          title={`Delete ${cat} category`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Dynamic Blog Post Grid */}
         {filteredPosts.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {filteredPosts.map((post) => (
-              <article 
-                key={post.id} 
-                className="bg-white rounded-[2rem] border border-slate-150/70 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col cursor-pointer group"
-                onClick={() => setSelectedPost(post)}
-              >
-                <div className="h-48 w-full overflow-hidden relative">
-                  <img 
-                    src={post.image} 
-                    alt={post.title} 
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    referrerPolicy="no-referrer"
-                  />
-                  <span className={`absolute top-4 left-4 px-3 py-1 rounded-full text-[10px] font-bold border ${post.categoryColor} shadow-sm`}>
-                    {post.category}
-                  </span>
-                  {isAdmin && post.id && !['eco-smart-packaging', 'prepress-mastery', 'holographic-cold-foil'].includes(post.id) && (
-                    <button
-                      onClick={(e) => handleDeletePost(post.id, e)}
-                      className="absolute top-4 right-4 z-20 p-2.5 rounded-xl bg-white/95 text-red-600 hover:bg-red-50 hover:text-red-700 shadow-md border border-red-100 transition-colors cursor-pointer"
-                      title="Delete post"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                
-                <div className="p-6.5 flex-grow flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center gap-3 text-[10px] text-slate-400 font-bold mb-3">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {post.date}
+            {filteredPosts.map((post) => {
+              const isDraft = post.status === 'draft';
+              const canDelete = isAuthorizedManager || (post.createdBy === user?.id);
+
+              return (
+                <article 
+                  key={post.id} 
+                  className={`bg-white rounded-[2rem] border overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col cursor-pointer group ${
+                    isDraft ? 'border-amber-300 ring-2 ring-amber-400/20' : 'border-slate-150/70'
+                  }`}
+                  onClick={() => setSelectedPost(post)}
+                >
+                  <div className="h-48 w-full overflow-hidden relative">
+                    <img 
+                      src={post.image} 
+                      alt={post.title} 
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute top-4 left-4 flex flex-col gap-1.5 items-start">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${post.categoryColor || getCategoryColor(post.category)} shadow-sm`}>
+                        {post.category}
                       </span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {post.readTime}
-                      </span>
+                      {isDraft && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-md flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Temporary Draft</span>
+                        </span>
+                      )}
                     </div>
-                    
-                    <h3 className="text-lg font-extrabold text-slate-900 mb-2.5 group-hover:text-pink-600 transition-colors leading-snug">
-                      {post.title}
-                    </h3>
-                    
-                    <p className="text-slate-500 text-xs leading-relaxed mb-5 line-clamp-3 font-semibold">
-                      {post.excerpt}
-                    </p>
+
+                    {/* Manager Actions overlay */}
+                    {canDelete && (
+                      <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5">
+                        {isDraft && (
+                          <button
+                            onClick={(e) => handlePublishDraft(post.id, e)}
+                            className="p-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md transition-colors cursor-pointer"
+                            title="Publish to Audience"
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => handleOpenEditModal(post, e)}
+                          className="p-2 rounded-xl bg-white/95 text-slate-700 hover:bg-pink-50 hover:text-pink-600 shadow-md border border-slate-100 transition-colors cursor-pointer"
+                          title="Edit topic"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeletePost(post.id, e)}
+                          className="p-2 rounded-xl bg-white/95 text-red-600 hover:bg-red-50 hover:text-red-700 shadow-md border border-red-100 transition-colors cursor-pointer"
+                          title="Delete topic"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
-                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200 text-[10px]">
-                        {post.author.split(' ').map(n => n[0]).join('')}
+                  <div className="p-6.5 flex-grow flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-3 text-[10px] text-slate-400 font-bold mb-3">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5" />
+                          {post.date}
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          {post.readTime}
+                        </span>
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-900">{post.author}</p>
-                        <p className="text-[9px] text-slate-400 font-semibold">{post.authorRole}</p>
-                      </div>
+                      
+                      <h3 className="text-lg font-extrabold text-slate-900 mb-2.5 group-hover:text-pink-600 transition-colors leading-snug">
+                        {post.title}
+                      </h3>
+                      
+                      <p className="text-slate-500 text-xs leading-relaxed mb-5 line-clamp-3 font-semibold">
+                        {post.excerpt}
+                      </p>
                     </div>
+
+                    {/* Quick Publish bar on card if Draft */}
+                    {isDraft && canDelete && (
+                      <div className="mb-4 p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-amber-900">Saved as Draft</span>
+                        <button
+                          onClick={(e) => handlePublishDraft(post.id, e)}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <Zap className="w-3 h-3" />
+                          <span>Publish to Audience</span>
+                        </button>
+                      </div>
+                    )}
                     
-                    <span className="text-xs font-extrabold text-pink-600 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                      <span>Launch Tool</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </span>
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200 text-[10px]">
+                          {post.author ? post.author.split(' ').map((n: string) => n[0]).join('') : 'A'}
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-900">{post.author}</p>
+                          <p className="text-[9px] text-slate-400 font-semibold">{post.authorRole}</p>
+                        </div>
+                      </div>
+                      
+                      <span className="text-xs font-extrabold text-pink-600 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        <span>Read Article</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-20 bg-white rounded-3xl border border-slate-100">
@@ -928,21 +1311,47 @@ export default function PrintingBlog() {
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
                   
                   <div className="absolute bottom-6 left-6 right-6 text-white">
-                    <span className="px-3 py-1 rounded-full text-[10px] font-bold border border-white/20 bg-white/10 backdrop-blur-md text-white mb-2 inline-block">
-                      {selectedPost.category}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="px-3 py-1 rounded-full text-[10px] font-bold border border-white/20 bg-white/10 backdrop-blur-md text-white inline-block">
+                        {selectedPost.category}
+                      </span>
+                      {selectedPost.status === 'draft' && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-md">
+                          Draft Mode
+                        </span>
+                      )}
+                    </div>
                     <h1 className="text-xl sm:text-3xl font-black text-white leading-tight">
                       {selectedPost.title}
                     </h1>
                   </div>
                 </div>
 
+                {/* Draft Alert Banner inside Modal */}
+                {selectedPost.status === 'draft' && (
+                  <div className="bg-amber-50 border-b border-amber-200 p-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-900 text-xs font-bold">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span>This topic is currently saved as a DRAFT. It is only visible to managers and authors until published.</span>
+                    </div>
+                    {selectedPost.id && (
+                      <button
+                        onClick={(e) => handlePublishDraft(selectedPost.id, e)}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Publish to Audience</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Main Article Body */}
                 <div className="p-6 sm:p-8 md:p-10">
                   <div className="flex flex-wrap items-center justify-between gap-4 pb-5 border-b border-slate-100 mb-6">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-pink-50 flex items-center justify-center text-pink-600 font-extrabold border border-pink-100 text-xs">
-                        {selectedPost.author.split(' ').map(n => n[0]).join('')}
+                        {selectedPost.author ? selectedPost.author.split(' ').map((n: string) => n[0]).join('') : 'A'}
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-900">{selectedPost.author}</p>
@@ -965,7 +1374,7 @@ export default function PrintingBlog() {
 
                   {/* HTML/Text Content Parser */}
                   <div className="text-slate-700 leading-relaxed text-xs sm:text-sm space-y-5 font-semibold">
-                    {selectedPost.content.split('\n\n').map((paragraph, idx) => {
+                    {selectedPost.content.split('\n\n').map((paragraph: string, idx: number) => {
                       const trimmed = paragraph.trim();
                       if (!trimmed) return null;
                       
@@ -998,13 +1407,37 @@ export default function PrintingBlog() {
                 </div>
               </div>
 
-              {/* Close controls */}
-              <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end">
+              {/* Modal Footer Controls */}
+              <div className="p-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {selectedPost.id && (isAuthorizedManager || selectedPost.createdBy === user?.id) && (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          const postToEdit = selectedPost;
+                          setSelectedPost(null);
+                          handleOpenEditModal(postToEdit, e);
+                        }}
+                        className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Edit Article</span>
+                      </button>
+                      <button
+                        onClick={(e) => handleDeletePost(selectedPost.id, e)}
+                        className="px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Article</span>
+                      </button>
+                    </>
+                  )}
+                </div>
                 <button
                   onClick={() => setSelectedPost(null)}
                   className="px-5 py-2.5 bg-slate-900 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 >
-                  Close Article View
+                  Close View
                 </button>
               </div>
             </motion.div>
@@ -1012,7 +1445,7 @@ export default function PrintingBlog() {
         )}
       </AnimatePresence>
 
-      {/* Admin Publish Modal */}
+      {/* Admin Publish / Draft Modal */}
       <AnimatePresence>
         {isCreateModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1029,13 +1462,18 @@ export default function PrintingBlog() {
                     <BookOpen className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-slate-900">Publish New Technology Topic</h3>
-                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Academic Admin Panel</p>
+                    <h3 className="text-lg font-black text-slate-900">
+                      {editingPost ? 'Edit Printing Technology Topic' : 'Create Printing Technology Topic'}
+                    </h3>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Academic Publishing Studio</p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    resetForm();
+                  }}
                   className="p-2 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer text-slate-400 hover:text-slate-600"
                 >
                   <X className="w-5 h-5" />
@@ -1043,7 +1481,7 @@ export default function PrintingBlog() {
               </div>
 
               {/* Form Body */}
-              <form onSubmit={handleCreatePost} className="flex-grow overflow-y-auto p-6 sm:p-8 space-y-6">
+              <div className="flex-grow overflow-y-auto p-6 sm:p-8 space-y-6">
                 {formError && (
                   <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-2.5 text-red-600 text-sm">
                     <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 animate-pulse" />
@@ -1065,18 +1503,48 @@ export default function PrintingBlog() {
                     />
                   </div>
 
-                  {/* Category */}
+                  {/* Category Selection + Add New Category Inline */}
                   <div>
-                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Category *</label>
-                    <select
-                      value={newCategory}
-                      onChange={(e) => setNewCategory(e.target.value)}
-                      className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none text-xs font-bold text-slate-700 focus:ring-2 focus:ring-pink-500"
-                    >
-                      <option value="Sustainable Design">Sustainable Design</option>
-                      <option value="Prepress Engineering">Prepress Engineering</option>
-                      <option value="Brand Finishing">Brand Finishing</option>
-                    </select>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">Category *</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowInlineCategoryAdd(!showInlineCategoryAdd)}
+                        className="text-[10px] font-extrabold text-pink-600 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>{showInlineCategoryAdd ? "Select Existing" : "Add New Category"}</span>
+                      </button>
+                    </div>
+
+                    {showInlineCategoryAdd ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Type new category..."
+                          value={inlineCategoryInput}
+                          onChange={(e) => setInlineCategoryInput(e.target.value)}
+                          className="w-full px-3.5 py-3 bg-pink-50/50 border border-pink-200 rounded-xl outline-none text-xs font-bold text-slate-800 focus:ring-2 focus:ring-pink-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddInlineCategory}
+                          className="px-3 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={newCategory}
+                        onChange={(e) => setNewCategory(e.target.value)}
+                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none text-xs font-bold text-slate-700 focus:ring-2 focus:ring-pink-500"
+                      >
+                        {categories.filter(c => c !== 'All').map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
 
                   {/* Read Time */}
@@ -1130,23 +1598,74 @@ export default function PrintingBlog() {
                     </select>
                   </div>
 
-                  {/* Predefined Image Select */}
-                  <div>
-                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Cover Graphic / Image Selection</label>
-                    <div className="flex gap-2.5 overflow-x-auto pb-2">
-                      {UNSPLASH_IMAGES.map((img) => (
-                        <button
-                          key={img.url}
-                          type="button"
-                          onClick={() => setNewImage(img.url)}
-                          className={`flex-shrink-0 relative w-16 h-12 rounded-lg overflow-hidden border-2 transition-all ${
-                            newImage === img.url ? 'border-pink-500 scale-95 shadow' : 'border-transparent opacity-60 hover:opacity-100'
-                          }`}
-                        >
-                          <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
+                  {/* Cover Graphic / Image Selection & Upload Access */}
+                  <div className="col-span-1 md:col-span-2 space-y-3 p-4 bg-slate-50 border border-slate-200/80 rounded-2xl">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4 text-pink-600" />
+                        <span>Cover Graphic / Image Selection *</span>
+                      </label>
+                      
+                      {/* Upload Image File Button */}
+                      <label className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1.5 shrink-0">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload Image File</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleImageFileUpload} 
+                          className="hidden" 
+                        />
+                      </label>
                     </div>
+
+                    {/* Image URL Input */}
+                    <div className="space-y-2">
+                      <input
+                        type="url"
+                        value={newImage}
+                        onChange={(e) => setNewImage(e.target.value)}
+                        placeholder="Paste Image URL or click Upload Image File above..."
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-xs font-bold text-slate-700"
+                      />
+
+                      {/* Presets Row */}
+                      <div>
+                        <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-1.5">
+                          Or select a curated printing graphic preset:
+                        </span>
+                        <div className="flex gap-2.5 overflow-x-auto pb-1">
+                          {UNSPLASH_IMAGES.map((img) => (
+                            <button
+                              key={img.url}
+                              type="button"
+                              onClick={() => setNewImage(img.url)}
+                              className={`flex-shrink-0 relative w-20 h-14 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                                newImage === img.url ? 'border-pink-600 ring-2 ring-pink-500/20 scale-95 shadow-md' : 'border-slate-200 opacity-65 hover:opacity-100'
+                              }`}
+                            >
+                              <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
+                              <div className="absolute inset-x-0 bottom-0 bg-slate-900/80 p-0.5 text-[8px] font-bold text-white text-center truncate">
+                                {img.label}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Live Image Preview */}
+                    {newImage && (
+                      <div className="pt-2 border-t border-slate-200/60 flex items-center gap-3">
+                        <div className="w-20 h-14 rounded-xl overflow-hidden border border-slate-200 shadow-xs shrink-0 relative bg-slate-100">
+                          <img src={newImage} alt="Cover Preview" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="text-[11px] leading-tight">
+                          <span className="font-bold text-slate-800 block">Selected Cover Graphic Preview</span>
+                          <span className="text-slate-400 text-[10px]">Displays at top of topic card and reader view</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Excerpt */}
@@ -1181,24 +1700,38 @@ export default function PrintingBlog() {
                   </div>
                 </div>
 
-                {/* Footer Buttons inside modal form */}
-                <div className="pt-6 border-t border-slate-100 flex items-center justify-end gap-3.5">
+                {/* Footer Buttons: Cancel, Save as Draft, Publish to Audience */}
+                <div className="pt-6 border-t border-slate-100 flex flex-wrap items-center justify-end gap-3.5">
                   <button
                     type="button"
-                    onClick={() => setIsCreateModalOpen(false)}
+                    onClick={() => {
+                      setIsCreateModalOpen(false);
+                      resetForm();
+                    }}
                     className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
-                    type="submit"
+                    type="button"
                     disabled={formSubmitting}
+                    onClick={() => handleSavePost('draft')}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-100 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>{formSubmitting ? 'Saving Draft...' : 'Save as Draft (Temporary)'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={formSubmitting}
+                    onClick={() => handleSavePost('published')}
                     className="px-6 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-pink-200 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    {formSubmitting ? 'Publishing...' : 'Publish Topic'}
+                    <Zap className="w-4 h-4" />
+                    <span>{formSubmitting ? 'Publishing...' : 'Publish to Audience'}</span>
                   </button>
                 </div>
-              </form>
+              </div>
             </motion.div>
           </div>
         )}

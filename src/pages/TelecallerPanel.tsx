@@ -2,12 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, addDoc, updateDoc, doc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
+import { useSettings } from '../hooks/useSettings';
+import { 
+  DEFAULT_GENERAL_TEMPLATE, 
+  DEFAULT_COURSE_PROMO_TEMPLATE, 
+  resolveTemplateText 
+} from '../utils/whatsappTemplates';
 import { Lead } from '../types';
 import { Phone, Mail, Calendar, CheckCircle, XCircle, Clock, UserPlus, FileText, Search, Filter, Plus, Edit2, Trash2, Briefcase, MessageCircle, ChevronDown, ChevronUp, BookOpen, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '../utils';
 
 export default function TelecallerPanel() {
   const { user } = useAuth();
+  const { whatsappSettings } = useSettings();
+  const promoVideoUrl = whatsappSettings?.coursePromotionVideoUrl || 'https://youtu.be/vMl8FHK75HM';
   const [leads, setLeads] = useState<Lead[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<Lead['status'] | 'all'>('all');
@@ -631,9 +639,20 @@ export default function TelecallerPanel() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <MessageCircle className="w-6 h-6 text-green-500" /> WhatsApp Marketing Templates
-              </h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <MessageCircle className="w-6 h-6 text-green-500" /> WhatsApp Marketing Templates
+                </h2>
+                <a 
+                  href="/marketing?tab=templates" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-pink-600 font-bold hover:underline mt-1"
+                >
+                  <span>Open Full Marketing Templates Page</span>
+                  <span>↗</span>
+                </a>
+              </div>
               <button
                 onClick={() => setIsShowingTemplates(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -643,57 +662,104 @@ export default function TelecallerPanel() {
             </div>
             
             <div className="space-y-6">
-              <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                <h3 className="font-semibold text-lg text-gray-800 mb-2">General Inquiry Template</h3>
-                <div id="whatsapp-template-view" className="bg-white border text-sm text-gray-700 whitespace-pre-wrap border-gray-200 rounded-lg p-4 font-mono mb-3">
-{`*Hello!* 👋
-
-Welcome to *Endless Spark School of Printing and Packaging*!
-
-We are excited to share an amazing opportunity to transform your career! 🚀
-
-*Modes of Study Available:*
-📍 *Offline Classes*: Practical, hands-on physical labs and classroom training.
-💻 *Online Classes*: Learn from anywhere with our advanced interactive student app.
-
-*Explore our industry-leading courses:*
-${courses.length > 0 ? courses.map(course => `🎓 ${course.title}`).join('\n') : "🎓 Packaging Engineer\n🎓 Production Art Engineer\n🎓 Print Ready Engineer\n🎓 Plate Ready Engineer\n🎓 Colour Retouching Engineer\n🎓 Quality Control Engineer\n🎓 Printing & Packaging Cross Courses"}
-
-*How Our Dedicated Learning App Helps You Excel Online:*
-🧠 *Interactive AI Mind Maps*: Simplify complex technical concepts with visual structures.
-📋 *Digital Project Checklists*: Work on real-world Pre-Flight & QC checklists dynamically.
-🎥 *Secure Video Hub*: Replay recorded lectures anytime with lightning-fast streaming.
-💬 *Live Queries Resolver*: Raise doubts via our support catalog and get timely solutions from faculty.
-📅 *Smart Cohort Scheduler*: Effortlessly plan offline labs and schedule live online mentoring sessions.
-
-*Join us to get:*
-✅ Flexible Class Schedules 
-✅ 100% Placement Assistance 
-✅ Industry Expert Mentorship
-
-Ready to get started or learn more? 
-👉 Fill out this quick inquiry form and we'll get right back to you:
-${window.location.origin}/inquiry
-
-📞 Or reach us directly on Call / WhatsApp: *+91 90428 21999*
-
-Let’s build your future together! 🌟
-
-Best,
-The Admissions Team`}
+              {/* Course Promotion Video Highlight Banner */}
+              <div className="p-3 bg-pink-50 border border-pink-100 rounded-xl flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 bg-pink-600 text-white rounded-lg">🎥</span>
+                  <div>
+                    <span className="font-bold text-gray-900 block">Course Promotion Video URL:</span>
+                    <a href={promoVideoUrl} target="_blank" rel="noopener noreferrer" className="text-pink-600 font-mono underline font-medium">
+                      {promoVideoUrl}
+                    </a>
+                  </div>
                 </div>
                 <button
-                  id="copy-whatsapp-template-btn"
                   onClick={() => {
-                    const text = `*Hello!* 👋\n\nWelcome to *Endless Spark School of Printing and Packaging*!\n\nWe are excited to share an amazing opportunity to transform your career! 🚀\n\n*Modes of Study Available:*\n📍 *Offline Classes*: Practical, hands-on physical labs and classroom training.\n💻 *Online Classes*: Learn from anywhere with our advanced interactive student app.\n\n*Explore our industry-leading courses:*\n${courses.length > 0 ? courses.map(course => `🎓 ${course.title}`).join('\n') : "🎓 Packaging Engineer\n🎓 Production Art Engineer\n🎓 Print Ready Engineer\n🎓 Plate Ready Engineer\n🎓 Colour Retouching Engineer\n🎓 Quality Control Engineer\n🎓 Printing & Packaging Cross Courses"}\n\n*How Our Dedicated Learning App Helps You Excel Online:*\n🧠 *Interactive AI Mind Maps*: Simplify complex technical concepts with visual structures.\n📋 *Digital Project Checklists*: Work on real-world Pre-Flight & QC checklists dynamically.\n🎥 *Secure Video Hub*: Replay recorded lectures anytime with lightning-fast streaming.\n💬 *Live Queries Resolver*: Raise doubts via our support catalog and get timely solutions from faculty.\n📅 *Smart Cohort Scheduler*: Effortlessly plan offline labs and schedule live online mentoring sessions.\n\n*Join us to get:*\n✅ Flexible Class Schedules \n✅ 100% Placement Assistance \n✅ Industry Expert Mentorship\n\nReady to get started or learn more? \n👉 Fill out this quick inquiry form and we'll get right back to you:\n${window.location.origin}/inquiry\n\n📞 Or reach us directly on Call / WhatsApp: *+91 90428 21999*\n\nLet’s build your future together! 🌟\n\nBest,\nThe Admissions Team\n`;
-                    navigator.clipboard.writeText(text);
-                    alert('Template copied to clipboard!');
+                    navigator.clipboard.writeText(promoVideoUrl);
+                    alert('Video URL copied!');
                   }}
-                  className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg text-sm"
+                  className="px-2.5 py-1 bg-white border border-pink-200 text-pink-700 font-bold rounded-lg hover:bg-pink-100 transition-colors shrink-0"
                 >
-                  Copy to Clipboard
+                  Copy Video Link
                 </button>
               </div>
+
+              {/* General Inquiry & Course Overview Template */}
+              {(() => {
+                const textGeneral = resolveTemplateText(
+                  whatsappSettings?.customGeneralTemplate,
+                  DEFAULT_GENERAL_TEMPLATE,
+                  { promoVideoUrl, courses }
+                );
+                return (
+                  <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-3">
+                    <h3 className="font-semibold text-base text-gray-800">General Inquiry Template with Course Promotion Video</h3>
+                    <div id="whatsapp-template-view" className="bg-white border text-sm text-gray-700 whitespace-pre-wrap border-gray-200 rounded-lg p-4 font-mono leading-relaxed">
+                      {textGeneral}
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(textGeneral)}`, '_blank');
+                        }}
+                        className="flex-1 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-xs transition duration-200 flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>Share Directly on WhatsApp</span>
+                      </button>
+                      <button
+                        id="copy-whatsapp-template-btn"
+                        onClick={() => {
+                          navigator.clipboard.writeText(textGeneral);
+                          alert('Template copied to clipboard!');
+                        }}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer"
+                      >
+                        Copy Text
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Dedicated Video Promotion Template Card */}
+              {(() => {
+                const textCoursePromo = resolveTemplateText(
+                  whatsappSettings?.customCoursePromoTemplate,
+                  DEFAULT_COURSE_PROMO_TEMPLATE,
+                  { promoVideoUrl }
+                );
+                return (
+                  <div className="border border-pink-200 rounded-xl p-4 bg-pink-50/40 space-y-3">
+                    <h3 className="font-bold text-base text-pink-900 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-pink-600" /> Dedicated Course Promotion Video Template
+                    </h3>
+                    <div className="bg-white border text-sm text-gray-700 whitespace-pre-wrap border-gray-200 rounded-lg p-4 font-mono leading-relaxed">
+                      {textCoursePromo}
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(textCoursePromo)}`, '_blank');
+                        }}
+                        className="flex-1 w-full bg-pink-600 hover:bg-pink-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-xs transition duration-200 flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>Share Directly on WhatsApp</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(textCoursePromo);
+                          alert('Course Promotion Video template copied!');
+                        }}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer"
+                      >
+                        Copy Text
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             
             <div className="mt-6 flex justify-end">

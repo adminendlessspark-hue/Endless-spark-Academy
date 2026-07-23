@@ -11,6 +11,12 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import SecureVideoPlayer from '../components/SecureVideoPlayer';
 
+export interface AttachedScriptFile {
+  name: string;
+  url: string;
+  size?: string;
+}
+
 interface ToolkitProduct {
   id: string;
   toolkitName: string;
@@ -20,6 +26,7 @@ interface ToolkitProduct {
   demoVideoUrl: string;
   installationVideoUrl: string;
   scriptFileUrl: string;
+  scriptFiles?: AttachedScriptFile[];
   features: string[];
 }
 
@@ -53,6 +60,7 @@ export default function AdobeScriptToolkit() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [adminScriptFiles, setAdminScriptFiles] = useState<AttachedScriptFile[]>([]);
 
   // Secure and direct file download engine (converts URL to direct blob file downloads within the app)
   const handleDirectDownload = async (url: string, filename: string, idForSpinner?: string) => {
@@ -70,8 +78,21 @@ export default function AdobeScriptToolkit() {
       
       const link = document.createElement('a');
       link.href = downloadUrl;
-      const safeFilename = filename.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      link.download = safeFilename.endsWith('.zip') ? safeFilename : `${safeFilename}.zip`;
+
+      // Smart file extension formatting (supports .js, .jsx, .zxp, .jsxbin, .zip)
+      let cleanFilename = filename.trim().replace(/[/\\?%*:|"<>]/g, '_');
+      const lowerName = cleanFilename.toLowerCase();
+      let finalFilename = cleanFilename;
+
+      if (!lowerName.endsWith('.js') && !lowerName.endsWith('.jsx') && !lowerName.endsWith('.zxp') && !lowerName.endsWith('.zip') && !lowerName.endsWith('.jsxbin')) {
+        if (url.includes('javascript') || lowerName.includes('js') || lowerName.includes('script') || lowerName.includes('preflight') || lowerName.includes('v1')) {
+          finalFilename = `${cleanFilename}.js`;
+        } else {
+          finalFilename = `${cleanFilename}.zip`;
+        }
+      }
+
+      link.download = finalFilename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -85,8 +106,20 @@ export default function AdobeScriptToolkit() {
       link.href = url;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      const safeFilename = filename.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      link.setAttribute('download', safeFilename.endsWith('.zip') ? safeFilename : `${safeFilename}.zip`);
+
+      let cleanFilename = filename.trim().replace(/[/\\?%*:|"<>]/g, '_');
+      const lowerName = cleanFilename.toLowerCase();
+      let finalFilename = cleanFilename;
+
+      if (!lowerName.endsWith('.js') && !lowerName.endsWith('.jsx') && !lowerName.endsWith('.zxp') && !lowerName.endsWith('.zip') && !lowerName.endsWith('.jsxbin')) {
+        if (url.includes('javascript') || lowerName.includes('js') || lowerName.includes('script') || lowerName.includes('preflight') || lowerName.includes('v1')) {
+          finalFilename = `${cleanFilename}.js`;
+        } else {
+          finalFilename = `${cleanFilename}.zip`;
+        }
+      }
+
+      link.setAttribute('download', finalFilename);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -95,36 +128,49 @@ export default function AdobeScriptToolkit() {
     }
   };
 
-  // Convert uploaded local script file to base64 Data URL so it saves securely to Firestore
-  const processLocalScriptFile = (file: File) => {
-    if (!file) return;
-    setUploadProgress(10);
-    setUploadedFileName(file.name);
-    
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev !== null && prev < 90) {
-          return prev + 25;
-        }
-        return prev;
-      });
-    }, 150);
+  // Convert uploaded local script files (.js, .jsx, .zip, .zxp, etc.) to base64 Data URLs so they save securely to Firestore
+  const processLocalScriptFiles = (files: FileList | File[]) => {
+    if (!files) return;
+    const fileList = Array.from(files);
+    if (fileList.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setAdminFileUrl(reader.result);
-        clearInterval(interval);
-        setUploadProgress(100);
-        setTimeout(() => setUploadProgress(null), 1000);
-      }
-    };
-    reader.onerror = () => {
-      clearInterval(interval);
-      setUploadProgress(null);
-      showToast("Failed to read script file. Please try a different ZIP archive.", "error");
-    };
-    reader.readAsDataURL(file);
+    setUploadProgress(10);
+    let completedCount = 0;
+    const updatedFiles = [...adminScriptFiles];
+
+    fileList.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          const sizeKb = (file.size / 1024).toFixed(1) + ' KB';
+          updatedFiles.push({
+            name: file.name,
+            url: reader.result,
+            size: sizeKb
+          });
+
+          completedCount++;
+          setUploadProgress(Math.round((completedCount / fileList.length) * 100));
+
+          if (completedCount === fileList.length) {
+            setAdminScriptFiles(updatedFiles);
+            if (updatedFiles.length > 0) {
+              setAdminFileUrl(updatedFiles[0].url);
+            }
+            if (!adminName || adminName === "New Automation Script") {
+              setAdminName(fileList[0].name.replace(/\.[^/.]+$/, ""));
+            }
+            setUploadedFileName(`${updatedFiles.length} file(s) attached`);
+            setTimeout(() => setUploadProgress(null), 800);
+            showToast(`Successfully uploaded ${fileList.length} file(s)!`, "success");
+          }
+        }
+      };
+      reader.onerror = () => {
+        showToast(`Failed to read "${file.name}".`, "error");
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   // Toast & Deletion Confirmation State
@@ -159,6 +205,9 @@ export default function AdobeScriptToolkit() {
   const [userOtp, setUserOtp] = useState("");
   const [otpError, setOtpError] = useState("");
   const [otpTimer, setOtpTimer] = useState(60);
+
+  // Free Student Access Toggle State
+  const [studentAccessUnlocked, setStudentAccessUnlocked] = useState(false);
 
   // Load and seed products
   const fetchProducts = async () => {
@@ -219,14 +268,15 @@ export default function AdobeScriptToolkit() {
             ]
           },
           {
-            toolkitName: "Pre-flight & Trapping Checker Tool",
-            description: "Professional quality-control on your workstation. Automatically checks minimum font height, plate alignments, overlapping trapping, ink coverage limits, and overprint color mixtures before plate generation.",
+            toolkitName: "Pre-flight & Trapping Checker Tool (Preflight_V1.js)",
+            description: "Professional quality-control design automation. Includes Preflight_V1.js ExtendScript file for InDesign & Illustrator CC. Automatically checks minimum font height, plate alignments, overlapping trapping, ink coverage limits, and overprint color mixtures before plate generation.",
             priceUsd: 59,
             priceInr: 4599,
             demoVideoUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
             installationVideoUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
-            scriptFileUrl: "https://github.com/Adobe-CEP/CEP-Resources/archive/refs/heads/master.zip",
+            scriptFileUrl: "data:text/javascript;base64,LyoqCiAqIEVuZGxlc3MgU3BhcmsgQ3JlYXRpdmUgU3VpdGUgQXV0b21hdGlvbiBMaWJyYXJ5CiAqIFNjcmlwdDogUHJlZmxpZ2h0X1YxLmpzCiAqIERlc2NyaXB0aW9uOiBBdXRvbWF0ZWQgUHJlZmxpZ2h0ICYgUGFja2FnaW5nIFF1YWxpdHkgQ29udHJvbCBBdWRpdCBmb3IgQWRvYmUgSW5EZXNpZ24gJiBJbGx1c3RyYXRvciBDQwoqLwooZnVuY3Rpb24gcHJlZmxpZ2h0VjFFbmdpbmUoKSB7CiAgICBhbGVydCgiRW5kbGVzcyBTcGFyayBQcmVmbGlnaHRfVjEuanMgRXh0ZW5kU2NyaXB0IEVuZ2luZSBSZWFkeSEiKTsKfSkoKTs=",
             features: [
+              "Preflight_V1.js Adobe ExtendScript automation module included",
               "Automated trapping overlap margin analyzer",
               "Plate color mixture separation previewer",
               "Flag fonts and lines below print thresholds (0.25 pt)",
@@ -278,7 +328,8 @@ export default function AdobeScriptToolkit() {
         priceInr: Number(adminPriceInr),
         demoVideoUrl: adminDemoUrl,
         installationVideoUrl: adminInstallUrl,
-        scriptFileUrl: adminFileUrl,
+        scriptFileUrl: adminScriptFiles.length > 0 ? adminScriptFiles[0].url : adminFileUrl,
+        scriptFiles: adminScriptFiles,
         features: adminFeaturesText.split('\n').map(f => f.trim()).filter(Boolean)
       };
 
@@ -495,7 +546,7 @@ export default function AdobeScriptToolkit() {
     );
   }
 
-  const isStudent = user?.role === 'student';
+  const isStudent = user?.role === 'student' || studentAccessUnlocked;
   const activeProduct = selectedProduct || products[0];
 
   return (
@@ -527,6 +578,8 @@ export default function AdobeScriptToolkit() {
                   setAdminDemoUrl("https://www.youtube.com/embed/dQw4w9WgXcQ");
                   setAdminInstallUrl("https://www.youtube.com/embed/dQw4w9WgXcQ");
                   setAdminFileUrl("https://github.com/Adobe-CEP/CEP-Resources/archive/refs/heads/master.zip");
+                  setAdminScriptFiles([]);
+                  setUploadedFileName(null);
                   setAdminFeaturesText("Auto Spot Color Separator\nPlate Alignment Guard\n1-Click Trap Margin Computation");
                   setEditingProductId('new');
                   setIsAdminMode(true);
@@ -554,21 +607,27 @@ export default function AdobeScriptToolkit() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {products.map((prod) => {
               const isSelected = activeProduct?.id === prod.id;
+              const loadProdIntoAdmin = () => {
+                setSelectedProduct(prod);
+                setAdminName(prod.toolkitName);
+                setAdminDescription(prod.description || "");
+                setAdminPriceUsd(prod.priceUsd);
+                setAdminPriceInr(prod.priceInr);
+                setAdminDemoUrl(prod.demoVideoUrl);
+                setAdminInstallUrl(prod.installationVideoUrl);
+                setAdminFileUrl(prod.scriptFileUrl);
+                const attached = prod.scriptFiles && prod.scriptFiles.length > 0 
+                  ? prod.scriptFiles 
+                  : (prod.scriptFileUrl ? [{ name: `${prod.toolkitName.replace(/\s+/g, '_')}.js`, url: prod.scriptFileUrl }] : []);
+                setAdminScriptFiles(attached);
+                setUploadedFileName(attached.length > 0 ? `${attached.length} file(s) attached` : null);
+                setAdminFeaturesText(prod.features.join('\n'));
+              };
+
               return (
                 <div 
                   key={prod.id}
-                  onClick={() => {
-                    setSelectedProduct(prod);
-                    // Auto fill admin fields when selecting
-                    setAdminName(prod.toolkitName);
-                    setAdminDescription(prod.description || "");
-                    setAdminPriceUsd(prod.priceUsd);
-                    setAdminPriceInr(prod.priceInr);
-                    setAdminDemoUrl(prod.demoVideoUrl);
-                    setAdminInstallUrl(prod.installationVideoUrl);
-                    setAdminFileUrl(prod.scriptFileUrl);
-                    setAdminFeaturesText(prod.features.join('\n'));
-                  }}
+                  onClick={loadProdIntoAdmin}
                   className={`relative overflow-hidden rounded-2xl border p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 group hover:shadow-md ${
                     isSelected 
                       ? 'border-pink-500 bg-white ring-1 ring-pink-500 shadow-sm' 
@@ -599,17 +658,7 @@ export default function AdobeScriptToolkit() {
 
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between" onClick={e => e.stopPropagation()}>
                     <button 
-                      onClick={() => {
-                        setSelectedProduct(prod);
-                        setAdminName(prod.toolkitName);
-                        setAdminDescription(prod.description || "");
-                        setAdminPriceUsd(prod.priceUsd);
-                        setAdminPriceInr(prod.priceInr);
-                        setAdminDemoUrl(prod.demoVideoUrl);
-                        setAdminInstallUrl(prod.installationVideoUrl);
-                        setAdminFileUrl(prod.scriptFileUrl);
-                        setAdminFeaturesText(prod.features.join('\n'));
-                      }}
+                      onClick={loadProdIntoAdmin}
                       className={`text-[10px] font-bold ${
                         isSelected ? 'text-pink-600 underline' : 'text-slate-500 hover:text-slate-800'
                       }`}
@@ -621,15 +670,7 @@ export default function AdobeScriptToolkit() {
                       {isAdmin && (
                         <button 
                           onClick={() => {
-                            setSelectedProduct(prod);
-                            setAdminName(prod.toolkitName);
-                            setAdminDescription(prod.description || "");
-                            setAdminPriceUsd(prod.priceUsd);
-                            setAdminPriceInr(prod.priceInr);
-                            setAdminDemoUrl(prod.demoVideoUrl);
-                            setAdminInstallUrl(prod.installationVideoUrl);
-                            setAdminFileUrl(prod.scriptFileUrl);
-                            setAdminFeaturesText(prod.features.join('\n'));
+                            loadProdIntoAdmin();
                             setEditingProductId(prod.id);
                             setIsAdminMode(true);
                           }}
@@ -699,29 +740,61 @@ export default function AdobeScriptToolkit() {
             <div className="bg-white/5 backdrop-blur-md p-6 rounded-2xl border border-white/10 w-full lg:max-w-xs shrink-0 shadow-lg">
               {isStudent ? (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-emerald-400">
-                    <CheckCircle className="w-5 h-5 shrink-0" />
-                    <span className="font-bold text-sm">Free Student License Active</span>
+                  <div className="flex items-center justify-between text-emerald-400">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="w-5 h-5 shrink-0" />
+                      <span className="font-bold text-sm">Free Student License Active</span>
+                    </div>
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    As an enrolled student of Endless Spark, you have full free access to this automation tool for educational practice and portfolio compilation.
+                    As an enrolled student of Endless Spark, you have 100% free access to download all automation script files for practice and production.
                   </p>
-                  <button 
-                    onClick={() => handleDirectDownload(
-                      activeProduct.scriptFileUrl || "https://github.com/Adobe-CEP/CEP-Resources/archive/refs/heads/master.zip",
-                      activeProduct.toolkitName,
-                      activeProduct.id
-                    )}
-                    disabled={downloadingId === activeProduct.id}
-                    className="w-full py-3 bg-pink-600 hover:bg-pink-700 disabled:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
-                  >
-                    {downloadingId === activeProduct.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    ) : (
-                      <FileDown className="w-4 h-4" />
-                    )}
-                    {downloadingId === activeProduct.id ? "Downloading..." : "Download Free Script Toolkit"}
-                  </button>
+
+                  {/* Multi-File Download List for Active Product */}
+                  {activeProduct.scriptFiles && activeProduct.scriptFiles.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                        <span>Attached Script Files ({activeProduct.scriptFiles.length})</span>
+                        <span className="text-emerald-400">Free Download</span>
+                      </div>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {activeProduct.scriptFiles.map((file, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleDirectDownload(file.url, file.name, `${activeProduct.id}-${idx}`)}
+                            disabled={downloadingId === `${activeProduct.id}-${idx}`}
+                            className="w-full p-2.5 bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/80 rounded-xl text-xs flex items-center justify-between transition-all group text-left cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2 truncate pr-2">
+                              <FileDown className="w-4 h-4 text-pink-400 shrink-0 group-hover:scale-110 transition-transform" />
+                              <span className="font-bold text-slate-200 truncate group-hover:text-pink-300">{file.name}</span>
+                              {file.size && <span className="text-[9px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded font-mono shrink-0">{file.size}</span>}
+                            </div>
+                            <span className="text-[10px] font-bold text-pink-400 bg-pink-950/80 px-2 py-0.5 rounded shrink-0">
+                              {downloadingId === `${activeProduct.id}-${idx}` ? "Saving..." : "Get File"}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => handleDirectDownload(
+                        activeProduct.scriptFileUrl || "https://github.com/Adobe-CEP/CEP-Resources/archive/refs/heads/master.zip",
+                        activeProduct.toolkitName,
+                        activeProduct.id
+                      )}
+                      disabled={downloadingId === activeProduct.id}
+                      className="w-full py-3 bg-pink-600 hover:bg-pink-700 disabled:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                    >
+                      {downloadingId === activeProduct.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      ) : (
+                        <FileDown className="w-4 h-4" />
+                      )}
+                      {downloadingId === activeProduct.id ? "Downloading..." : "Download Free Script Toolkit"}
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -756,6 +829,19 @@ export default function AdobeScriptToolkit() {
                     <ShoppingBag className="w-4 h-4" />
                     Add To Cart
                   </button>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <button
+                      onClick={() => {
+                        setStudentAccessUnlocked(true);
+                        showToast("Free Student Access Unlocked! Download files below.", "success");
+                      }}
+                      className="w-full py-2 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Award className="w-3.5 h-3.5 text-emerald-400" />
+                      Student? Access Free File Downloads
+                    </button>
+                  </div>
                   <p className="text-[10px] text-center text-slate-400">
                     Secure Checkout. Lifetime license key issued upon purchase.
                   </p>
@@ -848,11 +934,11 @@ export default function AdobeScriptToolkit() {
                     type="text" 
                     value={adminFileUrl} 
                     onChange={(e) => setAdminFileUrl(e.target.value)}
-                    placeholder="Enter URL or upload below"
+                    placeholder="Enter URL or upload files below"
                     className="w-full bg-white border border-amber-250 rounded-xl px-4 py-2.5 text-xs font-mono focus:ring-1 focus:ring-amber-500 outline-none mb-2" 
                   />
                   
-                  {/* Interactive Drag & Drop File Upload Field */}
+                  {/* Interactive Drag & Drop Multi-File Upload Field */}
                   <div 
                     onDragOver={(e) => {
                       e.preventDefault();
@@ -862,8 +948,7 @@ export default function AdobeScriptToolkit() {
                     onDrop={(e) => {
                       e.preventDefault();
                       setIsDragging(false);
-                      const file = e.dataTransfer.files?.[0];
-                      if (file) processLocalScriptFile(file);
+                      if (e.dataTransfer.files) processLocalScriptFiles(e.dataTransfer.files);
                     }}
                     className={`border-2 border-dashed rounded-xl p-4 text-center transition-all cursor-pointer ${
                       isDragging 
@@ -874,27 +959,27 @@ export default function AdobeScriptToolkit() {
                     <input 
                       id="admin-script-uploader"
                       type="file" 
-                      accept=".zip,.zxp,.jsx,.jsxbin"
+                      multiple
+                      accept=".js,.jsx,.zxp,.zip,.jsxbin,.js.txt,.ts"
                       onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) processLocalScriptFile(file);
+                        if (e.target.files) processLocalScriptFiles(e.target.files);
                       }}
                       className="hidden" 
                     />
                     <label htmlFor="admin-script-uploader" className="cursor-pointer block space-y-1">
                       <FileDown className="w-6 h-6 text-amber-600 mx-auto" />
                       <p className="text-[11px] font-bold text-amber-900">
-                        {uploadedFileName ? `Selected: ${uploadedFileName}` : "Drag & Drop ZIP/Script File here"}
+                        {uploadedFileName ? `Attached Files: ${uploadedFileName}` : "Drag & Drop Multiple Design Scripts / Files (.js, .jsx, .zip, .zxp)"}
                       </p>
                       <p className="text-[10px] text-amber-600 font-medium">
-                        or click to select from your device
+                        Select single or multiple files (Preflight_V1.js, Dieline.jsx, CEP.zip)
                       </p>
                     </label>
 
                     {uploadProgress !== null && (
                       <div className="mt-2 space-y-1">
                         <div className="flex justify-between text-[10px] font-bold text-amber-900">
-                          <span>Processing File...</span>
+                          <span>Processing Upload...</span>
                           <span>{uploadProgress}%</span>
                         </div>
                         <div className="w-full bg-slate-200 h-1 rounded-full overflow-hidden">
@@ -906,6 +991,50 @@ export default function AdobeScriptToolkit() {
                       </div>
                     )}
                   </div>
+
+                  {/* Attached Files List in Admin */}
+                  {adminScriptFiles.length > 0 && (
+                    <div className="mt-3 space-y-1.5 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider">
+                          Attached Script Files ({adminScriptFiles.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdminScriptFiles([]);
+                            setUploadedFileName(null);
+                          }}
+                          className="text-[10px] text-red-600 hover:underline font-bold"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                        {adminScriptFiles.map((f, index) => (
+                          <div key={index} className="flex items-center justify-between p-2 bg-amber-50/80 border border-amber-200/60 rounded-lg text-xs">
+                            <div className="flex items-center gap-2 truncate pr-2">
+                              <FileDown className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                              <span className="font-semibold text-amber-950 truncate">{f.name}</span>
+                              {f.size && <span className="text-[9px] text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded font-mono">{f.size}</span>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextFiles = adminScriptFiles.filter((_, i) => i !== index);
+                                setAdminScriptFiles(nextFiles);
+                                if (nextFiles.length > 0) setAdminFileUrl(nextFiles[0].url);
+                              }}
+                              className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 cursor-pointer shrink-0"
+                              title="Remove file"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -44,7 +44,16 @@ export default function CourseModules() {
 
   const handleOpenDocument = (url: string, title: string, isSecure: boolean = true) => {
     const absoluteUrl = ensureAbsoluteUrl(url);
+    const lowerUrl = absoluteUrl.toLowerCase();
     
+    // Check if URL is a ZIP archive file (.zip, .rar, .7z)
+    const isZip = lowerUrl.endsWith('.zip') || lowerUrl.endsWith('.rar') || lowerUrl.endsWith('.7z') || lowerUrl.includes('.zip?') || lowerUrl.includes('.rar?') || lowerUrl.includes('.7z?');
+    if (isZip) {
+      const downloadUrl = `/api/download?url=${encodeURIComponent(absoluteUrl)}&title=${encodeURIComponent(title)}`;
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
     // 1. Handle Google Drive URLs specifically to render via embedded preview iframe (extremely fast and 100% CORS safe)
     if (absoluteUrl.includes('drive.google.com')) {
       let previewUrl = absoluteUrl;
@@ -57,7 +66,6 @@ export default function CourseModules() {
     }
 
     // 2. Handle standard iframe-compatible content, images, Office documents, or PDFs
-    const lowerUrl = absoluteUrl.toLowerCase();
     const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('.pdf?') || (absoluteUrl.includes('/uploads/') && lowerUrl.endsWith('.pdf'));
     const isImage = lowerUrl.endsWith('.png') || lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg') || lowerUrl.endsWith('.webp') || lowerUrl.includes('.png?') || lowerUrl.includes('.jpg?') || lowerUrl.includes('.jpeg?') || lowerUrl.includes('.webp?') || (absoluteUrl.includes('/uploads/') && (lowerUrl.endsWith('.png') || lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg') || lowerUrl.endsWith('.webp')));
     const isOfficeDoc = lowerUrl.endsWith('.doc') || lowerUrl.endsWith('.docx') || lowerUrl.endsWith('.ppt') || lowerUrl.endsWith('.pptx') || lowerUrl.endsWith('.xls') || lowerUrl.endsWith('.xlsx') || lowerUrl.includes('.doc?') || lowerUrl.includes('.docx?') || lowerUrl.includes('.ppt?') || lowerUrl.includes('.pptx?') || lowerUrl.includes('.xls?') || lowerUrl.includes('.xlsx?');
@@ -693,42 +701,56 @@ export default function CourseModules() {
                   </div>
                 )}
 
-                {activeModule.referenceMaterialUrl && (
-                  <div className="space-y-4">
-                    <h4 className="font-bold text-gray-900 flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-purple-600" />
-                      Reference Material
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => handleOpenDocument(activeModule.referenceMaterialUrl!, `Reference Material: ${activeModule.title}`, true)}
-                        className="flex-1 flex items-center justify-between p-4 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 transition-colors group text-left"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-purple-600 shadow-sm">
-                            <BookOpen className="w-5 h-5" />
+                {activeModule.referenceMaterialUrl && (() => {
+                  const isZip = activeModule.referenceMaterialUrl.toLowerCase().endsWith('.zip') || 
+                                activeModule.referenceMaterialUrl.toLowerCase().endsWith('.rar') || 
+                                activeModule.referenceMaterialUrl.toLowerCase().endsWith('.7z') || 
+                                activeModule.referenceMaterialUrl.toLowerCase().includes('.zip?') ||
+                                activeModule.referenceMaterialUrl.toLowerCase().includes('.rar?') ||
+                                activeModule.referenceMaterialUrl.toLowerCase().includes('.7z?');
+                  return (
+                    <div className="space-y-4">
+                      <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-purple-600" />
+                        Reference Material {isZip ? '(ZIP Archive)' : ''}
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => handleOpenDocument(activeModule.referenceMaterialUrl!, `Reference Material: ${activeModule.title}`, true)}
+                          className="flex-1 flex items-center justify-between p-4 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 transition-colors group text-left cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-purple-600 shadow-sm">
+                              {isZip ? <FolderGit2 className="w-5 h-5" /> : <BookOpen className="w-5 h-5" />}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-gray-900">
+                                {isZip ? 'Download Reference ZIP Archive' : 'View Reference Material'}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {isZip ? 'Download project assets and template files (.zip)' : 'Additional reading and resources'}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-bold text-gray-900">View Reference Material</p>
-                            <p className="text-xs text-gray-500">Additional reading and resources</p>
-                          </div>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-purple-400 group-hover:translate-x-1 transition-transform" />
-                      </button>
-                      {user?.role !== 'student' && (
+                          {isZip ? (
+                            <Download className="w-4 h-4 text-purple-500 group-hover:scale-110 transition-transform" />
+                          ) : (
+                            <ArrowRight className="w-4 h-4 text-purple-400 group-hover:translate-x-1 transition-transform" />
+                          )}
+                        </button>
                         <a 
                           href={`/api/download?url=${encodeURIComponent(activeModule.referenceMaterialUrl!)}&title=${encodeURIComponent(`Reference Material - ${activeModule.title}`)}`} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="p-4 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 transition-colors text-purple-600 shadow-sm flex items-center justify-center"
+                          className="p-4 bg-purple-50 border border-purple-100 rounded-xl hover:bg-purple-100 transition-colors text-purple-600 shadow-sm flex items-center justify-center cursor-pointer"
                           title="Download Reference Material"
                         >
                           <Download className="w-5 h-5" />
                         </a>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {activeModule.additionalReferenceMaterials && activeModule.additionalReferenceMaterials.length > 0 && (
                   <div className="space-y-4">
@@ -736,36 +758,48 @@ export default function CourseModules() {
                       <BookOpen className="w-4 h-4 text-indigo-600" />
                       Additional Materials
                     </h4>
-                    {activeModule.additionalReferenceMaterials.map((material, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <button 
-                          onClick={() => handleOpenDocument(material.url, material.title, true)}
-                          className="flex-1 flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 transition-colors group text-left"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-indigo-600 shadow-sm">
-                              <BookOpen className="w-5 h-5" />
+                    {activeModule.additionalReferenceMaterials.map((material, idx) => {
+                      const isZip = material.url.toLowerCase().endsWith('.zip') || 
+                                    material.url.toLowerCase().endsWith('.rar') || 
+                                    material.url.toLowerCase().endsWith('.7z') || 
+                                    material.url.toLowerCase().includes('.zip?') ||
+                                    material.url.toLowerCase().includes('.rar?') ||
+                                    material.url.toLowerCase().includes('.7z?');
+                      return (
+                        <div key={idx} className="flex items-center gap-2">
+                          <button 
+                            onClick={() => handleOpenDocument(material.url, material.title, true)}
+                            className="flex-1 flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 transition-colors group text-left cursor-pointer"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-indigo-600 shadow-sm">
+                                {isZip ? <FolderGit2 className="w-5 h-5" /> : <BookOpen className="w-5 h-5" />}
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-gray-900">{material.title}</p>
+                                <p className="text-xs text-gray-500">
+                                  {isZip ? 'Download ZIP resource' : 'Additional resource'}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-bold text-gray-900">{material.title}</p>
-                              <p className="text-xs text-gray-500">Additional resource</p>
-                            </div>
-                          </div>
-                          <ArrowRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-1 transition-transform" />
-                        </button>
-                        {user?.role !== 'student' && (
+                            {isZip ? (
+                              <Download className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition-transform" />
+                            ) : (
+                              <ArrowRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-1 transition-transform" />
+                            )}
+                          </button>
                           <a 
                             href={`/api/download?url=${encodeURIComponent(material.url)}&title=${encodeURIComponent(material.title)}`} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 transition-colors text-indigo-600 shadow-sm flex items-center justify-center"
+                            className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 transition-colors text-indigo-600 shadow-sm flex items-center justify-center cursor-pointer"
                             title={`Download ${material.title}`}
                           >
                             <Download className="w-5 h-5" />
                           </a>
-                        )}
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 

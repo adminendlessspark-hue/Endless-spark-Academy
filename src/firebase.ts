@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { initializeFirestore, memoryLocalCache, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, memoryLocalCache, doc, getDocFromServer, disableNetwork, enableNetwork } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -21,6 +21,14 @@ const getStoredDbId = (): string => {
 export const db = initializeFirestore(app, {
   localCache: memoryLocalCache()
 }, getStoredDbId());
+
+export function enableFirestoreNetwork() {
+  return enableNetwork(db);
+}
+
+export function disableFirestoreNetwork() {
+  return disableNetwork(db);
+}
 
 export const storage = getStorage(app);
 console.log("Firebase Storage initialized with bucket:", firebaseConfig.storageBucket);
@@ -55,6 +63,8 @@ export interface FirestoreErrorInfo {
   }
 }
 
+let isNetworkDisabledForQuota = false;
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
@@ -74,12 +84,17 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  
   const isQuota = errInfo.error.includes('Quota limit exceeded') || errInfo.error.includes('Quota exceeded');
   
   if (isQuota) {
+    console.warn('Firestore Quota Reached: ', JSON.stringify(errInfo));
+    if (!isNetworkDisabledForQuota) {
+      isNetworkDisabledForQuota = true;
+      disableNetwork(db).catch(() => {});
+    }
     window.dispatchEvent(new CustomEvent('firestore_quota_exceeded', { detail: errInfo }));
+  } else {
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
   }
 
   // If it's a GET, LIST or general read-based subscription, do NOT throw a fatal exception.

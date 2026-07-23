@@ -922,6 +922,18 @@ export default function AdminPanel() {
     }
   };
 
+  const handleDeleteConsultationBooking = async (bookingId: string) => {
+    if (checkPreview()) return;
+    if (!window.confirm("Are you sure you want to delete this consultation slot booking record? This action cannot be undone.")) return;
+    try {
+      await deleteDoc(doc(db, 'consultation_bookings', bookingId));
+      alert("Consultation booking deleted successfully.");
+    } catch (err: any) {
+      console.error("Error deleting consultation booking:", err);
+      alert("Failed to delete booking.");
+    }
+  };
+
   const handleCreateFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
     if (checkPreview()) return;
@@ -3307,6 +3319,7 @@ export default function AdminPanel() {
             { id: 'batch-center', label: 'Batch Center', icon: Layers },
             { id: 'roadmap', label: 'Faculty Roadmap', icon: Layers },
             { id: 'interactive-demo', label: 'Demo Center', icon: Sparkles },
+            { id: 'printing-blog', label: 'Printing Blog', icon: BookOpen },
             { id: 'team', label: 'Manage Team', icon: Users },
             { id: 'placements', label: 'Placements', icon: Briefcase },
             { id: 'holidays', label: 'Holidays', icon: Calendar },
@@ -3322,6 +3335,8 @@ export default function AdminPanel() {
               onClick={() => {
                 if (tab.id === 'interactive-demo') {
                   navigate('/admin/demo-center');
+                } else if (tab.id === 'printing-blog') {
+                  navigate('/printing-blog');
                 } else {
                   setActiveTab(tab.id as any);
                 }
@@ -4928,7 +4943,7 @@ export default function AdminPanel() {
                     </div>
                     <div>
                       <span className="text-xs text-gray-400 block font-semibold uppercase tracking-wider">Total Revenue</span>
-                      <span className="text-2xl font-black text-gray-950">₹{(consultationBookings.length * 500).toLocaleString('en-IN')}</span>
+                      <span className="text-2xl font-black text-gray-950">₹{consultationBookings.reduce((sum, b) => sum + (Number(b.amountPaid) || 100), 0).toLocaleString('en-IN')}</span>
                     </div>
                   </div>
 
@@ -4975,6 +4990,7 @@ export default function AdminPanel() {
                           <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Booked Date & Time</th>
                           <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Payment Details</th>
                           <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Tuition Reduction Status</th>
+                          <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -5001,14 +5017,14 @@ export default function AdminPanel() {
                               </div>
                             </td>
                             <td className="py-4 px-6">
-                              <div className="text-xs font-extrabold text-slate-800">₹{booking.amountPaid || 500} RS</div>
+                              <div className="text-xs font-extrabold text-slate-800">₹{booking.amountPaid || 100} RS</div>
                               <div className="text-[10px] font-mono text-slate-400 mt-1">Ref: {booking.paymentId}</div>
                             </td>
                             <td className="py-4 px-6">
                               <div className="flex items-center gap-3">
                                 {booking.feeReduced ? (
                                   <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-extrabold flex items-center gap-1 shadow-sm border border-emerald-100">
-                                    <CheckCircle className="w-3.5 h-3.5" /> Adjusted (Reduced ₹500)
+                                    <CheckCircle className="w-3.5 h-3.5" /> Adjusted (Reduced ₹{booking.amountPaid || 100})
                                   </span>
                                 ) : (
                                   <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-extrabold flex items-center gap-1 border border-amber-100">
@@ -5025,9 +5041,19 @@ export default function AdminPanel() {
                                       : "bg-pink-600 text-white hover:bg-pink-700 shadow-md shadow-pink-100"
                                   )}
                                 >
-                                  {booking.feeReduced ? "Revert Adjustment" : "Apply ₹500 Reduction"}
+                                  {booking.feeReduced ? "Revert Adjustment" : `Apply ₹${booking.amountPaid || 100} Reduction`}
                                 </button>
                               </div>
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteConsultationBooking(booking.id)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-xl border border-red-100 transition-colors cursor-pointer"
+                                title="Delete consultation booking record"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -5245,7 +5271,7 @@ export default function AdminPanel() {
                           {student.demoData?.roomId && (
                             <button
                               onClick={() => {
-                                const classroomUrl = `${window.location.origin}/classroom/${student.demoData?.roomId}`;
+                                const classroomUrl = `https://endlesssparkcreativehub.in/classroom/${student.demoData?.roomId}`;
                                 const shareMsg = `Hello ${student.name}! 🌟\n\nYour online Demo Class at Endless Spark is successfully scheduled!\n\n📅 Date/Time: ${student.demoData?.preferredDate} at ${student.demoData?.preferredTime}\n💻 Join Your Live Virtual Classroom directly:\n${classroomUrl}\n\n(No downloads or signups required. Open on Google Chrome / Apple Safari to begin!).`;
                                 const rawPhone = student.phone || '';
                                 const cleanedPhone = rawPhone.replace(/[^0-9]/g, '');
@@ -5901,7 +5927,7 @@ export default function AdminPanel() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Reference Material URL</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Reference Material URL / ZIP Archive</label>
                         <input 
                           type="text"
                           className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2"
@@ -5910,11 +5936,11 @@ export default function AdminPanel() {
                             ...editingModule,
                             module: { ...editingModule.module, referenceMaterialUrl: e.target.value }
                           })}
-                          placeholder="URL to Reference Material (e.g., Adobe InDesign embed)"
+                          placeholder="URL to Reference Material (e.g., PDF, Doc, ZIP file, InDesign embed, Drive link)"
                         />
                         <FileUploader 
                           path="course_modules/reference_materials"
-                          accept=".pdf,.doc,.docx"
+                          accept=".pdf,.doc,.docx,.zip,.rar,.7z"
                           onUploadComplete={(url) => setEditingModule({
                             ...editingModule,
                             module: { ...editingModule.module, referenceMaterialUrl: url }
@@ -6545,17 +6571,17 @@ export default function AdminPanel() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Reference Material URL</label>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Reference Material URL / ZIP Archive</label>
                       <input 
                         type="text"
                         className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2"
                         value={newModuleData.referenceMaterialUrl || ''}
                         onChange={(e) => setNewModuleData({ ...newModuleData, referenceMaterialUrl: e.target.value })}
-                        placeholder="URL to Reference Material (e.g., Adobe InDesign embed)"
+                        placeholder="URL to Reference Material (e.g., PDF, Doc, ZIP file, InDesign embed, Drive link)"
                       />
                       <FileUploader 
                         path="course_modules/reference_materials"
-                        accept=".pdf,.doc,.docx"
+                        accept=".pdf,.doc,.docx,.zip,.rar,.7z"
                         onUploadComplete={(url) => setNewModuleData({ ...newModuleData, referenceMaterialUrl: url })}
                       />
                     </div>
@@ -11017,7 +11043,7 @@ export default function AdminPanel() {
                       
                       // If it's an interview, open mail client
                       if ((newSessionType === 'interview' || newSessionType === 'hr_interview') && newSessionInterviewerEmail) {
-                        const interviewLink = `${window.location.origin}/interview/${roomId}`;
+                        const interviewLink = `https://endlesssparkcreativehub.in/interview/${roomId}`;
                         const subject = encodeURIComponent(`Interview Scheduled: ${newSessionTitle}`);
                         const body = encodeURIComponent(`Hello,\n\nYou have been scheduled to conduct an interview.\n\nStudent(s): ${selectedStudents.map(s => s.name).join(', ')}\nDate & Time: ${new Date(newSessionDate).toLocaleString()}\n\nPlease join the interview and provide your feedback using this link:\n${interviewLink}\n\nThank you.`);
                         window.open(`mailto:${newSessionInterviewerEmail}?subject=${subject}&body=${body}`, '_blank');

@@ -1119,14 +1119,13 @@ async function startServer() {
           console.log(`Backend: Upload successful with bucket ${currentBucketName}`);
           break;
         } catch (uploadErr: any) {
-          console.warn(`Backend: Failed/Skipping bucket ${currentBucketName}:`, uploadErr);
+          console.log(`Backend: Cloud Storage bucket ${currentBucketName} not available or accessible (${uploadErr?.message || uploadErr}), checking next fallback...`);
           lastError = uploadErr;
         }
       }
 
       if (!uploadSuccess) {
-        console.error("Backend: STORAGE UPLOAD ERROR across all buckets:", lastError);
-        console.log("Backend: GCS upload has failed or storage is not enabled/configured. Falling back to local filesystem storage...");
+        console.log("Backend: Cloud Storage unavailable, falling back to local filesystem storage...");
         
         try {
           const relativeDest = `uploads/${requestedPath}`;
@@ -1143,7 +1142,7 @@ async function startServer() {
           isLocalUploaded = true;
           uploadSuccess = true;
         } catch (localSaveErr: any) {
-          console.error("Backend: Local fallback storage failed too:", localSaveErr);
+          console.error("Backend: Local fallback storage failed:", localSaveErr);
           
           let customMessage = lastError?.message || "Storage upload failed.";
           const errLower = customMessage.toLowerCase();
@@ -1581,7 +1580,7 @@ async function startServer() {
           res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(finalName)}"`);
           return res.send(fileBuffer);
         } catch (gcsErr: any) {
-          console.error("Backend Download: Direct GCS download failed, trying standard proxy fallback:", gcsErr.message);
+          console.log("Backend Download: Direct GCS download unavailable, using standard proxy/fallback:", gcsErr?.message || gcsErr);
         }
       }
 

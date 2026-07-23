@@ -20,12 +20,15 @@ export default function GlobalNotification() {
     const handleGlobalError = (event: ErrorEvent) => {
       let message = event.message || 'An unexpected error occurred';
       
-      // Ignore benign WebSocket/HMR errors and firestore assertion failures
+      // Ignore benign WebSocket/HMR errors and firestore internal assertion stream failures
       if (message.includes('WebSocket') || 
           message.includes('closed without opened') || 
           message.includes('CLOSING state') ||
           message.includes('INTERNAL ASSERTION FAILED') ||
+          message.includes('FIRESTORE') ||
           (event.error && (event.error.message || '').includes('INTERNAL ASSERTION FAILED'))) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
         return;
       }
       
@@ -61,8 +64,11 @@ export default function GlobalNotification() {
           message.includes('closed without opened') || 
           message.includes('CLOSING state') ||
           message.includes('INTERNAL ASSERTION FAILED') ||
+          message.includes('FIRESTORE') ||
           reasonStr.includes('INTERNAL ASSERTION FAILED') ||
           reasonStack.includes('INTERNAL ASSERTION FAILED')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
         return;
       }
       
@@ -89,7 +95,7 @@ export default function GlobalNotification() {
     };
 
     const handleQuotaExceededEvent = () => {
-      setError("Database Daily Quota Exceeded: The Google Cloud Firebase free-tier daily database units are consumed. The application is now fully running in Offline Sandbox Mode with cached structures.");
+      setError("Database Daily Quota Exceeded: The Google Cloud Firebase free-tier daily database read units are consumed for today. The application is running in standard Offline Sandbox Mode with local fallback data. Quotas reset daily.");
     };
 
     window.addEventListener('error', handleGlobalError);
@@ -123,6 +129,16 @@ export default function GlobalNotification() {
               <div className="text-xs text-gray-600 max-h-36 overflow-y-auto break-words whitespace-pre-wrap">
                 {error}
               </div>
+              {error.includes("Quota") && (
+                <a
+                  href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/databases/${firebaseConfig.firestoreDatabaseId}/data?openUpgradeDialog=true`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-block text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline"
+                >
+                  Manage/Upgrade Database Quota in Firebase Console &rarr;
+                </a>
+              )}
             </div>
             <button 
               onClick={() => setError(null)}

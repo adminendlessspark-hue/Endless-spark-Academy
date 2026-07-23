@@ -213,7 +213,7 @@ export default function Registration() {
   };
 
   if (isSubmitted) {
-    const classroomUrl = `${window.location.origin}/classroom/${scheduledRoomId}`;
+    const classroomUrl = `https://endlesssparkcreativehub.in/classroom/${scheduledRoomId}`;
     
     // Copy link helper
     const handleCopy = () => {

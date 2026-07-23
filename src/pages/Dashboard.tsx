@@ -1112,7 +1112,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
                         </a>
                         <button 
                           onClick={() => {
-                            const shareMsg = `Hello! 🌟 Here is my Live Demo Classroom link at Endless Spark:\n📅 Date/Time: ${user.demoData?.preferredDate} at ${user.demoData?.preferredTime}\n💻 Join my Live Virtual Classroom directly here:\n${window.location.origin}/classroom/${user.demoData?.roomId}\n\n(No downloads or signups required. Open on Google Chrome / Apple Safari to begin!).`;
+                            const shareMsg = `Hello! 🌟 Here is my Live Demo Classroom link at Endless Spark:\n📅 Date/Time: ${user.demoData?.preferredDate} at ${user.demoData?.preferredTime}\n💻 Join my Live Virtual Classroom directly here:\nhttps://endlesssparkcreativehub.in/classroom/${user.demoData?.roomId}\n\n(No downloads or signups required. Open on Google Chrome / Apple Safari to begin!).`;
                             window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareMsg)}`, '_blank');
                           }}
                           className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-sm transition-colors flex items-center justify-center gap-2 shadow-md"

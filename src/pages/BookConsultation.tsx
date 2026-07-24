@@ -120,10 +120,10 @@ export default function BookConsultation() {
       });
       setScheduledDateTime(dateFormatted);
 
-      // Query for any available faculty member
-      let facultyId = 'unassigned';
-      let facultyName = 'Pending Assignment (Admin to review)';
-      let facultyEmail = '';
+      // Query for any available faculty member or default to Admin
+      let facultyId = 'admin';
+      let facultyName = 'Admin';
+      let facultyEmail = 'adminendlessspark@gmail.com';
       
       try {
         const facultyQuery = query(collection(db, 'users'), where('role', '==', 'faculty'));
@@ -132,8 +132,8 @@ export default function BookConsultation() {
           const firstFaculty = facultySnapshot.docs[0];
           const facultyData = firstFaculty.data();
           facultyId = firstFaculty.id;
-          facultyName = facultyData.name || 'Faculty Member';
-          facultyEmail = facultyData.email || '';
+          facultyName = facultyData.name || 'Admin';
+          facultyEmail = facultyData.email || 'adminendlessspark@gmail.com';
         }
       } catch (err) {
         console.error("Error fetching faculty for auto-assign:", err);

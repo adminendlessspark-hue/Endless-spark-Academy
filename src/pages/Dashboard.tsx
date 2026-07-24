@@ -348,30 +348,20 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
     });
 
     let unsubLiveSessions: () => void = () => {};
-    const liveSessionsQuery = user.assignedFacultyId 
-      ? query(
-          collection(db, 'live_sessions'),
-          or(
-            where('facultyId', '==', user.assignedFacultyId),
-            where('studentId', '==', user.id),
-            where('studentIds', 'array-contains', user.id)
-          )
-        )
-      : query(
-          collection(db, 'live_sessions'),
-          or(
-            where('studentId', '==', user.id),
-            where('studentIds', 'array-contains', user.id)
-          )
-        );
-
-    unsubLiveSessions = onSnapshot(liveSessionsQuery, (snapshot) => {
+    unsubLiveSessions = onSnapshot(collection(db, 'live_sessions'), (snapshot) => {
       const sessions = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as any));
-      // Filter sessions: show if assigned to this student (via studentId or studentIds)
-      // OR if it's assigned to their faculty AND has no specific student assigned (legacy behavior)
       const filteredSessions = sessions.filter(s => {
+        // If student is registered for demo or this is a demo session
+        if (s.type === 'demo' || s.isDemo || s.roomId?.startsWith('EndlessSpark-Demo')) {
+          if (user.demoData?.roomId && s.roomId === user.demoData.roomId) return true;
+          if (user.registeredForDemo) return true;
+          if (s.studentId === user.id || (s.studentIds && s.studentIds.includes(user.id))) return true;
+          if (s.students?.some((st: any) => st.email?.toLowerCase() === user.email?.toLowerCase())) return true;
+          return true;
+        }
         if (s.studentIds && s.studentIds.includes(user.id)) return true;
         if (s.studentId === user.id) return true;
+        if (s.students?.some((st: any) => st.email?.toLowerCase() === user.email?.toLowerCase())) return true;
         if (user.assignedFacultyId && s.facultyId === user.assignedFacultyId && !s.studentId && (!s.studentIds || s.studentIds.length === 0)) return true;
         return false;
       });
@@ -1747,7 +1737,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
                       </div>
                       <div>
                         <h3 className="font-bold text-gray-900">{session.title}</h3>
-                        <p className="text-sm text-gray-500">by {session.facultyName}</p>
+                        <p className="text-sm text-gray-500">by {session.facultyName && !session.facultyName.includes('Pending') ? session.facultyName : 'Admin'}</p>
                       </div>
                     </div>
                     <span className={cn(

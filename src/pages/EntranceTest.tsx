@@ -165,19 +165,17 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
   const handleAppendAnswer = (part: string, question: string, text: string) => {
     setAnswers(prev => {
       if (part === 'partD_listening' || part === 'partE_paragraph') {
-        const currentVal = (prev as any)[part] || '';
         return {
           ...prev,
-          [part]: currentVal ? `${currentVal} ${text.trim()}` : text.trim()
+          [part]: text.trim()
         };
       }
-      const currentPart = (prev as any)[part];
-      const currentVal = currentPart[question] || '';
+      const currentPart = (prev as any)[part] || {};
       return {
         ...prev,
         [part]: {
           ...currentPart,
-          [question]: currentVal ? `${currentVal} ${text.trim()}` : text.trim()
+          [question]: text.trim()
         }
       };
     });
@@ -816,6 +814,7 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
                   <VoiceInput 
                     language={selectedLanguage} 
                     prompt="Abdul works in a small shop. He uses an old phone. The battery is very weak. Every day, the phone switches off. One day, Abdul gets his salary. He goes to the mobile shop. He looks at many phones. Some phones are very expensive. Abdul chooses a simple smartphone. It has a good battery and a clear screen. He is very happy with his new phone. Now, he can call his family anytime."
+                    initialValue={answers.partC.story1}
                     onTranscript={(text) => handleAppendAnswer('partC', 'story1', text)} 
                   />
                 </div>
@@ -841,6 +840,7 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
                   <VoiceInput 
                     language={selectedLanguage} 
                     prompt="Meena works in a garment factory during the day. She is tired when she comes home, but she has a dream: she wants to improve her English and get a better job. Every evening at 7 p.m., Meena goes to an English class. The classroom is small, but the teacher is kind and patient. There are students of different ages; some are young, while others are older adults. At first, Meena feels shy speaking in English. She makes many mistakes and sometimes forgets words, but she does not give up. She practices a little every day, even on Sundays. After six months, Meena can speak more confidently. She can answer customers in English at the factory, and her supervisor has noticed her improvement. One day, he offers her a new position with a higher salary. Meena thanks her teacher and classmates. She understands that small, daily efforts can change her life."
+                    initialValue={answers.partC.story2}
                     onTranscript={(text) => handleAppendAnswer('partC', 'story2', text)} 
                   />
                 </div>
@@ -884,6 +884,7 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
                 <VoiceInput 
                   language={selectedLanguage} 
                   prompt="Listen to the FatMan story audio and translate or summarize it here."
+                  initialValue={answers.partD_listening}
                   onTranscript={(text) => handleAppendAnswer('partD_listening', '', text)} 
                 />
               </div>
@@ -1039,6 +1040,7 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
                     <VoiceInput 
                       language={selectedLanguage} 
                       prompt={item.q}
+                      initialValue={answers.partF[item.id as keyof typeof answers.partF]}
                       onTranscript={(text) => handleAppendAnswer('partF', item.id, text)} 
                     />
                   </div>

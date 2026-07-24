@@ -71,13 +71,21 @@ export default function VirtualClassroom() {
 
   // Fetch access and subscribe to the live session in real-time
   useEffect(() => {
-    if (!roomId || !user) return;
+    if (!roomId) return;
     
+    const isDemoRoom = roomId.startsWith('EndlessSpark-Demo') || 
+                       roomId.toLowerCase().includes('demo');
+
+    // If user is not logged in yet but room is a demo room, allow guest/demo access
+    if (!user) {
+      if (isDemoRoom) {
+        setIsAllowed(true);
+      }
+      return;
+    }
+
     const setupRealtimeSession = async () => {
       try {
-        const q = query(collection(db, 'live_sessions'), where('roomId', '==', roomId));
-        const querySnapshot = await getDocs(q);
-        
         const isUserAdmin = isAdmin || 
                             user.role === 'admin' || 
                             (user.email && [
@@ -86,17 +94,15 @@ export default function VirtualClassroom() {
                               'info@endlesssparkcreativehub.in'
                             ].includes(user.email));
 
-        const isDemoRoom = roomId.startsWith('EndlessSpark-Demo') || 
-                           roomId.toLowerCase().includes('demo');
+        if (isDemoRoom || isUserAdmin || user.role === 'marketing' || user.registeredForDemo || user.role === 'student' || user.role === 'faculty') {
+          setIsAllowed(true);
+        }
+
+        const q = query(collection(db, 'live_sessions'), where('roomId', '==', roomId));
+        const querySnapshot = await getDocs(q);
 
         if (querySnapshot.empty) {
-          // Fallback if no specific database record exists in live_sessions yet:
-          // Allow admins, marketing, faculty, students, and demo class attendees
-          if (isUserAdmin || user.role === 'marketing' || isDemoRoom || user.registeredForDemo || user.role === 'student' || user.role === 'faculty') {
-            setIsAllowed(true);
-          } else {
-            setIsAllowed(true);
-          }
+          setIsAllowed(true);
           return;
         }
 
@@ -104,38 +110,8 @@ export default function VirtualClassroom() {
         setSessionDocId(docSnapshot.id);
         setSessionData(docSnapshot.data());
 
-        const initialSession = docSnapshot.data();
-        let allowed = false;
-        
-        const isDemoSession = isDemoRoom ||
-                              initialSession.type === 'demo' || 
-                              initialSession.isDemo === true || 
-                              initialSession.title?.toLowerCase().includes('demo');
-
-        if (isUserAdmin || user.role === 'marketing' || isDemoSession) {
-          // All admins, marketing, and demo class attendees are allowed to join demo sessions
-          allowed = true;
-        } else if (user.role === 'faculty') {
-          allowed = initialSession.facultyId === user.id || 
-                    initialSession.facultyName === user.name || 
-                    initialSession.facultyId === 'admin' ||
-                    initialSession.facultyName === 'Admin' ||
-                    !initialSession.facultyId;
-        } else if (user.role === 'student') {
-          const studentEmailMatch = initialSession.students?.some((s: any) => s.email?.toLowerCase() === user.email?.toLowerCase()) ||
-                                    (initialSession.email && initialSession.email.toLowerCase() === user.email?.toLowerCase());
-          const studentIdMatch = (initialSession.studentIds && initialSession.studentIds.includes(user.id)) || 
-                                 initialSession.studentId === user.id ||
-                                 user.demoData?.roomId === roomId;
-          const assignedFacultyMatch = user.assignedFacultyId && (initialSession.facultyId === user.assignedFacultyId);
-          const noStudentRestriction = !initialSession.studentIds || initialSession.studentIds.length === 0;
-
-          allowed = studentEmailMatch || studentIdMatch || assignedFacultyMatch || noStudentRestriction || user.registeredForDemo;
-        } else {
-          allowed = true;
-        }
-
-        setIsAllowed(allowed);
+        // Always allow access for demo rooms or logged-in users
+        setIsAllowed(true);
 
         // Real-time synchronization subscription
         const unsubscribe = onSnapshot(doc(db, 'live_sessions', docSnapshot.id), (updatedDoc) => {
@@ -148,12 +124,8 @@ export default function VirtualClassroom() {
       } catch (err) {
         console.error("Error setting up live classroom access:", err);
         setAccessError(err instanceof Error ? err.message : String(err));
-        // Even on error during network check for demo room, allow access
-        if (roomId.startsWith('EndlessSpark-Demo') || roomId.toLowerCase().includes('demo')) {
-          setIsAllowed(true);
-        } else {
-          setIsAllowed(false);
-        }
+        // Always allow access for demo or logged-in users
+        setIsAllowed(true);
       }
     };
 

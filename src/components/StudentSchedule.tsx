@@ -3,7 +3,8 @@ import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/f
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { ScheduleSlot } from '../types';
-import { Clock, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
+import { Clock, Calendar, CheckCircle, AlertCircle, Video, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function StudentSchedule() {
   const { user } = useAuth();
@@ -102,11 +103,11 @@ export default function StudentSchedule() {
 
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 mb-8">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-pink-600" />
-            Today's Schedule
+            Today's Schedule & Logging Buffer
           </h2>
           <p className="text-sm text-gray-500 mt-1">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -120,6 +121,19 @@ export default function StudentSchedule() {
         </div>
       </div>
 
+      {/* 15-Min Logging Buffer Rule Banner */}
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 flex items-start gap-3 text-xs text-amber-900">
+        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <p className="font-bold text-amber-950">
+            Mandatory 15-Minute Logging Buffer Policy (20 Classes Target)
+          </p>
+          <p className="leading-relaxed text-amber-800">
+            Students must clock in within <strong>15 minutes</strong> of the scheduled start time (starts 5 mins early). If you fail to clock in within the 15-minute buffer window, the class is automatically logged as <strong>Missed (Buffer Exceeded)</strong> and directly reduces your Cumulative Attendance score.
+          </p>
+        </div>
+      </div>
+
       <div className="space-y-4">
         {slots.length === 0 ? (
           <div className="text-center py-8 text-gray-500 italic bg-gray-50 rounded-2xl border border-gray-100">
@@ -129,16 +143,18 @@ export default function StudentSchedule() {
           slots.map(slot => {
             const { canClockIn, canClockOut, isMissed } = isWithinWindow(slot);
             
-            // Auto-mark as missed if they didn't clock in and the window passed
+            // Auto-mark as missed in Firestore if student failed 15m clock-in logging buffer
             if (isMissed && !slot.clockInTime && slot.status === 'scheduled') {
-              // In a real app, this might be handled by a cloud function
-              // For now, we'll just show it as missed visually
+              updateDoc(doc(db, 'schedule_slots', slot.id), {
+                status: 'missed',
+                missReason: 'Failed 15-minute clock-in logging buffer'
+              }).catch(() => {});
             }
 
             return (
-              <div key={slot.id} className={`p-5 rounded-2xl border ${
-                slot.status === 'completed' ? 'bg-green-50 border-green-100' :
-                slot.status === 'missed' || (isMissed && !slot.clockInTime) ? 'bg-red-50 border-red-100' :
+              <div key={slot.id} className={`p-5 rounded-2xl border transition-all ${
+                slot.status === 'completed' ? 'bg-green-50 border-green-200' :
+                slot.status === 'missed' || (isMissed && !slot.clockInTime) ? 'bg-red-50 border-red-200' :
                 'bg-white border-gray-200 shadow-sm'
               }`}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -149,9 +165,16 @@ export default function StudentSchedule() {
                       <Clock className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-gray-900 text-lg">
-                        {slot.type === 'live_class' ? 'Live 1-on-1 Class' : 'Self Task'}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-gray-900 text-lg">
+                          {slot.type === 'live_class' ? 'Live 1-on-1 Class' : 'Self Task'}
+                        </h3>
+                        {slot.status === 'scheduled' && !slot.clockInTime && canClockIn && (
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                            15m Clock-In Buffer Open
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 text-gray-600 mt-1">
                         <span className="font-mono font-medium">{slot.startTime} - {slot.endTime}</span>
                         <span className="text-gray-300">•</span>
@@ -162,31 +185,56 @@ export default function StudentSchedule() {
 
                   <div className="flex flex-col items-end gap-2">
                     {slot.status === 'completed' ? (
-                      <div className="flex items-center gap-2 text-green-600 font-bold bg-green-100 px-4 py-2 rounded-xl">
-                        <CheckCircle className="w-5 h-5" />
+                      <div className="flex items-center gap-2 text-green-700 font-bold bg-green-100 border border-green-200 px-4 py-2 rounded-xl">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
                         Completed
                       </div>
                     ) : slot.status === 'missed' || (isMissed && !slot.clockInTime) ? (
-                      <div className="flex items-center gap-2 text-red-600 font-bold bg-red-100 px-4 py-2 rounded-xl">
-                        <AlertCircle className="w-5 h-5" />
-                        Missed
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-center gap-2 text-red-700 font-bold bg-red-100 border border-red-200 px-4 py-2 rounded-xl">
+                          <AlertCircle className="w-5 h-5 text-red-600" />
+                          Missed (Buffer Failed)
+                        </div>
+                        <span className="text-[10px] font-semibold text-red-600 mt-1">
+                          Exceeded 15-minute logging buffer
+                        </span>
                       </div>
                     ) : (
                       <div className="flex flex-col gap-2 items-end">
                         {!slot.clockInTime ? (
-                          <button
-                            onClick={() => handleClockIn(slot.id)}
-                            disabled={!canClockIn}
-                            className={`px-6 py-2.5 rounded-xl font-bold transition-all ${
-                              canClockIn 
-                                ? 'bg-pink-600 text-white hover:bg-pink-700 shadow-lg shadow-pink-200' 
-                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            }`}
-                          >
-                            Clock In
-                          </button>
+                          <div className="flex flex-col sm:flex-row items-center gap-2">
+                            {slot.type === 'live_class' && (
+                              <Link
+                                to={`/classroom/${slot.roomId || `ES-Classroom-${user?.assignedFacultyId || user?.id || 'General'}`}`}
+                                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md shadow-emerald-200 transition-all hover:scale-105 shrink-0"
+                              >
+                                <Video className="w-4 h-4 animate-pulse" />
+                                Join Live Class
+                              </Link>
+                            )}
+                            <button
+                              onClick={() => handleClockIn(slot.id)}
+                              disabled={!canClockIn}
+                              className={`px-6 py-2.5 rounded-xl font-bold transition-all ${
+                                canClockIn 
+                                  ? 'bg-pink-600 text-white hover:bg-pink-700 shadow-lg shadow-pink-200' 
+                                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              }`}
+                            >
+                              Clock In
+                            </button>
+                          </div>
                         ) : (
                           <div className="flex flex-col items-end gap-2">
+                            {slot.type === 'live_class' && (
+                              <Link
+                                to={`/classroom/${slot.roomId || `ES-Classroom-${user?.assignedFacultyId || user?.id || 'General'}`}`}
+                                className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-200 transition-all hover:scale-105 mb-1"
+                              >
+                                <Video className="w-4 h-4 animate-pulse" />
+                                Join Live Classroom
+                              </Link>
+                            )}
                             <div className="bg-pink-50 text-pink-700 px-4 py-2 rounded-lg border border-pink-100 flex items-center gap-2">
                               <Clock className="w-4 h-4 animate-pulse" />
                               <span className="font-mono font-bold text-lg">{getRemainingTime(slot.clockInTime)}</span>

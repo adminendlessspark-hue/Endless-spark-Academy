@@ -136,12 +136,18 @@ export default function EntranceTestResults() {
           </div>
         </div>
 
-        <div className="text-center pt-8">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
           <button 
             onClick={() => navigate('/')}
-            className="bg-gray-900 text-white px-12 py-4 rounded-2xl font-bold hover:bg-gray-800 transition-all shadow-xl"
+            className="w-full sm:w-auto bg-gray-900 text-white px-10 py-4 rounded-2xl font-bold hover:bg-gray-800 transition-all shadow-xl"
           >
             Go to My Dashboard
+          </button>
+          <button 
+            onClick={() => navigate('/entrance-test')}
+            className="w-full sm:w-auto border border-pink-200 text-pink-600 hover:bg-pink-50 px-10 py-4 rounded-2xl font-bold transition-all"
+          >
+            Re-attempt / Practice Test
           </button>
         </div>
       </div>

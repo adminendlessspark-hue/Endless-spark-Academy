@@ -132,6 +132,7 @@ export interface ScheduleSlot {
   status: 'scheduled' | 'completed' | 'missed';
   clockInTime?: string;
   clockOutTime?: string;
+  roomId?: string;
 }
 
 export interface Lead {
@@ -520,6 +521,7 @@ export interface StudentProject {
   projectFileUrl?: string;
   googleDriveLink?: string;
   correctionPdfUrl?: string;
+  thumbnailUrl?: string;
   isFilesCleanedUp?: boolean;
   slaDate: string;
   createdAt: string;

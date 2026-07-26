@@ -4,10 +4,11 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import { Link, useNavigate } from 'react-router-dom';
-import { FolderKanban, MessageSquare, ChevronDown, ChevronUp, Image, Download, ExternalLink, Trash2, CheckCircle2, Globe, Info, AlertCircle } from 'lucide-react';
+import { FolderKanban, MessageSquare, ChevronDown, ChevronUp, Image, Download, ExternalLink, Trash2, CheckCircle2, Globe, Info, AlertCircle, Eye, Upload, X, Plus } from 'lucide-react';
 import { cn } from '../utils';
 import { StudentProject } from '../types';
 import { extractReworkItems } from '../components/ProductionReworkChecklist';
+import { FileUploader } from '../components/FileUploader';
 
 export default function StudentProjects() {
   const { user } = useAuth();
@@ -16,6 +17,21 @@ export default function StudentProjects() {
   const [expandedRow, setExpandedRow] = useState<Record<string, boolean>>({});
   const [localFinalFileLinks, setLocalFinalFileLinks] = useState<Record<string, string>>({});
   const [showRejectionHistory, setShowRejectionHistory] = useState<Record<string, boolean>>({});
+  const [previewModalImage, setPreviewModalImage] = useState<{ url: string; title: string } | null>(null);
+  const [uploadingThumbnailForId, setUploadingThumbnailForId] = useState<string | null>(null);
+
+  const handleUpdateThumbnail = async (projectId: string, url: string) => {
+    try {
+      await updateDoc(doc(db, 'student_projects', projectId), {
+        thumbnailUrl: url,
+        updatedAt: new Date().toISOString()
+      });
+      alert('Project thumbnail updated successfully!');
+      setUploadingThumbnailForId(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `student_projects/${projectId}`);
+    }
+  };
 
   const toggleRow = (id: string) => {
     setExpandedRow(prev => ({ ...prev, [id]: !prev[id] }));
@@ -418,10 +434,31 @@ export default function StudentProjects() {
                         {expandedRow[project.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </td>
-                    <td className="py-3 px-4 cursor-pointer" onClick={() => navigate(`/project/${project.id}`)}>
-                      <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-gray-500 mx-auto overflow-hidden shadow-sm">
-                        <Image className="w-4 h-4" />
-                      </div>
+                    <td className="py-3 px-4">
+                      {project.thumbnailUrl ? (
+                        <div 
+                          onClick={() => setPreviewModalImage({ url: project.thumbnailUrl!, title: project.title })}
+                          className="w-10 h-10 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 shadow-sm hover:scale-110 transition-all cursor-pointer mx-auto group relative"
+                          title="Click to view full thumbnail image"
+                        >
+                          <img src={project.thumbnailUrl} alt={project.title} className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                            <Eye className="w-4 h-4" />
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setExpandedRow(prev => ({ ...prev, [project.id]: true }));
+                            setUploadingThumbnailForId(project.id);
+                          }}
+                          className="w-10 h-10 bg-gray-100 hover:bg-pink-50 border border-dashed border-gray-300 hover:border-pink-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:text-pink-600 mx-auto transition-all text-[9px] font-bold gap-0.5 group"
+                          title="Click to upload project thumbnail"
+                        >
+                          <Image className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                          <span className="text-[8px] leading-none">+Add</span>
+                        </button>
+                      )}
                     </td>
                   <td className="py-3 px-4 text-[#e4573d] font-bold text-sm cursor-pointer hover:underline" onClick={() => navigate(`/project/${project.id}`)}>
                     {project.clientBrief?.projectNumber || project.projectCode || project.id.substring(0, 8)}
@@ -516,6 +553,95 @@ export default function StudentProjects() {
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <td colSpan={12} className="p-6">
                       <div className="space-y-8">
+                        {/* Project Artwork & Thumbnail Reference Card */}
+                        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                          <div className="flex items-start gap-4">
+                            <div className="w-24 h-24 sm:w-28 sm:h-28 bg-gray-100 rounded-2xl border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center relative shadow-sm group">
+                              {project.thumbnailUrl ? (
+                                <>
+                                  <img src={project.thumbnailUrl} alt={project.title} className="w-full h-full object-cover" />
+                                  <button 
+                                    onClick={() => setPreviewModalImage({ url: project.thumbnailUrl!, title: project.title })}
+                                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white gap-1 text-xs font-bold"
+                                  >
+                                    <Eye className="w-4 h-4" /> Enlarge
+                                  </button>
+                                </>
+                              ) : (
+                                <div className="text-center p-2 text-gray-400">
+                                  <Image className="w-8 h-8 mx-auto mb-1 opacity-50" />
+                                  <span className="text-[10px] font-medium block">No Thumbnail</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold uppercase tracking-wider text-pink-600 bg-pink-50 px-2.5 py-0.5 rounded-md">
+                                  Visual Project Card
+                                </span>
+                                {project.thumbnailUrl && (
+                                  <button 
+                                    onClick={() => setPreviewModalImage({ url: project.thumbnailUrl!, title: project.title })}
+                                    className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-semibold"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" /> View HD Image
+                                  </button>
+                                )}
+                              </div>
+                              <h3 className="text-base font-bold text-gray-900">{project.title}</h3>
+                              <p className="text-xs text-gray-500 max-w-lg leading-relaxed">
+                                Artwork thumbnail preview helps QC reviewers, mentors, and teammates instantly identify the project specification and brand artwork.
+                              </p>
+                              
+                              {/* Upload/Update Thumbnail Action */}
+                              <div className="pt-2">
+                                {uploadingThumbnailForId === project.id ? (
+                                  <div className="bg-gray-50 border border-pink-200 rounded-2xl p-4 space-y-3 max-w-md">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                                        <Upload className="w-4 h-4 text-pink-600" /> Upload Project Artwork Thumbnail
+                                      </span>
+                                      <button 
+                                        onClick={() => setUploadingThumbnailForId(null)}
+                                        className="text-gray-400 hover:text-gray-600"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                    <FileUploader 
+                                      path={`student_projects/thumbnails/${project.id}`}
+                                      accept="image/*"
+                                      label="Choose Image File"
+                                      onUploadComplete={(url) => handleUpdateThumbnail(project.id, url)}
+                                    />
+                                    <div className="flex items-center gap-2 pt-1">
+                                      <span className="text-[10px] text-gray-400 shrink-0">Or paste image URL:</span>
+                                      <input 
+                                        type="text" 
+                                        placeholder="https://example.com/thumbnail.png"
+                                        className="flex-1 px-2.5 py-1 text-xs border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-pink-500"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            const val = (e.target as HTMLInputElement).value.trim();
+                                            if (val) handleUpdateThumbnail(project.id, val);
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button 
+                                    onClick={() => setUploadingThumbnailForId(project.id)}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-100 hover:bg-pink-50 hover:text-pink-600 text-gray-700 rounded-xl text-xs font-bold transition-all border border-gray-200"
+                                  >
+                                    <Upload className="w-3.5 h-3.5" /> {project.thumbnailUrl ? 'Change Thumbnail Image' : 'Upload Project Thumbnail'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
                         {/* Status Roadmap */}
                         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                           <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Project Roadmap</h4>
@@ -906,6 +1032,54 @@ export default function StudentProjects() {
             ))}
           </tbody>
           </table>
+        </div>
+      )}
+      {/* Thumbnail Lightbox Preview Modal */}
+      {previewModalImage && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4"
+          onClick={() => setPreviewModalImage(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+              <div className="flex items-center gap-2">
+                <Image className="w-5 h-5 text-pink-600" />
+                <h3 className="font-bold text-sm text-gray-900">{previewModalImage.title} - Artwork Thumbnail</h3>
+              </div>
+              <button 
+                onClick={() => setPreviewModalImage(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 bg-gray-950 flex items-center justify-center min-h-[300px] max-h-[70vh] overflow-auto">
+              <img 
+                src={previewModalImage.url} 
+                alt={previewModalImage.title} 
+                className="max-w-full max-h-[60vh] object-contain rounded-xl shadow-lg"
+              />
+            </div>
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+              <a 
+                href={previewModalImage.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+              >
+                <ExternalLink className="w-4 h-4" /> Open Full Image
+              </a>
+              <button 
+                onClick={() => setPreviewModalImage(null)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-xs font-bold transition-colors"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

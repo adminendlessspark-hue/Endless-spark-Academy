@@ -4,28 +4,138 @@ import { useAuth } from '../AuthContext';
 import { doc, getDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { cn } from '../utils';
-import { CheckCircle, AlertCircle, Loader2, Play, Pause, Volume2, ArrowLeft } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Play, Pause, Volume2, ArrowLeft, ArrowRight, RotateCcw } from 'lucide-react';
 import VoiceInput from '../components/VoiceInput';
 import { GoogleGenAI, Type } from '@google/genai';
 import { generateGeminiContent } from '../services/gemini';
 
 const FATMAN_STORY_TEXT = `There is a fat man. He wants to lose weight. He is very fat. He weighs 300 pounds. The doctor tells him, "You must lose weight or you will die." The fat man is scared. He doesn't want to die. So he starts a diet. For one month, he eats only grass. Of course, the grass tastes terrible. But the man wants to lose weight. Unfortunately, after one month, he is still very fat. He does not lose any weight! Not one pound! He is frustrated. He decides to exercise. Every day, he walks 12 miles. He is very tired. In fact, he is exhausted. But after one month, he is still very fat! Oh, no! He is extremely frustrated. He decides to give up. He goes to a restaurant. He wants to eat everything because he is so frustrated. At the restaurant, he meets a beautiful woman. She likes him, and he likes her. They begin to date. Every day, the beautiful woman cooks healthy food for the fat man. His new girlfriend makes a difference in his life. The fat man loses weight! After six months, he weighs only 170 pounds. He is thin and he has a wonderful girlfriend. The man and his girlfriend are both thrilled.`;
 
+const DEFAULT_ANSWERS = {
+  partA: { q1: '', q2: '', q3: '', q4: '', q5: '' },
+  partB_understanding: { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q8: '', q9: '', q10: '' },
+  partB_grammar: { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q8: '', q9: '', q10: '' },
+  partC: { story1: '', story2: '' },
+  partD_listening: '',
+  partE_paragraph: '',
+  partF: { q1: '', q2: '', q3: '', q4: '', q5: '' }
+};
+
 export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
   
-  const [currentPart, setCurrentPart] = useState<'A' | 'B' | 'C' | 'D' | 'E' | 'F'>('A');
-  const [partAStage, setPartAStage] = useState<'intro' | 'memorize' | 'questions'>('intro');
+  const draftStorageKey = `entrance_test_draft_${user?.id || 'guest'}`;
+
+  // Answers state with local storage auto-restore
+  const [answers, setAnswers] = useState(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.answers) {
+          return {
+            ...DEFAULT_ANSWERS,
+            ...parsed.answers,
+            partA: { ...DEFAULT_ANSWERS.partA, ...(parsed.answers.partA || {}) },
+            partB_understanding: { ...DEFAULT_ANSWERS.partB_understanding, ...(parsed.answers.partB_understanding || {}) },
+            partB_grammar: { ...DEFAULT_ANSWERS.partB_grammar, ...(parsed.answers.partB_grammar || {}) },
+            partC: { ...DEFAULT_ANSWERS.partC, ...(parsed.answers.partC || {}) },
+            partF: { ...DEFAULT_ANSWERS.partF, ...(parsed.answers.partF || {}) }
+          };
+        }
+      }
+    } catch (err) {
+      console.error("Failed to restore entrance test draft:", err);
+    }
+    return DEFAULT_ANSWERS;
+  });
+
+  const [currentPart, setCurrentPart] = useState<'A' | 'B' | 'C' | 'D' | 'E' | 'F'>(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.currentPart && ['A', 'B', 'C', 'D', 'E', 'F'].includes(parsed.currentPart)) {
+          return parsed.currentPart;
+        }
+      }
+    } catch (err) {}
+    return 'A';
+  });
+
+  const [partAStage, setPartAStage] = useState<'intro' | 'memorize' | 'questions'>(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.partAStage) return parsed.partAStage;
+      }
+    } catch (err) {}
+    return 'intro';
+  });
+
   const [timeLeft, setTimeLeft] = useState(20);
-  const [showLanguageModal, setShowLanguageModal] = useState(!isDemo && !user?.nativeLanguage);
+  const [selectedLanguage, setSelectedLanguage] = useState(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.selectedLanguage) return parsed.selectedLanguage;
+      }
+    } catch (err) {}
+    return (!isDemo && user?.nativeLanguage) || '';
+  });
+
+  const [showLanguageModal, setShowLanguageModal] = useState(!isDemo && !user?.nativeLanguage && !selectedLanguage);
   const [showDemoLeadModal, setShowDemoLeadModal] = useState(isDemo);
-  const [demoLeadInfo, setDemoLeadInfo] = useState({ name: '', email: '', phone: '' });
-  const [selectedLanguage, setSelectedLanguage] = useState((!isDemo && user?.nativeLanguage) || '');
+  const [demoLeadInfo, setDemoLeadInfo] = useState(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.demoLeadInfo) return parsed.demoLeadInfo;
+      }
+    } catch (err) {}
+    return { name: '', email: '', phone: '' };
+  });
+
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [reviewMode, setReviewMode] = useState(false);
   
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsPaused, setTtsPaused] = useState(false);
   const [ttsProgress, setTtsProgress] = useState(0);
+
+  // Auto-save draft on any change
+  useEffect(() => {
+    try {
+      const draftObj = {
+        answers,
+        currentPart,
+        partAStage,
+        selectedLanguage,
+        demoLeadInfo,
+        updatedAt: new Date().toISOString()
+      };
+      localStorage.setItem(draftStorageKey, JSON.stringify(draftObj));
+      setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (err) {
+      console.error("Auto-save draft error:", err);
+    }
+  }, [answers, currentPart, partAStage, selectedLanguage, demoLeadInfo, draftStorageKey]);
+
+  const handleResetDraft = () => {
+    if (window.confirm('Are you sure you want to clear your temporary answers and restart the test?')) {
+      try {
+        localStorage.removeItem(draftStorageKey);
+      } catch (err) {}
+      setAnswers(DEFAULT_ANSWERS);
+      setCurrentPart('A');
+      setPartAStage('intro');
+      setTimeLeft(20);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -92,17 +202,6 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
   const [audioUrl, setAudioUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  
-  // Answers state
-  const [answers, setAnswers] = useState({
-    partA: { q1: '', q2: '', q3: '', q4: '', q5: '' },
-    partB_understanding: { q1: '', q2: '', q3: '', q4: '', q5: '' },
-    partB_grammar: { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q8: '', q9: '', q10: '' },
-    partC: { story1: '', story2: '' },
-    partD_listening: '',
-    partE_paragraph: '',
-    partF: { q1: '', q2: '', q3: '', q4: '', q5: '' }
-  });
 
   useEffect(() => {
     // Fetch audio URL from settings
@@ -335,6 +434,7 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
           createdAt: new Date().toISOString(),
           notes: `Submitted via Demo Entrance Test. Score: ${totalMarks}/75`
         });
+        try { localStorage.removeItem(draftStorageKey); } catch (err) {}
         alert(`Demo Test Completed! Your score is ${totalMarks}/75. In a real scenario, this would be saved to your profile. Your details have been sent to our counselors.`);
         navigate('/');
         return;
@@ -352,6 +452,8 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
         entranceTestMarks: totalMarks,
         nativeLanguage: selectedLanguage
       });
+
+      try { localStorage.removeItem(draftStorageKey); } catch (err) {}
 
       // Trigger WhatsApp notification for entrance test completion (non-blocking)
       fetch('/api/notify-milestone', {
@@ -375,24 +477,35 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
-  if (!isDemo && user?.entranceTestStatus === 'evaluated') {
+  if (!isDemo && user?.entranceTestStatus === 'evaluated' && !reviewMode) {
     return (
       <div className="max-w-3xl mx-auto text-center py-12">
         <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Test Completed</h2>
-        <p className="text-gray-600 mb-6">You have already completed the entrance test.</p>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 inline-block text-left">
-          <p className="text-lg font-bold text-gray-900 mb-2">Your Score: {user.entranceTestMarks} / 75</p>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Entrance Test Completed</h2>
+        <p className="text-gray-600 mb-6">You have completed the entrance test for your account.</p>
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 inline-block text-left max-w-md w-full">
+          <p className="text-xl font-black text-gray-900 mb-4">Your Score: {user.entranceTestMarks} / 75</p>
           <div className="flex flex-col gap-3">
             <button 
               onClick={() => navigate('/entrance-test-results')}
-              className="mt-4 bg-gray-900 text-white px-6 py-2 rounded-xl font-bold hover:bg-gray-800 transition-all shadow-lg"
+              className="w-full bg-gray-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-gray-800 transition-all shadow-lg text-center"
             >
-              View Detailed Results
+              View Detailed Score & AI Feedback
+            </button>
+            <button 
+              type="button"
+              onClick={() => {
+                if (window.confirm("Would you like to re-attempt the Entrance Test? Your new score will replace the existing score upon submission.")) {
+                  setReviewMode(true);
+                }
+              }}
+              className="w-full border border-pink-200 text-pink-600 hover:bg-pink-50 px-6 py-3 rounded-2xl font-bold transition-all text-center flex items-center justify-center gap-2"
+            >
+              <RotateCcw className="w-4 h-4" /> Re-attempt / Practice Test Again
             </button>
             <button 
               onClick={() => navigate('/')}
-              className="mt-2 text-gray-500 hover:text-gray-900 font-bold"
+              className="mt-2 text-gray-400 hover:text-gray-900 font-bold text-sm text-center"
             >
               Return to Dashboard
             </button>
@@ -515,21 +628,38 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
         <p className="text-xl text-gray-600 mt-3 leading-relaxed max-w-3xl">Please complete all sections carefully. Your answers will be evaluated automatically by our AI system.</p>
       </div>
 
-      {/* Progress Tabs */}
-      <div className="flex flex-wrap gap-2 mb-10">
-        {['A', 'B', 'C', 'D', 'E', 'F'].map((part) => (
+      {/* Progress Tabs & Draft Auto-save banner */}
+      <div className="mb-8 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+          <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">
+            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+            <span>Draft progress auto-saved temporarily</span>
+            {lastSavedTime && <span className="text-gray-400 font-mono">({lastSavedTime})</span>}
+          </div>
           <button
-            key={part}
-            onClick={() => setCurrentPart(part as any)}
-            className={`px-6 py-3 rounded-2xl font-bold text-sm transition-all ${
-              currentPart === part 
-                ? 'bg-pink-600 text-white shadow-lg shadow-pink-100 scale-105' 
-                : 'bg-white text-gray-500 border border-gray-100 hover:bg-gray-50'
-            }`}
+            type="button"
+            onClick={handleResetDraft}
+            className="text-xs text-gray-500 hover:text-red-600 font-bold flex items-center gap-1.5 transition-colors"
           >
-            Part {part}
+            <RotateCcw className="w-3.5 h-3.5" /> Clear & Restart Test
           </button>
-        ))}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {['A', 'B', 'C', 'D', 'E', 'F'].map((part) => (
+            <button
+              key={part}
+              onClick={() => setCurrentPart(part as any)}
+              className={`px-6 py-3 rounded-2xl font-bold text-sm transition-all ${
+                currentPart === part 
+                  ? 'bg-pink-600 text-white shadow-lg shadow-pink-100 scale-105' 
+                  : 'bg-white text-gray-600 border border-gray-100 hover:bg-gray-50'
+              }`}
+            >
+              Part {part}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-gray-100/50 border border-gray-100">
@@ -599,7 +729,7 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
                   { q: "Which pair is in the list?", id: "q2", opts: ["CAT, CAR", "BOTTLE, TRAIN", "RIVER, GLASS", "ORANGE, TREE"] },
                   { q: "Which number was in the 4th position?", id: "q3", opts: ["2", "5", "9", "4"] },
                   { q: "Which word came immediately before \"work\"?", id: "q4", opts: ["their", "finish", "students", "early"] },
-                  { q: "Which colors were second and fifth?", id: "q5", opts: ["RED and WHITE", "BLUE and WHITE", "YELLOW and BLACK", "BLUE and BLACK"] }
+                  { q: "Which two colors were included in the word list?", id: "q5", opts: ["RED and YELLOW", "GREEN and ORANGE", "BLUE and WHITE", "BLACK and PURPLE"] }
                 ].map((item, idx) => (
                   <div key={idx} className="space-y-5">
                     <div className="flex gap-4">
@@ -621,8 +751,9 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
                     </div>
                   </div>
                 ))}
-                <div className="flex justify-end pt-10">
-                  <button onClick={() => setCurrentPart('B')} className="bg-gray-900 text-white px-10 py-4 rounded-2xl font-bold hover:bg-pink-600 transition-all shadow-xl shadow-gray-200 flex items-center gap-2">Next Module <ArrowLeft className="w-4 h-4 rotate-180" /></button>
+                <div className="flex justify-between items-center pt-10 border-t border-gray-100">
+                  <button onClick={() => setPartAStage('memorize')} className="text-gray-500 hover:text-gray-900 font-bold flex items-center gap-2 transition-colors px-4 py-2 rounded-xl hover:bg-gray-100"><ArrowLeft className="w-4 h-4" /> Review Memorize List</button>
+                  <button onClick={() => setCurrentPart('B')} className="bg-gray-900 text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-pink-600 transition-all shadow-xl flex items-center gap-2">Next Module: Part B <ArrowRight className="w-4 h-4" /></button>
                 </div>
               </div>
             )}
@@ -788,9 +919,9 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
                 ))}
               </div>
 
-              <div className="flex justify-between pt-6">
-                <button onClick={() => setCurrentPart('A')} className="text-gray-500 hover:text-gray-900 font-bold">Previous</button>
-                <button onClick={() => setCurrentPart('C')} className="bg-gray-900 text-white px-6 py-2 rounded-xl font-bold hover:bg-gray-800">Next Part</button>
+              <div className="flex justify-between items-center pt-10 border-t border-gray-100">
+                <button onClick={() => setCurrentPart('A')} className="text-gray-500 hover:text-gray-900 font-bold flex items-center gap-2 transition-colors px-4 py-2 rounded-xl hover:bg-gray-100"><ArrowLeft className="w-4 h-4" /> Previous: Part A</button>
+                <button onClick={() => setCurrentPart('C')} className="bg-gray-900 text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-pink-600 transition-all shadow-xl flex items-center gap-2">Next Module: Part C <ArrowRight className="w-4 h-4" /></button>
               </div>
             </div>
           </div>
@@ -858,9 +989,9 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
               </div>
             </div>
 
-            <div className="flex justify-between pt-10">
-              <button onClick={() => setCurrentPart('B')} className="text-gray-400 hover:text-gray-900 font-bold flex items-center gap-2 transition-colors"><ArrowLeft className="w-4 h-4" /> Previous Module</button>
-              <button onClick={() => setCurrentPart('D')} className="bg-gray-900 text-white px-10 py-4 rounded-2xl font-bold hover:bg-pink-600 transition-all shadow-xl shadow-gray-200">Next Module</button>
+            <div className="flex justify-between items-center pt-10 border-t border-gray-100">
+              <button onClick={() => setCurrentPart('B')} className="text-gray-500 hover:text-gray-900 font-bold flex items-center gap-2 transition-colors px-4 py-2 rounded-xl hover:bg-gray-100"><ArrowLeft className="w-4 h-4" /> Previous: Part B</button>
+              <button onClick={() => setCurrentPart('D')} className="bg-gray-900 text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-pink-600 transition-all shadow-xl flex items-center gap-2">Next Module: Part D <ArrowRight className="w-4 h-4" /></button>
             </div>
           </div>
         )}
@@ -963,9 +1094,9 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
               />
             </div>
 
-            <div className="flex justify-between pt-6">
-              <button onClick={() => setCurrentPart('C')} className="text-gray-500 hover:text-gray-900 font-bold">Previous</button>
-              <button onClick={() => setCurrentPart('E')} className="bg-gray-900 text-white px-6 py-2 rounded-xl font-bold hover:bg-gray-800">Next Part</button>
+            <div className="flex justify-between items-center pt-10 border-t border-gray-100">
+              <button onClick={() => setCurrentPart('C')} className="text-gray-500 hover:text-gray-900 font-bold flex items-center gap-2 transition-colors px-4 py-2 rounded-xl hover:bg-gray-100"><ArrowLeft className="w-4 h-4" /> Previous: Part C</button>
+              <button onClick={() => setCurrentPart('E')} className="bg-gray-900 text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-pink-600 transition-all shadow-xl flex items-center gap-2">Next Module: Part E <ArrowRight className="w-4 h-4" /></button>
             </div>
           </div>
         )}
@@ -994,13 +1125,13 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
               />
             </div>
 
-            <div className="flex justify-between pt-6 border-t border-gray-100">
-              <button onClick={() => setCurrentPart('D')} className="text-gray-500 hover:text-gray-900 font-bold">Previous</button>
+            <div className="flex justify-between items-center pt-10 border-t border-gray-100">
+              <button onClick={() => setCurrentPart('D')} className="text-gray-500 hover:text-gray-900 font-bold flex items-center gap-2 transition-colors px-4 py-2 rounded-xl hover:bg-gray-100"><ArrowLeft className="w-4 h-4" /> Previous: Part D</button>
               <button 
                 onClick={() => setCurrentPart('F')}
-                className="flex items-center gap-2 bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg"
+                className="bg-gray-900 text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-pink-600 transition-all shadow-xl flex items-center gap-2"
               >
-                Next Part
+                Next Module: Part F <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -1054,14 +1185,14 @@ export default function EntranceTest({ isDemo = false }: { isDemo?: boolean }) {
               ))}
             </div>
 
-            <div className="flex justify-between pt-10 border-t border-gray-100">
-              <button onClick={() => setCurrentPart('E')} className="text-gray-500 hover:text-gray-900 font-bold">Previous</button>
+            <div className="flex justify-between items-center pt-10 border-t border-gray-100">
+              <button onClick={() => setCurrentPart('E')} className="text-gray-500 hover:text-gray-900 font-bold flex items-center gap-2 transition-colors px-4 py-2 rounded-xl hover:bg-gray-100"><ArrowLeft className="w-4 h-4" /> Previous: Part E</button>
               <button 
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="flex items-center gap-2 bg-pink-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-pink-700 transition-colors shadow-lg shadow-pink-200 disabled:opacity-50"
+                className="flex items-center gap-2 bg-pink-600 text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-pink-700 transition-all shadow-lg shadow-pink-200 disabled:opacity-50"
               >
-                {isSubmitting ? <><Loader2 className="w-5 h-5 animate-spin" /> Submitting...</> : 'Submit Test'}
+                {isSubmitting ? <><Loader2 className="w-5 h-5 animate-spin" /> Submitting Test...</> : 'Submit Final Test'}
               </button>
             </div>
           </div>

@@ -8,7 +8,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useIdleTimeout } from '../hooks/useIdleTimeout';
 import { StudentProject, StudentQuery } from '../types';
 import { downloadDataUrlFile } from './QueryTracker';
-import { ArrowLeft, Clock, CheckCircle, AlertCircle, FileText, Play, Square, ExternalLink, Cloud, Calendar, Printer, ChevronDown, ChevronUp, FileCheck, Upload, Download, Loader2, Globe, Lightbulb, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle, AlertCircle, FileText, Play, Square, ExternalLink, Cloud, Calendar, Printer, ChevronDown, ChevronUp, FileCheck, Upload, Download, Loader2, Globe, Lightbulb, HelpCircle, Image, Eye, X } from 'lucide-react';
 import { cn } from '../utils';
 import { Type, GoogleGenAI } from "@google/genai";
 import { generateGeminiContent } from '../services/gemini';
@@ -183,6 +183,22 @@ export default function ProjectDetail() {
   const [newCorrectionPdfUrl, setNewCorrectionPdfUrl] = useState('');
   const [isUpdatingCorrectionPdf, setIsUpdatingCorrectionPdf] = useState(false);
   const [qcErrorCategories, setQcErrorCategories] = useState<string[]>(['Typography', 'Color', 'Layout', 'Bleed/Trim', 'Other']);
+  const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
+
+  const handleUpdateThumbnail = async (url: string) => {
+    if (!project) return;
+    try {
+      const projectRef = doc(db, 'student_projects', project.id);
+      await updateDoc(projectRef, {
+        thumbnailUrl: url,
+        updatedAt: new Date().toISOString()
+      });
+      alert('Project thumbnail image updated successfully!');
+      setIsUploadingThumbnail(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `student_projects/${project.id}`);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -870,58 +886,113 @@ export default function ProjectDetail() {
         )}
 
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden mb-8">
-        <button 
-          onClick={() => setIsHeaderExpanded(prev => !prev)}
-          className={cn(
-            "w-full text-left p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 outline-none focus:outline-none group transition-all duration-200 bg-gray-50",
-            isHeaderExpanded ? "border-b border-gray-150" : ""
-          )}
-          id="toggle-project-header"
-        >
-          <div className="flex-1">
-            <div className="flex flex-wrap items-center gap-3 mb-2">
-              <h1 className="text-xl md:text-2xl font-bold text-gray-900 group-hover:text-pink-600 transition-colors leading-tight">
-                {project.title}
-              </h1>
-              {(project.clientBrief?.projectNumber || project.projectCode) && (
-                <span className="bg-gray-200 text-gray-700 px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold">
-                  {project.clientBrief?.projectNumber || project.projectCode}
-                </span>
-              )}
-              {project.courseName && (
-                <span className="bg-pink-100 text-pink-700 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider">
-                  {project.courseName}
-                </span>
+        <div className="p-6 md:p-8 bg-gray-50 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border-b border-gray-150">
+          <div className="flex items-start gap-4 flex-1">
+            {/* Project Artwork Thumbnail Card */}
+            <div 
+              onClick={(e) => {
+                e.stopPropagation();
+                if (project.thumbnailUrl) {
+                  setActiveViewerUrl(project.thumbnailUrl);
+                  setActiveViewerTitle(`${project.title} - Artwork Thumbnail`);
+                } else {
+                  setIsUploadingThumbnail(true);
+                }
+              }}
+              className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-2xl border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center relative shadow-sm group hover:scale-105 transition-all cursor-pointer"
+              title={project.thumbnailUrl ? "Click to view full thumbnail image" : "Click to upload project thumbnail"}
+            >
+              {project.thumbnailUrl ? (
+                <>
+                  <img src={project.thumbnailUrl} alt={project.title} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                    <Eye className="w-5 h-5" />
+                  </div>
+                </>
+              ) : (
+                <div className="text-center p-2 text-gray-400 group-hover:text-pink-600 transition-colors">
+                  <Image className="w-6 h-6 mx-auto mb-1 opacity-60" />
+                  <span className="text-[9px] font-bold block text-gray-500">+ Thumbnail</span>
+                </div>
               )}
             </div>
-            
-            {/* Show metadata below title only when expanded */}
-            {isHeaderExpanded ? (
-              <div className="flex flex-wrap items-center gap-4 text-gray-500 mt-3 animate-in fade-in duration-200">
-                <p className="flex items-center gap-1.5 text-xs font-medium">
-                  <Clock className="w-4 h-4 text-gray-400" /> Total Est: {project.estimatedTime}m
-                </p>
-                {project.status !== 'approved' && project.stageEstimates && (
-                  <p className="flex items-center gap-1.5 text-pink-600 font-medium bg-pink-50 px-2.5 py-1 rounded-full text-xs">
-                    <Clock className="w-4 h-4" /> {project.status.toUpperCase()} Est: {project.stageEstimates[project.status as keyof typeof project.stageEstimates] || 0}m
-                  </p>
+
+            <div className="flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900 leading-tight">
+                  {project.title}
+                </h1>
+                {(project.clientBrief?.projectNumber || project.projectCode) && (
+                  <span className="bg-gray-200 text-gray-700 px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold">
+                    {project.clientBrief?.projectNumber || project.projectCode}
+                  </span>
                 )}
-                {project.slaDate && (
-                  <p className="flex items-center gap-1.5 text-pink-700 font-bold bg-pink-50 px-2.5 py-1 rounded-full text-xs">
-                    <Calendar className="w-4 h-4" /> SLA: {new Date(project.slaDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </p>
+                {project.courseName && (
+                  <span className="bg-pink-100 text-pink-700 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider">
+                    {project.courseName}
+                  </span>
                 )}
               </div>
-            ) : (
-              <p className="text-xs text-gray-400 font-medium font-mono uppercase tracking-wider mt-1">
-                Click to expand steps & metadata
-              </p>
-            )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button 
+                  onClick={() => setIsUploadingThumbnail(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-pink-50 text-gray-700 hover:text-pink-600 rounded-xl text-xs font-bold border border-gray-200 transition-all shadow-sm"
+                >
+                  <Upload className="w-3.5 h-3.5" /> {project.thumbnailUrl ? 'Change Thumbnail Image' : 'Upload Thumbnail'}
+                </button>
+                {project.thumbnailUrl && (
+                  <button 
+                    onClick={() => {
+                      setActiveViewerUrl(project.thumbnailUrl!);
+                      setActiveViewerTitle(`${project.title} - Artwork Thumbnail`);
+                    }}
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline font-semibold"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> Enlarge
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
-            {/* Minimal Status Indicator when collapsed */}
-            {!isHeaderExpanded && (
+            {/* Minimal Status Indicator or Admin Stage Change */}
+            {isElevated ? (
+              <div className="flex flex-col items-end gap-1 relative">
+                <span className="text-[9px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                  Change Project Stage
+                </span>
+                <select
+                  value={project.status}
+                  onChange={async (e) => {
+                    const newStatus = e.target.value;
+                    if (!project) return;
+                    try {
+                      await updateDoc(doc(db, 'student_projects', project.id), {
+                        status: newStatus,
+                        updatedAt: new Date().toISOString()
+                      });
+                      alert(`Project stage successfully updated to: ${newStatus.toUpperCase()}`);
+                    } catch (err) {
+                      handleFirestoreError(err, OperationType.UPDATE, `student_projects/${project.id}`);
+                    }
+                  }}
+                  className="bg-white border border-pink-200 hover:border-pink-300 rounded-xl px-2.5 py-1 text-xs font-bold text-pink-700 outline-none cursor-pointer shadow-sm uppercase shrink-0 transition-all font-sans"
+                >
+                  {stages.map((stg) => (
+                    <option key={stg} value={stg} className="text-gray-700 bg-white">
+                      {stg === 'client' ? 'Client Brief' :
+                       stg === 'preflight' ? 'Pre-Flight Plan' :
+                       stg === 'production' ? 'Production Art' :
+                       stg === 'pqc' ? 'Production QC' :
+                       stg === 'qc' ? 'QC' :
+                       stg === 'approved' ? 'Approved' : stg}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
               <span className={cn(
                 "px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border",
                 project.status === 'approved' ? "bg-green-50 border-green-200 text-green-700" :
@@ -932,65 +1003,36 @@ export default function ProjectDetail() {
               </span>
             )}
 
-            {isHeaderExpanded && (
-              <div className="flex flex-col items-end gap-1 relative mr-1 animate-in fade-in duration-200">
-                {isElevated ? (
-                  <div className="flex flex-col items-end gap-1 relative">
-                    <span className="text-[9px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded uppercase tracking-wider">
-                      Change Project Stage
-                    </span>
-                    <select
-                      value={project.status}
-                      onChange={async (e) => {
-                        const newStatus = e.target.value;
-                        if (!project) return;
-                        try {
-                          await updateDoc(doc(db, 'student_projects', project.id), {
-                            status: newStatus,
-                            updatedAt: new Date().toISOString()
-                          });
-                          alert(`Project stage successfully updated to: ${newStatus.toUpperCase()}`);
-                        } catch (err) {
-                          handleFirestoreError(err, OperationType.UPDATE, `student_projects/${project.id}`);
-                        }
-                      }}
-                      className="bg-white border border-pink-200 hover:border-pink-300 rounded-xl px-2.5 py-1 text-xs font-bold text-pink-700 outline-none cursor-pointer shadow-sm uppercase shrink-0 transition-all font-sans"
-                    >
-                      {stages.map((stg) => (
-                        <option key={stg} value={stg} className="text-gray-700 bg-white">
-                          {stg === 'client' ? 'Client Brief' :
-                           stg === 'preflight' ? 'Pre-Flight Plan' :
-                           stg === 'production' ? 'Production Art' :
-                           stg === 'pqc' ? 'Production QC' :
-                           stg === 'qc' ? 'QC' :
-                           stg === 'approved' ? 'Approved' : stg}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <span className={cn(
-                    "px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider",
-                    project.status === 'approved' ? "bg-green-100 text-green-700" :
-                    project.status === 'qc' ? "bg-orange-100 text-orange-700" :
-                    "bg-blue-100 text-blue-700"
-                  )}>
-                    {project.status}
-                  </span>
-                )}
-                {project.status === 'approved' && (
-                  <div className="text-[10px] font-bold text-green-600">
-                    Points: {project.points} | Efficiency: {project.efficiency.toFixed(1)}%
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="p-2 border border-pink-400 rounded-xl bg-white text-pink-600 group-hover:bg-pink-50 group-hover:text-pink-700 transition-all duration-150 shadow-sm shrink-0">
+            <button 
+              onClick={() => setIsHeaderExpanded(prev => !prev)}
+              className="flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-gray-900 bg-white px-3.5 py-2 rounded-xl border border-gray-200 shadow-sm transition-colors"
+            >
+              {isHeaderExpanded ? 'Collapse' : 'Expand'}
               {isHeaderExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Expanded Metadata Block */}
+        {isHeaderExpanded && (
+          <div className="p-6 bg-white border-b border-gray-100">
+            <div className="flex flex-wrap items-center gap-4 text-gray-500 animate-in fade-in duration-200">
+              <p className="flex items-center gap-1.5 text-xs font-medium">
+                <Clock className="w-4 h-4 text-gray-400" /> Total Est: {project.estimatedTime}m
+              </p>
+              {project.status !== 'approved' && project.stageEstimates && (
+                <p className="flex items-center gap-1.5 text-pink-600 font-medium bg-pink-50 px-2.5 py-1 rounded-full text-xs">
+                  <Clock className="w-4 h-4" /> {project.status.toUpperCase()} Est: {project.stageEstimates[project.status as keyof typeof project.stageEstimates] || 0}m
+                </p>
+              )}
+              {project.slaDate && (
+                <p className="flex items-center gap-1.5 text-pink-700 font-bold bg-pink-50 px-2.5 py-1 rounded-full text-xs">
+                  <Calendar className="w-4 h-4" /> SLA: {new Date(project.slaDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </p>
+              )}
             </div>
           </div>
-        </button>
+        )}
 
         {isHeaderExpanded && (
           <div className="animate-in fade-in slide-in-from-top-1 duration-200">
@@ -2885,6 +2927,75 @@ export default function ProjectDetail() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+        {/* Upload / Edit Thumbnail Modal */}
+        {isUploadingThumbnail && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-150 relative">
+              <button 
+                onClick={() => setIsUploadingThumbnail(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <h3 className="text-lg font-extrabold text-gray-900 mb-1 flex items-center gap-2">
+                <Image className="w-5 h-5 text-pink-600" />
+                Upload Project Artwork Thumbnail
+              </h3>
+              <p className="text-xs text-gray-500 mb-5 leading-relaxed">
+                Upload a clear image file (PNG, JPG, WEBP) or paste a web URL to display as the project's cover thumbnail on cards and dashboards.
+              </p>
+
+              <div className="space-y-4">
+                <FileUploader 
+                  path={`student_projects/thumbnails/${project.id}`}
+                  accept="image/*"
+                  label="Select Image File"
+                  onUploadComplete={(url) => handleUpdateThumbnail(url)}
+                />
+
+                <div className="relative border-t border-gray-100 pt-4">
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                    Or paste direct Image URL
+                  </label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="https://example.com/artwork_thumbnail.png"
+                      className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-gray-800"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = (e.target as HTMLInputElement).value.trim();
+                          if (val) handleUpdateThumbnail(val);
+                        }
+                      }}
+                      id="input-thumbnail-url"
+                    />
+                    <button
+                      onClick={() => {
+                        const inputEl = document.getElementById('input-thumbnail-url') as HTMLInputElement;
+                        if (inputEl && inputEl.value.trim()) {
+                          handleUpdateThumbnail(inputEl.value.trim());
+                        }
+                      }}
+                      className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
+                    >
+                      Save URL
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2 text-right">
+                  <button
+                    onClick={() => setIsUploadingThumbnail(false)}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

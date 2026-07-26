@@ -1,5 +1,5 @@
 import { User, TopicScore, LeaveRequest, Holiday, CourseType, CourseModule, TrainingRecord, PlacementSettings } from '../types';
-import { CircleCheck, Circle, Clock, ArrowRight, FileText, Award, Download, Printer, X, ShieldAlert, Key, Calendar, Send, Info, Video, IdCard, IndianRupee, Smartphone, BookOpen, FolderKanban, CheckSquare, FileCheck, Briefcase, Zap, Camera, Upload, MessageSquare, ExternalLink, Sparkles } from 'lucide-react';
+import { CircleCheck, Circle, Clock, ArrowRight, FileText, Award, Download, Printer, X, ShieldAlert, Key, Calendar, Send, Info, Video, IdCard, IndianRupee, Smartphone, BookOpen, FolderKanban, CheckSquare, FileCheck, Briefcase, Zap, Camera, Upload, MessageSquare, ExternalLink, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { cn, formatCourseName } from '../utils';
@@ -425,14 +425,31 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
     const targetClasses = monthsSinceJoining * 20;
     
     const legacyAttendance = user?.dailyAttendance?.filter(a => a.status === 'approved').length || 0;
-    const newAttendance = scheduleSlots.filter(s => s.status === 'completed').length;
-    const totalAttended = legacyAttendance + newAttendance;
+    const completedSlots = scheduleSlots.filter(s => s.status === 'completed').length;
+    const totalAttended = legacyAttendance + completedSlots;
+
+    const legacyRejected = user?.dailyAttendance?.filter(a => a.status === 'rejected').length || 0;
+    const missedSlots = scheduleSlots.filter(s => {
+      if (s.status === 'missed') return true;
+      if (s.status === 'scheduled' && !s.clockInTime) {
+        // Check if 15m buffer passed
+        const [sh, sm] = s.startTime.split(':').map(Number);
+        const start = new Date();
+        start.setHours(sh, sm, 0, 0);
+        const lateStart = new Date(start.getTime() + 15 * 60000);
+        return new Date() > lateStart;
+      }
+      return false;
+    }).length;
+
+    const totalMissed = legacyRejected + missedSlots;
     
     const attendancePercentage = Math.min(100, Math.round((totalAttended / targetClasses) * 100));
     const attendanceMarks = Math.round((attendancePercentage / 100) * 20);
     
     return {
       totalAttended,
+      totalMissed,
       targetClasses,
       attendancePercentage,
       attendanceMarks,
@@ -1213,7 +1230,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
             />
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <Link
               to="/ai-tutor"
               className="mt-4 flex items-center justify-center gap-2 px-6 py-3 w-full sm:w-auto bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-bold shadow-lg hover:from-blue-600 hover:to-blue-700 transition hover:shadow-xl"
@@ -1221,35 +1238,100 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
               <Zap className="w-5 h-5" />
               Practice with AI Communication Coach
             </Link>
+
+            <Link
+              to={`/classroom/${user.assignedFacultyId ? `ES-Faculty-${user.assignedFacultyId}` : user.demoData?.roomId || `ES-Classroom-${user.id}`}`}
+              className="mt-4 flex items-center justify-center gap-2 px-6 py-3 w-full sm:w-auto bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-xl font-bold shadow-lg hover:from-pink-700 hover:to-rose-700 transition hover:shadow-xl"
+            >
+              <Video className="w-5 h-5 animate-pulse" />
+              Join Live Virtual Classroom
+            </Link>
           </div>
 
-          <div className="pt-6 border-t border-gray-100">
-            <div className="flex items-center justify-between mb-2">
+          {/* Active or Upcoming Live Class Banner */}
+          {liveSessions.length > 0 && (
+            <div className="mt-4 bg-gradient-to-r from-slate-900 via-pink-950 to-slate-900 border border-pink-500/30 rounded-2xl p-4 text-white shadow-md">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-pink-500/20 border border-pink-400/30 flex items-center justify-center text-pink-400 shrink-0">
+                    <Video className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-pink-400">
+                        {liveSessions[0].status === 'live' ? '🔴 LIVE NOW' : '📅 UPCOMING CLASS'}
+                      </span>
+                      <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded-full text-gray-300 font-mono">
+                        {new Date(liveSessions[0].scheduledFor).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-sm text-white">{liveSessions[0].title}</h4>
+                  </div>
+                </div>
+
+                <Link
+                  to={`/classroom/${liveSessions[0].roomId}`}
+                  className="w-full md:w-auto px-5 py-2.5 bg-pink-600 hover:bg-pink-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-pink-600/30 flex items-center justify-center gap-2 transition-all hover:scale-105 shrink-0"
+                >
+                  <Video className="w-4 h-4" />
+                  Join Class Room
+                </Link>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-6 border-t border-gray-100 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Calendar className={cn("w-4 h-4", attendanceStats.isLowAttendance ? "text-red-600" : "text-pink-600")} />
-                <span className={cn("text-sm font-bold", attendanceStats.isLowAttendance ? "text-red-600" : "text-gray-700")}>
-                  Cumulative Attendance ({attendanceStats.targetClasses} classes target)
+                <span className={cn("text-sm font-bold", attendanceStats.isLowAttendance ? "text-red-600" : "text-gray-900")}>
+                  Cumulative Attendance ({attendanceStats.targetClasses} Classes Target)
                 </span>
               </div>
-              <div className="flex flex-col items-end">
-                <span className={cn("text-sm font-bold", attendanceStats.isLowAttendance ? "text-red-600" : "text-pink-600")}>
-                  {attendanceStats.totalAttended}/{attendanceStats.targetClasses} Classes ({attendanceStats.attendancePercentage}%)
+              <div className="flex items-center gap-2">
+                <span className={cn("text-xs font-extrabold px-2.5 py-1 rounded-lg border", attendanceStats.isLowAttendance ? "bg-red-50 text-red-700 border-red-200" : "bg-pink-50 text-pink-700 border-pink-200")}>
+                  {attendanceStats.totalAttended}/{attendanceStats.targetClasses} Attended ({attendanceStats.attendancePercentage}%)
                 </span>
-                <span className={cn("text-xs font-bold", attendanceStats.isLowAttendance ? "text-red-500" : "text-orange-600")}>
+                <span className="text-xs font-extrabold bg-orange-50 text-orange-700 border border-orange-200 px-2.5 py-1 rounded-lg">
                   Marks: {attendanceStats.attendanceMarks}/20
                 </span>
               </div>
             </div>
-            <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden mb-4">
+
+            {/* Attendance Status Badges Breakdown */}
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold pt-1">
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Attended: {attendanceStats.totalAttended}
+              </span>
+              <span className="bg-red-50 text-red-700 border border-red-200 px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" /> Buffer Failed / Missed: {attendanceStats.totalMissed}
+              </span>
+              <span className="bg-gray-100 text-gray-700 border border-gray-200 px-2.5 py-0.5 rounded-md">
+                Target: {attendanceStats.targetClasses} Classes
+              </span>
+            </div>
+
+            <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden my-2">
               <div 
-                className={cn("h-full transition-all duration-500", attendanceStats.isLowAttendance ? "bg-red-500" : "bg-orange-500")} 
+                className={cn("h-full transition-all duration-500", attendanceStats.isLowAttendance ? "bg-red-500" : "bg-gradient-to-r from-pink-500 to-orange-500")} 
                 style={{ width: `${attendanceStats.attendancePercentage}%` }}
               />
             </div>
+
+            {/* 15-Min Logging Buffer Rule Callout for Student */}
+            <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-xl text-xs text-amber-900 space-y-1">
+              <p className="font-bold text-amber-950 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-600" /> 15-Minute Clock-In Logging Buffer Rule
+              </p>
+              <p className="text-[11px] leading-relaxed text-amber-800">
+                You must Clock In within <strong>15 minutes</strong> of your scheduled class start time. Exceeding the 15-minute logging buffer marks the session as <strong>Buffer Failed / Missed</strong>, reducing your total cumulative attendance score towards the 20-class target.
+              </p>
+            </div>
+
             {attendanceStats.isLowAttendance && (
-              <div className="flex items-center gap-2 text-xs font-medium text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
+              <div className="flex items-center gap-2 text-xs font-medium text-red-600 bg-red-50 p-3 rounded-xl border border-red-200">
                 <ShieldAlert className="w-4 h-4 flex-shrink-0" />
-                <p>Attendance is below 80%. This will reduce your final marks and may prevent certification.</p>
+                <p>Attendance is below 80%. This will reduce your final internal marks and may prevent course completion certification.</p>
               </div>
             )}
           </div>
@@ -1777,19 +1859,14 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
                     <Link
                       to={`/classroom/${session.roomId}`}
                       className={cn(
-                        "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition-all",
+                        "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition-all shadow-md",
                         session.status === 'live'
-                          ? "bg-pink-600 text-white hover:bg-pink-700 shadow-md shadow-pink-200"
-                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          ? "bg-pink-600 text-white hover:bg-pink-700 shadow-pink-200 animate-pulse"
+                          : "bg-pink-600 text-white hover:bg-pink-700 shadow-pink-100"
                       )}
-                      onClick={(e) => {
-                        if (session.status !== 'live') {
-                          e.preventDefault();
-                        }
-                      }}
                     >
                       <Video className="w-4 h-4" />
-                      {session.status === 'live' ? 'Join Class' : 'Not Started'}
+                      {session.status === 'live' ? 'Join Live Class Now' : 'Enter Virtual Classroom'}
                     </Link>
                   )}
                 </div>
@@ -1865,19 +1942,14 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
                         <Link
                           to={`/classroom/${session.roomId}`}
                           className={cn(
-                            "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition-all",
+                            "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition-all shadow-md",
                             session.status === 'live'
-                              ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200"
-                              : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                              ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 animate-pulse"
+                              : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100"
                           )}
-                          onClick={(e) => {
-                            if (session.status !== 'live') {
-                              e.preventDefault();
-                            }
-                          }}
                         >
                           <Video className="w-4 h-4" />
-                          {session.status === 'live' ? 'Join Interview' : 'Not Started'}
+                          {session.status === 'live' ? 'Join Interview Now' : 'Enter Interview Room'}
                         </Link>
                       )}
                     </div>
@@ -1952,19 +2024,14 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
                         <Link
                           to={`/classroom/${session.roomId}`}
                           className={cn(
-                            "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition-all",
+                            "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition-all shadow-md",
                             session.status === 'live'
-                              ? "bg-purple-600 text-white hover:bg-purple-700 shadow-md shadow-purple-200"
-                              : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                              ? "bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200 animate-pulse"
+                              : "bg-purple-600 text-white hover:bg-purple-700 shadow-purple-100"
                           )}
-                          onClick={(e) => {
-                            if (session.status !== 'live') {
-                              e.preventDefault();
-                            }
-                          }}
                         >
                           <Video className="w-4 h-4" />
-                          {session.status === 'live' ? 'Join Interview' : 'Not Started'}
+                          {session.status === 'live' ? 'Join HR Interview Now' : 'Enter Interview Room'}
                         </Link>
                       )}
                     </div>

@@ -1,5 +1,5 @@
 import { User, TopicScore, LeaveRequest, Holiday, CourseType, CourseModule, TrainingRecord, PlacementSettings } from '../types';
-import { CircleCheck, Circle, Clock, ArrowRight, FileText, Award, Download, Printer, X, ShieldAlert, Key, Calendar, Send, Info, Video, IdCard, IndianRupee, Smartphone, BookOpen, FolderKanban, CheckSquare, FileCheck, Briefcase, Zap, Camera, Upload, MessageSquare, ExternalLink, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { CircleCheck, Circle, Clock, ArrowRight, FileText, Award, Download, Printer, X, ShieldAlert, Key, Calendar, Send, Info, Video, IdCard, IndianRupee, Smartphone, BookOpen, FolderKanban, CheckSquare, FileCheck, Briefcase, Zap, Camera, Upload, MessageSquare, ExternalLink, Sparkles, CheckCircle2, AlertCircle, FolderGit2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { cn, formatCourseName } from '../utils';
@@ -995,6 +995,149 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
         </div>
       )}
 
+      {/* Reference Material (ZIP Archive) Section for Student Dashboard */}
+      {user?.role === 'student' && (
+        <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600 shadow-sm">
+                <BookOpen className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-gray-900">Reference Materials & ZIP Archives</h3>
+                  <span className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase bg-purple-100 text-purple-700 rounded-full tracking-wider">
+                    Course Assets
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Access and download reference project ZIP packages, template assets, and study guides for your assigned modules.
+                </p>
+              </div>
+            </div>
+
+            <Link 
+              to="/modules" 
+              className="bg-purple-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-purple-700 transition-all shadow-md self-start md:self-auto shrink-0"
+            >
+              Go to Course Modules
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          {/* List of Module ZIP Archives and Reference Materials */}
+          {(() => {
+            const modulesSource = courseModules.length > 0 ? courseModules : FALLBACK_COURSE_MODULES;
+            const relevant = modulesSource.filter(m => assignedCourses.includes(m.category as CourseType));
+            
+            // Collect items with reference material, zip archives or project templates
+            const items: { moduleTitle: string; title: string; url: string; isZip: boolean; type: string }[] = [];
+            
+            relevant.forEach(m => {
+              if (m.referenceMaterialUrl) {
+                const lower = m.referenceMaterialUrl.toLowerCase();
+                const isZip = lower.endsWith('.zip') || lower.endsWith('.rar') || lower.endsWith('.7z') || lower.includes('.zip?') || lower.includes('.rar?') || lower.includes('.7z?');
+                items.push({
+                  moduleTitle: m.title,
+                  title: isZip ? `${m.title} - Reference ZIP Package` : `${m.title} - Reference Material`,
+                  url: m.referenceMaterialUrl,
+                  isZip,
+                  type: isZip ? 'ZIP Archive' : 'Reference Guide'
+                });
+              }
+              if (m.additionalReferenceMaterials && m.additionalReferenceMaterials.length > 0) {
+                m.additionalReferenceMaterials.forEach(ref => {
+                  const lower = ref.url.toLowerCase();
+                  const isZip = lower.endsWith('.zip') || lower.endsWith('.rar') || lower.endsWith('.7z') || lower.includes('.zip?') || lower.includes('.rar?') || lower.includes('.7z?');
+                  items.push({
+                    moduleTitle: m.title,
+                    title: ref.title,
+                    url: ref.url,
+                    isZip,
+                    type: isZip ? 'ZIP Archive' : 'Additional Resource'
+                  });
+                });
+              }
+              if (m.projectTemplateUrl) {
+                const lower = m.projectTemplateUrl.toLowerCase();
+                const isZip = lower.endsWith('.zip') || lower.endsWith('.rar') || lower.endsWith('.7z') || lower.includes('.zip?') || lower.includes('.rar?') || lower.includes('.7z?');
+                items.push({
+                  moduleTitle: m.title,
+                  title: `${m.title} - Project Start Files`,
+                  url: m.projectTemplateUrl,
+                  isZip: true, // Project templates are project start ZIPs
+                  type: 'Project Start ZIP'
+                });
+              }
+            });
+
+            if (items.length === 0) {
+              return (
+                <div className="p-6 bg-purple-50/50 rounded-2xl border border-purple-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <FolderGit2 className="w-8 h-8 text-purple-500 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">Reference Materials & ZIP Archives Ready in Course Modules</p>
+                      <p className="text-xs text-gray-500">Explore each syllabus module to access dedicated downloadable ZIP files, mind maps, and practice worksheets.</p>
+                    </div>
+                  </div>
+                  <Link 
+                    to="/modules" 
+                    className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-colors whitespace-nowrap"
+                  >
+                    Open Modules
+                  </Link>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {items.map((item, idx) => (
+                  <div key={idx} className="p-4 bg-slate-50 border border-gray-200 rounded-2xl hover:border-purple-300 hover:shadow-sm transition-all flex flex-col justify-between space-y-3">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                          {item.type}
+                        </span>
+                        {item.isZip && (
+                          <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md uppercase">
+                            .ZIP
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="text-sm font-bold text-gray-900 line-clamp-1">{item.title}</h4>
+                      <p className="text-xs text-gray-500 line-clamp-1">Module: {item.moduleTitle}</p>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-150 flex items-center justify-between gap-2">
+                      <a 
+                        href={`/api/download?url=${encodeURIComponent(item.url)}&title=${encodeURIComponent(item.title)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download {item.isZip ? 'ZIP' : 'File'}
+                      </a>
+                      <a 
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 bg-white border border-gray-200 rounded-xl text-gray-600 hover:text-purple-600 hover:border-purple-200 transition-colors"
+                        title="View Document Link"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Homepage Videos - Conditionally visible */}
       {(founderVideoEnabled || overviewVideoEnabled) && (
         <div className={`grid grid-cols-1 ${founderVideoEnabled && overviewVideoEnabled ? 'md:grid-cols-2' : 'max-w-2xl mx-auto'} gap-6`}>
@@ -1391,6 +1534,91 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
           </div>
         </div>
       </div>
+
+        {/* Student Schedule & 15-Min Logging Buffer */}
+        <StudentSchedule />
+
+        {/* Live Classes / Demo Classes Section */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-2">
+            <Video className="w-5 h-5 text-pink-600" />
+            <h2 className="text-xl font-bold text-gray-900">{user.isApproved ? 'LIVE CLASSES' : 'DEMO CLASSES'}</h2>
+          </div>
+          
+          {(user.isApproved ? liveSessions.filter(s => s.type === 'live' || !s.type) : liveSessions.filter(s => s.type === 'demo')).length === 0 ? (
+            <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-gray-200">
+              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Video className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">No {user.isApproved ? 'Live' : 'Demo'} Classes</h3>
+              <p className="text-gray-500">There are no {user.isApproved ? 'live' : 'demo'} classes scheduled at the moment.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {(user.isApproved ? liveSessions.filter(s => s.type === 'live' || !s.type) : liveSessions.filter(s => s.type === 'demo')).map((session) => (
+                <div key={session.id} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center text-pink-600">
+                          <Video className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-gray-900">{session.title}</h3>
+                          <p className="text-sm text-gray-500">by {session.facultyName && !session.facultyName.includes('Pending') ? session.facultyName : 'Admin'}</p>
+                        </div>
+                      </div>
+                      <span className={cn(
+                        "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                        session.status === 'live' ? "bg-red-50 text-red-600 animate-pulse" :
+                        session.status === 'scheduled' ? "bg-blue-50 text-blue-600" :
+                        "bg-gray-100 text-gray-600"
+                      )}>
+                        {session.status}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-3 mb-6">
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Calendar className="w-4 h-4 text-gray-400" />
+                        <span>{new Date(session.scheduledFor).toLocaleString()}</span>
+                      </div>
+                      {session.recordingUrl && (
+                        <div className="mt-4">
+                          <div className="aspect-video bg-black rounded-xl overflow-hidden">
+                            <SecureVideoPlayer 
+                              url={session.recordingUrl} 
+                              title="Live Session Recording" 
+                              userName={user?.name}
+                              userId={user?.studentId || user?.id}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {session.status === 'completed' ? (
+                      <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold bg-gray-100 text-gray-500 cursor-not-allowed">
+                        <Video className="w-4 h-4" /> Class Ended
+                      </div>
+                    ) : (
+                      <Link
+                        to={`/classroom/${session.roomId}`}
+                        className={cn(
+                          "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition-all shadow-md",
+                          session.status === 'live'
+                            ? "bg-pink-600 text-white hover:bg-pink-700 shadow-pink-200 animate-pulse"
+                            : "bg-pink-600 text-white hover:bg-pink-700 shadow-pink-100"
+                        )}
+                      >
+                        <Video className="w-4 h-4" />
+                        {session.status === 'live' ? 'Join Live Class Now' : 'Enter Virtual Classroom'}
+                      </Link>
+                    )}
+                  </div>
+                ))}
+              </div>
+          )}
+        </div>
 
         <div className={cn(
           "bg-white p-6 rounded-2xl shadow-sm border flex flex-col md:flex-row items-center justify-between gap-4",
@@ -1790,90 +2018,6 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
               ))}
             </div>
           )}
-        </div>
-
-        <StudentSchedule />
-
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 px-2">
-          <Video className="w-5 h-5 text-pink-600" />
-          <h2 className="text-xl font-bold text-gray-900">{user.isApproved ? 'LIVE CLASSES' : 'DEMO CLASSES'}</h2>
-        </div>
-        
-        {(user.isApproved ? liveSessions.filter(s => s.type === 'live' || !s.type) : liveSessions.filter(s => s.type === 'demo')).length === 0 ? (
-          <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-gray-200">
-            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Video className="w-8 h-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-1">No {user.isApproved ? 'Live' : 'Demo'} Classes</h3>
-            <p className="text-gray-500">There are no {user.isApproved ? 'live' : 'demo'} classes scheduled at the moment.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {(user.isApproved ? liveSessions.filter(s => s.type === 'live' || !s.type) : liveSessions.filter(s => s.type === 'demo')).map((session) => (
-              <div key={session.id} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center text-pink-600">
-                        <Video className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-gray-900">{session.title}</h3>
-                        <p className="text-sm text-gray-500">by {session.facultyName && !session.facultyName.includes('Pending') ? session.facultyName : 'Admin'}</p>
-                      </div>
-                    </div>
-                    <span className={cn(
-                      "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                      session.status === 'live' ? "bg-red-50 text-red-600 animate-pulse" :
-                      session.status === 'scheduled' ? "bg-blue-50 text-blue-600" :
-                      "bg-gray-100 text-gray-600"
-                    )}>
-                      {session.status}
-                    </span>
-                  </div>
-                  
-                  <div className="space-y-3 mb-6">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Calendar className="w-4 h-4 text-gray-400" />
-                      <span>{new Date(session.scheduledFor).toLocaleString()}</span>
-                    </div>
-                    {session.recordingUrl && (
-                      <div className="mt-4">
-                        <div className="aspect-video bg-black rounded-xl overflow-hidden">
-                          <SecureVideoPlayer 
-                            url={session.recordingUrl} 
-                            title="Live Session Recording" 
-                            userName={user?.name}
-                            userId={user?.studentId || user?.id}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {session.status === 'completed' ? (
-                    <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold bg-gray-100 text-gray-500 cursor-not-allowed">
-                      <Video className="w-4 h-4" /> Class Ended
-                    </div>
-                  ) : (
-                    <Link
-                      to={`/classroom/${session.roomId}`}
-                      className={cn(
-                        "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold transition-all shadow-md",
-                        session.status === 'live'
-                          ? "bg-pink-600 text-white hover:bg-pink-700 shadow-pink-200 animate-pulse"
-                          : "bg-pink-600 text-white hover:bg-pink-700 shadow-pink-100"
-                      )}
-                    >
-                      <Video className="w-4 h-4" />
-                      {session.status === 'live' ? 'Join Live Class Now' : 'Enter Virtual Classroom'}
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          </div>
         </div>
 
         <div className="space-y-4">
@@ -2508,8 +2652,9 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
             </button>
           </div>
         </div>
-      </>
-    )}
+      </div>
+    </>
+  )}
 
       {/* ID Card Modal */}
       {showIDCard && (

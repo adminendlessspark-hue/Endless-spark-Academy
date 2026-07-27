@@ -135,6 +135,16 @@ export interface ScheduleSlot {
   roomId?: string;
 }
 
+export interface CallRecording {
+  id: string;
+  date: string;
+  duration: string;
+  audioUrl: string;
+  authorId: string;
+  authorName: string;
+  note?: string;
+}
+
 export interface Lead {
   id: string;
   name: string;
@@ -147,6 +157,7 @@ export interface Lead {
   place?: string;
   status: 'new' | 'contacted' | 'willing' | 'demo_scheduled' | 'demo_completed' | 'admission_started' | 'not_interested' | 'not_qualified';
   notes: { id: string; date: string; text: string; authorId: string; authorName: string }[];
+  callRecordings?: CallRecording[];
   createdAt: string;
   updatedAt: string;
   assignedTo?: string;

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { CourseModule, TopicScore, CourseType, TrainingRecord, TrainingPlanRow } from '../types';
-import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2 } from 'lucide-react';
+import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2, Presentation, Languages } from 'lucide-react';
 import { cn, getDirectDownloadUrl, formatCourseName, getOrdinalSuffix } from '../utils';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
@@ -649,17 +649,15 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {user?.role !== 'student' && (
-                        <a 
-                          href={`/api/download?url=${encodeURIComponent(activeModule.mindMapUrl!)}&title=${encodeURIComponent(`Mind Map - ${activeModule.title}`)}`} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center"
-                          title="Download Mind Map"
-                        >
-                          <Download className="w-5 h-5" />
-                        </a>
-                      )}
+                      <a 
+                        href={`/api/download?url=${encodeURIComponent(activeModule.mindMapUrl!)}&title=${encodeURIComponent(`Mind Map - ${activeModule.title}`)}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center cursor-pointer"
+                        title="Download Mind Map"
+                      >
+                        <Download className="w-5 h-5" />
+                      </a>
                     </div>
                   </div>
                 )}
@@ -673,7 +671,7 @@ export default function CourseModules() {
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={() => handleOpenDocument(activeModule.worksheetUrl!, `Worksheet: ${activeModule.title}`, true)}
-                        className="flex-1 flex items-center justify-between p-4 bg-orange-50 border border-orange-100 rounded-xl hover:bg-orange-100 transition-colors group text-left"
+                        className="flex-1 flex items-center justify-between p-4 bg-orange-50 border border-orange-100 rounded-xl hover:bg-orange-100 transition-colors group text-left cursor-pointer"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-orange-600 shadow-sm">
@@ -686,17 +684,50 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-orange-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {user?.role !== 'student' && (
-                        <a 
-                          href={`/api/download?url=${encodeURIComponent(activeModule.worksheetUrl!)}&title=${encodeURIComponent(`Worksheet - ${activeModule.title}`)}`} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="p-4 bg-orange-50 border border-orange-100 rounded-xl hover:bg-orange-100 transition-colors text-orange-600 shadow-sm flex items-center justify-center"
-                          title="Download Worksheet"
-                        >
-                          <Download className="w-5 h-5" />
-                        </a>
-                      )}
+                      <a 
+                        href={`/api/download?url=${encodeURIComponent(activeModule.worksheetUrl!)}&title=${encodeURIComponent(`Worksheet - ${activeModule.title}`)}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-4 bg-orange-50 border border-orange-100 rounded-xl hover:bg-orange-100 transition-colors text-orange-600 shadow-sm flex items-center justify-center cursor-pointer"
+                        title="Download Worksheet"
+                      >
+                        <Download className="w-5 h-5" />
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {activeModule.slidesUrl && (
+                  <div className="space-y-4">
+                    <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                      <Presentation className="w-4 h-4 text-pink-600" />
+                      PowerPoint Presentation Slides
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleOpenDocument(activeModule.slidesUrl!, `Slides Presentation: ${activeModule.title}`, true)}
+                        className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-pink-600 shadow-sm">
+                            <Presentation className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-900">View Presentation Slides</p>
+                            <p className="text-xs text-gray-500">PowerPoint (.pptx) / PDF Slides Deck</p>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
+                      </button>
+                      <a 
+                        href={`/api/download?url=${encodeURIComponent(activeModule.slidesUrl!)}&title=${encodeURIComponent(`Slides - ${activeModule.title}`)}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center cursor-pointer"
+                        title="Download Slides"
+                      >
+                        <Download className="w-5 h-5" />
+                      </a>
                     </div>
                   </div>
                 )}
@@ -710,10 +741,17 @@ export default function CourseModules() {
                                 activeModule.referenceMaterialUrl.toLowerCase().includes('.7z?');
                   return (
                     <div className="space-y-4">
-                      <h4 className="font-bold text-gray-900 flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-purple-600" />
-                        Reference Material {isZip ? '(ZIP Archive)' : ''}
-                      </h4>
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-purple-600" />
+                          Reference Material {isZip ? '(ZIP Archive)' : ''}
+                        </h4>
+                        {isZip && (
+                          <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase bg-purple-100 text-purple-700 rounded-md tracking-wider">
+                            ZIP Archive
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2">
                         <button 
                           onClick={() => handleOpenDocument(activeModule.referenceMaterialUrl!, `Reference Material: ${activeModule.title}`, true)}
@@ -807,12 +845,12 @@ export default function CourseModules() {
                   <div className="space-y-4">
                     <h4 className="font-bold text-gray-900 flex items-center gap-2">
                       <FolderGit2 className="w-4 h-4 text-pink-600" />
-                      Project
+                      Project Template / Start Files
                     </h4>
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={() => handleOpenDocument(activeModule.projectTemplateUrl!, `Project Template: ${activeModule.title}`, true)}
-                        className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left"
+                        className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left cursor-pointer"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-pink-600 shadow-sm">
@@ -825,17 +863,15 @@ export default function CourseModules() {
                         </div>
                         <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
                       </button>
-                      {user?.role !== 'student' && (
-                        <a 
-                          href={`/api/download?url=${encodeURIComponent(activeModule.projectTemplateUrl!)}&title=${encodeURIComponent(`Project Template - ${activeModule.title}`)}`} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center"
-                          title="Download Project Template"
-                        >
-                          <Download className="w-5 h-5" />
-                        </a>
-                      )}
+                      <a 
+                        href={`/api/download?url=${encodeURIComponent(activeModule.projectTemplateUrl!)}&title=${encodeURIComponent(`Project Template - ${activeModule.title}`)}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center cursor-pointer"
+                        title="Download Project Template"
+                      >
+                        <Download className="w-5 h-5" />
+                      </a>
                     </div>
                   </div>
                 )}

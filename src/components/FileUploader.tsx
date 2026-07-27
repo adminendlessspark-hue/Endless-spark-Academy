@@ -116,8 +116,10 @@ export function FileUploader({ onUploadComplete, onBeforeUpload, path, label, ac
         // More descriptive error message based on common Firebase Storage errors
         let msg = serverError?.message || "Upload failed. Please check your internet and try again.";
         
-        if (err.message.includes('permission-denied') || err.message.includes('unauthorized')) {
-          msg = "Upload failed: Permission denied. Storage rules may be blocking this path or you are not signed in as an admin.";
+        if (serverError?.message && !serverError.message.includes('Status 0')) {
+          msg = `Upload failed: ${serverError.message}`;
+        } else if (err.message.includes('permission-denied') || err.message.includes('unauthorized')) {
+          msg = "Upload failed: Storage permission denied. Please verify your file format and server connection.";
         } else if (err.message.includes('quota-exceeded')) {
           msg = "Upload failed: Storage quota exceeded.";
         } else if (err.message.includes('retry-limit-exceeded')) {

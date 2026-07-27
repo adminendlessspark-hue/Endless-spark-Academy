@@ -12,6 +12,7 @@ import { WebSocketServer } from "ws";
 import { GoogleGenAI, Modality } from "@google/genai";
 import JSZip from "jszip";
 import nodemailer from "nodemailer";
+import { Readable } from "stream";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1057,6 +1058,134 @@ async function startServer() {
     }
   });
 
+  function pipeWebStreamToRes(fetchResponse: Response, res: any) {
+    const contentType = fetchResponse.headers.get("content-type") || "video/webm";
+    const finalType = contentType.includes("html") ? "video/webm" : contentType;
+    
+    res.setHeader("Content-Type", finalType);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Range");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Accept-Ranges", "bytes");
+
+    if (fetchResponse.status === 206) {
+      res.status(206);
+      if (fetchResponse.headers.get("content-range")) {
+        res.setHeader("Content-Range", fetchResponse.headers.get("content-range")!);
+      }
+    }
+
+    if (fetchResponse.headers.get("content-length")) {
+      res.setHeader("Content-Length", fetchResponse.headers.get("content-length")!);
+    }
+
+    if (fetchResponse.body) {
+      const nodeStream = Readable.fromWeb(fetchResponse.body as any);
+      nodeStream.on("error", (err) => {
+        console.error("NodeStream error:", err);
+        if (!res.headersSent) res.status(500).send("Stream error");
+      });
+      return nodeStream.pipe(res);
+    }
+    return res.status(500).send("No stream body");
+  }
+
+  // API Route to proxy & stream Google Drive videos directly (bypassing Drive iframe processing delay)
+  app.get("/api/stream-drive-video", async (req: any, res: any) => {
+    const rawUrl = (req.query.url || req.query.id) as string;
+    if (!rawUrl) {
+      return res.status(400).send("Missing url or id parameter");
+    }
+
+    let fileId: string | null = null;
+    if (rawUrl.length >= 20 && !rawUrl.includes("/")) {
+      fileId = rawUrl;
+    } else {
+      const fileIdMatch = rawUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+                          rawUrl.match(/id=([a-zA-Z0-9_-]+)/) ||
+                          rawUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
+                          rawUrl.match(/([a-zA-Z0-9_-]{20,})/);
+      if (fileIdMatch) {
+        fileId = fileIdMatch[1];
+      }
+    }
+
+    if (!fileId) {
+      return res.status(400).send("Invalid Google Drive ID or URL");
+    }
+
+    // Try Google Drive API first if service account is available
+    try {
+      const auth = getGoogleAuth();
+      if (auth) {
+        const drive = google.drive({ version: "v3", auth });
+        const meta = await drive.files.get({ fileId, fields: "id, name, mimeType, size" });
+        const mimeType = meta.data.mimeType || "video/webm";
+
+        res.setHeader("Content-Type", mimeType);
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Range");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("Accept-Ranges", "bytes");
+
+        if (meta.data.size) {
+          res.setHeader("Content-Length", meta.data.size);
+        }
+
+        const driveStream = await drive.files.get(
+          { fileId, alt: "media" },
+          { 
+            responseType: "stream",
+            headers: req.headers.range ? { range: req.headers.range } : {} 
+          }
+        );
+
+        if (req.headers.range && driveStream.status === 206) {
+          res.status(206);
+          if (driveStream.headers['content-range']) {
+            res.setHeader('Content-Range', driveStream.headers['content-range']);
+          }
+        }
+
+        driveStream.data.on("error", (err: any) => {
+          console.error("Error in Drive API stream:", err.message);
+          if (!res.headersSent) res.status(500).send("Stream error");
+        });
+
+        return driveStream.data.pipe(res);
+      }
+    } catch (apiErr: any) {
+      console.warn("Drive API stream attempt skipped/failed, trying direct HTTP fetch:", apiErr.message || apiErr);
+    }
+
+    // Fallback: Direct fetch from Google Drive usercontent endpoint
+    try {
+      const directUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0&confirm=t`;
+      const fetchHeaders: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      };
+      if (req.headers.range) {
+        fetchHeaders['Range'] = req.headers.range;
+      }
+
+      const response = await fetch(directUrl, { headers: fetchHeaders });
+
+      if (!response.ok && response.status !== 206) {
+        const ucUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`;
+        const ucResponse = await fetch(ucUrl, { headers: fetchHeaders });
+        if (!ucResponse.ok && ucResponse.status !== 206) {
+          return res.status(ucResponse.status).send("Failed to stream Google Drive video");
+        }
+        return pipeWebStreamToRes(ucResponse, res);
+      }
+
+      return pipeWebStreamToRes(response, res);
+    } catch (err: any) {
+      console.error("Error streaming Drive video:", err);
+      return res.status(500).send("Failed to stream video");
+    }
+  });
+
   // API Route for file upload to bypass client-side CORS
   app.post("/api/upload-template", upload.single("file"), async (req: any, res: any) => {
     if (!req.file) {
@@ -1133,10 +1262,18 @@ async function startServer() {
           if (!fs.existsSync(localDestDir)) {
             fs.mkdirSync(localDestDir, { recursive: true });
           }
-          const localFileName = `${Date.now()}_${originalname.replace(/\s+/g, '_')}`;
+          const sanitizedOriginalName = originalname.replace(/[^a-zA-Z0-9_.-]/g, '_');
+          const localFileName = `${Date.now()}_${sanitizedOriginalName}`;
           const localFilePath = path.join(localDestDir, localFileName);
           
-          fs.copyFileSync(tempPath, localFilePath);
+          try {
+            fs.copyFileSync(tempPath, localFilePath);
+          } catch (copyErr) {
+            // Fallback to read/write sync if copyFileSync fails across filesystems
+            const fileData = fs.readFileSync(tempPath);
+            fs.writeFileSync(localFilePath, fileData);
+          }
+
           url = `/${relativeDest}/${localFileName}`;
           console.log("Backend: Successfully saved upload to local fallback path:", url);
           isLocalUploaded = true;
@@ -1144,12 +1281,10 @@ async function startServer() {
         } catch (localSaveErr: any) {
           console.error("Backend: Local fallback storage failed:", localSaveErr);
           
-          let customMessage = lastError?.message || "Storage upload failed.";
+          let customMessage = localSaveErr?.message || lastError?.message || "Storage upload failed.";
           const errLower = customMessage.toLowerCase();
           if (errLower.includes("not found") || errLower.includes("does not exist") || errLower.includes("404")) {
-            customMessage = "Firebase Storage has not been enabled or provisioned in your Firebase Project console.\n\nPlease go to your Firebase Console (https://console.firebase.google.com), open this project, click on 'Storage' in the left-hand navigation under 'Build', and click 'Get Started' to activate Storage first.";
-          } else if (errLower.includes("permission") || errLower.includes("unauthorized") || errLower.includes("403")) {
-            customMessage = "Permission denied while uploading into Firebase Storage.\n\nPlease verify that current Storage rules allow writes or check if the Google Cloud Run Service Account has access to GCS. Go to your Firebase Console -> Storage and verify that its rules are initialized (default rules allow reading & writing).";
+            customMessage = "Firebase Storage or upload directory is not accessible. Please check server permissions.";
           }
           
           throw new Error(customMessage);

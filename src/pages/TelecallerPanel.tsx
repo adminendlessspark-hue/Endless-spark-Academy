@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, onSnapshot, addDoc, updateDoc, doc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
@@ -9,7 +9,7 @@ import {
   resolveTemplateText 
 } from '../utils/whatsappTemplates';
 import { Lead } from '../types';
-import { Phone, Mail, Calendar, CheckCircle, XCircle, Clock, UserPlus, FileText, Search, Filter, Plus, Edit2, Trash2, Briefcase, MessageCircle, ChevronDown, ChevronUp, BookOpen, Sparkles, Loader2 } from 'lucide-react';
+import { Phone, Mail, Calendar, CheckCircle, XCircle, Clock, UserPlus, FileText, Search, Filter, Plus, Edit2, Trash2, Briefcase, MessageCircle, ChevronDown, ChevronUp, BookOpen, Sparkles, Loader2, Mic, MicOff, Square, Play, Pause, Volume2, Upload, Radio, HelpCircle, PhoneCall, PhoneOff, FileAudio, Download } from 'lucide-react';
 import { cn } from '../utils';
 
 export default function TelecallerPanel() {
@@ -33,6 +33,217 @@ export default function TelecallerPanel() {
   const [nextFollowUp, setNextFollowUp] = useState('');
   const [showTodayFollowUps, setShowTodayFollowUps] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+
+  // In-App Calling & Call Recording States
+  const [activeCallLead, setActiveCallLead] = useState<Lead | null>(null);
+  const [callStatus, setCallStatus] = useState<'idle' | 'dialing' | 'connected' | 'paused' | 'ended'>('idle');
+  const [callTimer, setCallTimer] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [callNotes, setCallNotes] = useState('');
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [isUploadingRecording, setIsUploadingRecording] = useState(false);
+  const [uploadProgressMsg, setUploadProgressMsg] = useState('');
+
+  // Advice & Guide Modal State
+  const [showCallAdviceModal, setShowCallAdviceModal] = useState(false);
+
+  // Expanded Call Recordings State per Lead
+  const [expandedRecordings, setExpandedRecordings] = useState<Record<string, boolean>>({});
+
+  // Audio Recording Refs
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Timer Helper
+  const startCallTimer = () => {
+    if (callTimerRef.current) clearInterval(callTimerRef.current);
+    callTimerRef.current = setInterval(() => {
+      setCallTimer(prev => prev + 1);
+    }, 1000);
+  };
+
+  const stopCallTimer = () => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Start In-App Call with Live Microphone Recording
+  const handleStartInAppCall = async (lead: Lead) => {
+    setActiveCallLead(lead);
+    setCallStatus('dialing');
+    setCallTimer(0);
+    setIsMuted(false);
+    setCallNotes('');
+    setRecordingBlob(null);
+    setRecordingUrl(null);
+    audioChunksRef.current = [];
+
+    // Trigger device phone dialer directly without opening popup tabs
+    window.location.href = `tel:${lead.phone.replace(/\s+/g, '')}`;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+      });
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        setRecordingBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setRecordingUrl(url);
+      };
+
+      mediaRecorder.start(1000);
+      setCallStatus('connected');
+      startCallTimer();
+    } catch (err) {
+      console.error("Error accessing microphone for call recording:", err);
+      // Still allow call timer and notes even if mic permission is restricted
+      setCallStatus('connected');
+      startCallTimer();
+    }
+  };
+
+  // Mute / Unmute Microphone
+  const toggleMuteMicrophone = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = isMuted;
+      });
+      setIsMuted(!isMuted);
+    }
+  };
+
+  // Pause / Resume Recording
+  const togglePauseRecording = () => {
+    if (mediaRecorderRef.current) {
+      if (mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.pause();
+        stopCallTimer();
+        setCallStatus('paused');
+      } else if (mediaRecorderRef.current.state === 'paused') {
+        mediaRecorderRef.current.resume();
+        startCallTimer();
+        setCallStatus('connected');
+      }
+    }
+  };
+
+  // End Call
+  const handleEndCall = () => {
+    stopCallTimer();
+    setCallStatus('ended');
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        console.error("Error stopping media recorder:", e);
+      }
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
+  // Save Call Recording & Add Note
+  const handleSaveCallRecording = async () => {
+    if (!activeCallLead) return;
+    setIsUploadingRecording(true);
+    setUploadProgressMsg('Saving call recording and logs...');
+
+    try {
+      let finalAudioUrl = '';
+
+      if (recordingBlob && recordingBlob.size > 0) {
+        setUploadProgressMsg('Uploading audio recording file...');
+        const formDataUpload = new FormData();
+        const fileExt = recordingBlob.type.includes('ogg') ? 'ogg' : 'webm';
+        const fileName = `call_recording_${activeCallLead.id}_${Date.now()}.${fileExt}`;
+        formDataUpload.append('file', new File([recordingBlob], fileName, { type: recordingBlob.type }));
+
+        const res = await fetch('/api/upload-template?path=course_modules/call_recordings', {
+          method: 'POST',
+          body: formDataUpload
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          finalAudioUrl = data.url || '';
+        } else {
+          finalAudioUrl = recordingUrl || '';
+        }
+      }
+
+      const durationStr = formatTime(callTimer);
+      const newRecordingItem = {
+        id: Date.now().toString(),
+        date: new Date().toISOString(),
+        duration: durationStr,
+        audioUrl: finalAudioUrl,
+        authorId: user?.id || 'telecaller',
+        authorName: user?.name || 'Telecaller',
+        note: callNotes.trim()
+      };
+
+      const updatedRecordings = [newRecordingItem, ...(activeCallLead.callRecordings || [])];
+
+      const callNoteText = `📞 In-App Recorded Call (${durationStr}): ${callNotes.trim() || 'Call completed.'}${finalAudioUrl ? ' [Audio Recording Attached]' : ''}`;
+      const newNoteObj = {
+        id: Date.now().toString(),
+        date: new Date().toISOString(),
+        text: callNoteText,
+        authorId: user?.id || 'telecaller',
+        authorName: user?.name || 'Telecaller'
+      };
+      const updatedNotes = [newNoteObj, ...activeCallLead.notes];
+
+      await updateDoc(doc(db, 'leads', activeCallLead.id), {
+        callRecordings: updatedRecordings,
+        notes: updatedNotes,
+        status: activeCallLead.status === 'new' ? 'contacted' : activeCallLead.status,
+        updatedAt: new Date().toISOString()
+      });
+
+      setSuccessMessage('Call recording and log saved successfully!');
+      setTimeout(() => setSuccessMessage(null), 3500);
+
+      setActiveCallLead(null);
+      setCallStatus('idle');
+      setRecordingBlob(null);
+      setRecordingUrl(null);
+    } catch (err) {
+      console.error("Error saving call recording:", err);
+      alert("Failed to save call recording. Please try again.");
+    } finally {
+      setIsUploadingRecording(false);
+      setUploadProgressMsg('');
+    }
+  };
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -293,6 +504,13 @@ export default function TelecallerPanel() {
             WhatsApp Templates
           </button>
           <button
+            onClick={() => setShowCallAdviceModal(true)}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white transition-all shadow-md rounded-xl py-2 px-4 text-sm font-medium cursor-pointer"
+          >
+            <Radio className="w-5 h-5 text-yellow-300 animate-pulse" />
+            Call Recording Guide
+          </button>
+          <button
             onClick={() => {
               setEditingLeadDetails(null);
               setFormData({ name: '', phone: '', countryCode: '+91', email: '', companyName: '', workExperience: '', currentRole: '', source: 'Advertisement', place: '', status: 'new' });
@@ -445,13 +663,21 @@ export default function TelecallerPanel() {
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full custom-scrollbar touch-pan-x whitespace-nowrap justify-start lg:justify-end w-full lg:w-auto shrink-0 pr-2">
                   <a 
                     href={`tel:${lead.phone.replace(/\s+/g, '')}`}
-                    onClick={() => handleAddNote(lead.id, lead.notes, "Initiated system call")}
-                    className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-md shrink-0"
-                    title="Call Lead"
+                    onClick={() => handleAddNote(lead.id, lead.notes, "Initiated direct call")}
+                    className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-md shrink-0 cursor-pointer"
+                    title="Direct Phone Call (Triggers Phone Dialer Immediately)"
                   >
-                    <Phone className="w-4 h-4" />
-                    <span>Call</span>
+                    <PhoneCall className="w-4 h-4 animate-bounce" />
+                    <span>Direct Call</span>
                   </a>
+                  <button 
+                    onClick={() => handleStartInAppCall(lead)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg text-sm font-bold transition-all active:scale-95 shadow-md shrink-0 cursor-pointer"
+                    title="In-App Call & Live Microphone Audio Recording"
+                  >
+                    <Mic className="w-4 h-4 text-yellow-300 animate-pulse" />
+                    <span>Call & Record</span>
+                  </button>
                   <a 
                     href={`https://wa.me/${lead.phone.replace(/\D/g, '')}`}
                     target="_blank"
@@ -624,6 +850,60 @@ export default function TelecallerPanel() {
                   </div>
                 </div>
               )}
+
+              {/* Call Recordings Accordion */}
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <button 
+                  onClick={() => setExpandedRecordings(prev => ({ ...prev, [lead.id]: !prev[lead.id] }))}
+                  className={cn(
+                    "w-full flex items-center justify-between font-bold text-[13px] md:text-sm transition-all px-4 py-2 rounded-xl border shadow-2xs cursor-pointer",
+                    expandedRecordings[lead.id]
+                      ? "bg-purple-50 text-purple-700 border-purple-300"
+                      : "bg-white text-purple-700 border-purple-200 hover:bg-purple-50/50"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <FileAudio className="w-4 h-4 text-purple-600" /> 
+                    <span>Call Recordings ({lead.callRecordings?.length || 0})</span>
+                  </div>
+                  {expandedRecordings[lead.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {expandedRecordings[lead.id] && (
+                  <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-1">
+                    {(!lead.callRecordings || lead.callRecordings.length === 0) ? (
+                      <div className="bg-white p-3 rounded-lg border border-gray-100 text-xs text-gray-500 italic text-center">
+                        No audio call recordings attached yet. Use "Call & Record" to save recorded calls.
+                      </div>
+                    ) : (
+                      lead.callRecordings.map(rec => (
+                        <div key={rec.id} className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs text-xs space-y-2">
+                          <div className="flex justify-between items-center text-gray-600 font-semibold">
+                            <span className="flex items-center gap-1.5 text-purple-800">
+                              <Mic className="w-3.5 h-3.5 text-purple-600" />
+                              {rec.authorName || 'Telecaller'}
+                            </span>
+                            <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">
+                              Duration: {rec.duration || '00:00'}
+                            </span>
+                          </div>
+                          {rec.note && <p className="text-gray-800 italic bg-gray-50 p-2 rounded-lg border border-gray-100">{rec.note}</p>}
+                          {rec.audioUrl ? (
+                            <div className="pt-1">
+                              <audio controls src={rec.audioUrl} className="w-full h-8 rounded-lg outline-none" />
+                            </div>
+                          ) : (
+                            <p className="text-gray-400 italic">No audio file available</p>
+                          )}
+                          <div className="text-[10px] text-gray-400 text-right">
+                            {new Date(rec.date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -957,6 +1237,187 @@ export default function TelecallerPanel() {
                 className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
               >
                 Convert
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active In-App Call & Live Recording Modal */}
+      {activeCallLead && (
+        <div className="fixed inset-0 bg-black/65 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-purple-100 animate-in zoom-in-95 duration-200">
+            <div className="text-center space-y-4">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-tr from-purple-600 to-indigo-600 text-white rounded-full shadow-lg ring-8 ring-purple-100 relative">
+                {callStatus === 'connected' ? (
+                  <PhoneCall className="w-10 h-10 animate-bounce" />
+                ) : callStatus === 'ended' ? (
+                  <PhoneOff className="w-10 h-10 text-red-300" />
+                ) : (
+                  <Phone className="w-10 h-10 animate-pulse" />
+                )}
+                {callStatus === 'connected' && (
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-5 w-5 bg-red-500 border-2 border-white"></span>
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-extrabold text-gray-900">{activeCallLead.name}</h2>
+                <p className="text-lg font-bold text-purple-700 mt-1">{activeCallLead.phone}</p>
+                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-purple-50 text-purple-800 rounded-full text-xs font-bold border border-purple-200">
+                  <Radio className="w-3.5 h-3.5 text-purple-600 animate-pulse" />
+                  {callStatus === 'dialing' && 'Initiating Call & Microphone...'}
+                  {callStatus === 'connected' && 'Call Active & Recording...'}
+                  {callStatus === 'paused' && 'Recording Paused'}
+                  {callStatus === 'ended' && 'Call Completed'}
+                </div>
+              </div>
+
+              {/* Timer Display */}
+              <div className="py-3 bg-gray-900 text-white rounded-2xl font-mono text-3xl font-bold tracking-widest shadow-inner flex items-center justify-center gap-3">
+                <Clock className="w-6 h-6 text-purple-400" />
+                <span>{formatTime(callTimer)}</span>
+              </div>
+
+              {/* Active Call Controls */}
+              {callStatus !== 'ended' ? (
+                <div className="flex items-center justify-center gap-4 py-3">
+                  <button
+                    onClick={toggleMuteMicrophone}
+                    className={cn(
+                      "p-4 rounded-full font-bold transition-all shadow-md active:scale-90 flex flex-col items-center gap-1 text-xs",
+                      isMuted ? "bg-red-100 text-red-700 hover:bg-red-200" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    )}
+                    title={isMuted ? "Unmute Mic" : "Mute Mic"}
+                  >
+                    {isMuted ? <MicOff className="w-6 h-6 text-red-600" /> : <Mic className="w-6 h-6 text-purple-600" />}
+                    <span>{isMuted ? 'Muted' : 'Mute'}</span>
+                  </button>
+
+                  <button
+                    onClick={togglePauseRecording}
+                    className="p-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full font-bold transition-all shadow-md active:scale-90 flex flex-col items-center gap-1 text-xs"
+                    title={callStatus === 'paused' ? "Resume Recording" : "Pause Recording"}
+                  >
+                    {callStatus === 'paused' ? <Play className="w-6 h-6 text-green-600" /> : <Pause className="w-6 h-6 text-amber-600" />}
+                    <span>{callStatus === 'paused' ? 'Resume' : 'Pause'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleEndCall}
+                    className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold transition-all shadow-lg active:scale-90 flex flex-col items-center gap-1 text-xs ring-4 ring-red-100"
+                    title="End Call"
+                  >
+                    <PhoneOff className="w-6 h-6" />
+                    <span>End Call</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4 pt-2 text-left">
+                  {recordingUrl && (
+                    <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 space-y-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-purple-900">
+                        <Volume2 className="w-4 h-4 text-purple-600" /> Live Audio Recording Preview ({formatTime(callTimer)})
+                      </div>
+                      <audio controls src={recordingUrl} className="w-full h-10 rounded-lg outline-none" />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Call Outcome Notes / Discussion Summary</label>
+                    <textarea
+                      rows={3}
+                      placeholder="e.g. Lead interested in Graphic Design course, demo session confirmed for Friday..."
+                      value={callNotes}
+                      onChange={(e) => setCallNotes(e.target.value)}
+                      className="w-full p-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none text-gray-800"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button
+                      onClick={() => {
+                        setActiveCallLead(null);
+                        setCallStatus('idle');
+                      }}
+                      className="px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl font-bold text-sm"
+                    >
+                      Discard Call
+                    </button>
+                    <button
+                      onClick={handleSaveCallRecording}
+                      disabled={isUploadingRecording}
+                      className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {isUploadingRecording ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>{uploadProgressMsg || 'Saving...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 text-green-300" />
+                          <span>Save Call & Recording</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Call & Recording Setup Guide Modal */}
+      {showCallAdviceModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-2xl border border-purple-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <HelpCircle className="w-6 h-6 text-purple-600" /> Telecaller Call & Recording Guide
+              </h2>
+              <button onClick={() => setShowCallAdviceModal(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">✕</button>
+            </div>
+
+            <div className="space-y-4 text-sm text-gray-700 leading-relaxed">
+              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200">
+                <h3 className="font-bold text-emerald-900 flex items-center gap-2 text-base mb-1">
+                  <PhoneCall className="w-5 h-5 text-emerald-700" /> 1. Direct Phone Call
+                </h3>
+                <p className="text-xs text-emerald-800">
+                  Click <strong>"Direct Call"</strong> on any lead card to trigger your phone dialer immediately with the lead's mobile number.
+                </p>
+              </div>
+
+              <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200">
+                <h3 className="font-bold text-purple-900 flex items-center gap-2 text-base mb-1">
+                  <Mic className="w-5 h-5 text-purple-700" /> 2. In-App Call & Live Recording
+                </h3>
+                <p className="text-xs text-purple-800">
+                  Click <strong>"Call & Record"</strong> on any lead card. The app triggers your phone dialer and captures live microphone audio during the conversation. Upon ending the call, your audio recording and outcome notes are automatically saved to the lead's history.
+                </p>
+              </div>
+
+              <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-200">
+                <h3 className="font-bold text-indigo-900 flex items-center gap-2 text-base mb-1">
+                  <CheckCircle className="w-5 h-5 text-indigo-700" /> 3. Review Call Logs
+                </h3>
+                <p className="text-xs text-indigo-800">
+                  Admins and Telecallers can expand <strong>"Call Recordings"</strong> under any lead card to listen to audio recordings, check durations, and review follow-up notes anytime.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setShowCallAdviceModal(false)}
+                className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-sm shadow-md"
+              >
+                Got It
               </button>
             </div>
           </div>

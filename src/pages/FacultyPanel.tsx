@@ -1080,14 +1080,17 @@ export default function FacultyPanel() {
             </div>
             <div className="p-6">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Google Drive Link</label>
-                <input
-                  type="url"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Google Drive Video Link(s)</label>
+                <textarea
+                  rows={4}
                   value={recordingUrl}
                   onChange={(e) => setRecordingUrl(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                  placeholder="https://drive.google.com/..."
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-mono text-sm"
+                  placeholder="https://drive.google.com/file/d/...&#10;Part 2: https://drive.google.com/file/d/..."
                 />
+                <p className="text-xs text-gray-500 mt-1.5">
+                  <strong>Multiple Videos Tip:</strong> Put each video link on a new line. You can also add labels like <code>Part 1: https://...</code> or <code>Part 2: https://...</code>
+                </p>
               </div>
             </div>
             <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">

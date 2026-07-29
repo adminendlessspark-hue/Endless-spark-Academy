@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { CourseModule, TopicScore, CourseType, TrainingRecord, TrainingPlanRow } from '../types';
-import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2, Presentation, Languages, ShieldCheck } from 'lucide-react';
+import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2, Presentation, Languages, ShieldCheck, ExternalLink } from 'lucide-react';
 import { cn, getDirectDownloadUrl, formatCourseName, getOrdinalSuffix } from '../utils';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
@@ -70,19 +70,25 @@ export default function CourseModules() {
     const isImage = lowerUrl.endsWith('.png') || lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg') || lowerUrl.endsWith('.webp') || lowerUrl.includes('.png?') || lowerUrl.includes('.jpg?') || lowerUrl.includes('.jpeg?') || lowerUrl.includes('.webp?') || (absoluteUrl.includes('/uploads/') && (lowerUrl.endsWith('.png') || lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg') || lowerUrl.endsWith('.webp')));
     const isOfficeDoc = lowerUrl.endsWith('.doc') || lowerUrl.endsWith('.docx') || lowerUrl.endsWith('.ppt') || lowerUrl.endsWith('.pptx') || lowerUrl.endsWith('.xls') || lowerUrl.endsWith('.xlsx') || lowerUrl.includes('.doc?') || lowerUrl.includes('.docx?') || lowerUrl.includes('.ppt?') || lowerUrl.includes('.pptx?') || lowerUrl.includes('.xls?') || lowerUrl.includes('.xlsx?');
 
+    const isEmbeddableUrl = 
+      absoluteUrl.includes('indd.adobe.com') || 
+      absoluteUrl.includes('youtube.com/embed') || 
+      absoluteUrl.includes('vimeo.com/video') ||
+      absoluteUrl.includes('canva.com/design') ||
+      absoluteUrl.includes('figma.com/embed');
+
     if (isOfficeDoc) {
       // Use official Google Docs embedded viewer to render Office documents seamlessly
       const googleViewerUrl = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(absoluteUrl)}`;
       setViewingIframe({ url: googleViewerUrl, title });
-    } else if (
-      absoluteUrl.includes('indd.adobe.com') || 
-      absoluteUrl.includes('youtube.com/embed') || 
-      absoluteUrl.includes('vimeo.com/video') ||
-      (!isPdf && !isImage)
-    ) {
+    } else if (isEmbeddableUrl) {
       setViewingIframe({ url: absoluteUrl, title });
-    } else {
+    } else if (isPdf || isImage) {
       setViewingPdf({ url: absoluteUrl, title, isSecure });
+    } else {
+      // Regular web page URLs (e.g. https://endlesssparkcreativehub.in/modules or external sites)
+      // Open directly in a new tab so browser iframe X-Frame-Options security policies don't block display
+      window.open(absoluteUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -1664,6 +1670,15 @@ export default function CourseModules() {
                 >
                   <Maximize className="w-5 h-5 text-gray-500" />
                 </button>
+                <a 
+                  href={viewingIframe.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  title="Open Link in New Tab"
+                >
+                  <ExternalLink className="w-5 h-5 text-gray-500" />
+                </a>
                 <button 
                   onClick={() => {
                     setViewingIframe(null);

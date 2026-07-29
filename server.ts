@@ -1254,11 +1254,13 @@ async function startServer() {
         }
       }
 
-      // Handle relative or absolute local files
-      const isLocalPath = targetUrl.startsWith("/") || targetUrl.startsWith("uploads/") || !/^(f|ht)tps?:\/\//i.test(targetUrl);
-      if (isLocalPath) {
+      // Handle relative, absolute, or domain-prefixed local uploads
+      const uploadIndex = targetUrl.indexOf("/uploads/");
+      if (uploadIndex !== -1 || targetUrl.startsWith("/") || targetUrl.startsWith("uploads/") || !/^(f|ht)tps?:\/\//i.test(targetUrl)) {
         let relativePath = targetUrl;
-        if (relativePath.startsWith("/")) {
+        if (uploadIndex !== -1) {
+          relativePath = targetUrl.substring(uploadIndex + 1); // e.g. "uploads/course_modules/..."
+        } else if (relativePath.startsWith("/")) {
           relativePath = relativePath.substring(1);
         }
         

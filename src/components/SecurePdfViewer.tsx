@@ -57,6 +57,7 @@ export default function SecurePdfViewer({
       
       const directUrl = getDirectDownloadUrl(url);
       
+      const proxyUrl = `/api/proxy-pdf?url=${encodeURIComponent(directUrl)}&title=${encodeURIComponent(title || 'Course Resource')}`;
       let urlsToTry: string[] = [];
       let success = false;
       const uploadIndex = directUrl.indexOf('/uploads/');
@@ -64,30 +65,21 @@ export default function SecurePdfViewer({
       if (uploadIndex !== -1) {
         // This is a local upload! Strip domain to keep it relative, 100% same-origin & ultra-fast
         const relativeUrl = directUrl.substring(uploadIndex);
-        urlsToTry = [relativeUrl, directUrl];
+        urlsToTry = [relativeUrl, proxyUrl, directUrl];
       } else if (directUrl.startsWith('/') || directUrl.startsWith('uploads/')) {
         const relativeUrl = directUrl.startsWith('/') ? directUrl : `/${directUrl}`;
-        urlsToTry = [relativeUrl, directUrl];
+        urlsToTry = [relativeUrl, proxyUrl, directUrl];
       } else {
         // External URLs (e.g. Google Drive, CDN links, Firebase Storage, GCS)
         const proxies = [
-          (u: string) => `/api/proxy-pdf?url=${encodeURIComponent(u)}&title=${encodeURIComponent(title || '')}`,
-          (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-          (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-          (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-          (u: string) => u // Original URL
+          proxyUrl,
+          `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
+          `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(directUrl)}`,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`,
+          directUrl // Original URL
         ];
 
-        // Always prioritize our custom high-speed backend proxy first, then try original direct URL, then other public proxies
-        const orderedProxies = [
-          proxies[0],       // Custom server-side proxy (fast & bypassed CORS)
-          (u: string) => u, // Direct fetch (might be CORS enabled)
-          proxies[1],       // corsproxy.io
-          proxies[2],       // codetabs
-          proxies[3]        // allorigins
-        ];
-
-        urlsToTry = orderedProxies.map(p => p(directUrl));
+        urlsToTry = proxies;
       }
 
       for (let i = 0; i < urlsToTry.length; i++) {
@@ -124,7 +116,7 @@ export default function SecurePdfViewer({
           }
 
           // Basic validation to ensure we didn't get an HTML error page from the proxy
-          if (blob.type.includes('text/html') || blob.size < 1000) {
+          if (blob.type.includes('text/html') || blob.size < 100) {
              throw new Error('Invalid PDF data received');
           }
 
@@ -145,6 +137,33 @@ export default function SecurePdfViewer({
           }
         } catch (err) {
           console.warn(`Fetch attempt ${i} failed:`, err);
+        }
+      }
+
+      // Final bulletproof attempt: Call our custom backend PDF proxy directly
+      if (!success && isMounted) {
+        try {
+          console.log("SecurePdfViewer: Making ultimate fallback request to proxyUrl:", proxyUrl);
+          const res = await fetch(proxyUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            if (blob.type.startsWith('image/')) {
+              const objUrl = URL.createObjectURL(blob);
+              objectUrlToRevoke = objUrl;
+              setPdfData(objUrl);
+              setIsImage(true);
+              setIsLoading(false);
+              success = true;
+            } else {
+              const ab = await blob.arrayBuffer();
+              setPdfData(ab);
+              setIsImage(false);
+              setIsLoading(false);
+              success = true;
+            }
+          }
+        } catch (e) {
+          console.error("SecurePdfViewer: Final proxy fallback error:", e);
         }
       }
 

@@ -66,7 +66,7 @@ export default function CourseModules() {
     }
 
     // 2. Handle standard iframe-compatible content, images, Office documents, or PDFs
-    const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('.pdf?') || (absoluteUrl.includes('/uploads/') && lowerUrl.endsWith('.pdf'));
+    const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('.pdf?') || absoluteUrl.includes('/uploads/') || lowerUrl.includes('assignment_papers');
     const isImage = lowerUrl.endsWith('.png') || lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg') || lowerUrl.endsWith('.webp') || lowerUrl.includes('.png?') || lowerUrl.includes('.jpg?') || lowerUrl.includes('.jpeg?') || lowerUrl.includes('.webp?') || (absoluteUrl.includes('/uploads/') && (lowerUrl.endsWith('.png') || lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg') || lowerUrl.endsWith('.webp')));
     const isOfficeDoc = lowerUrl.endsWith('.doc') || lowerUrl.endsWith('.docx') || lowerUrl.endsWith('.ppt') || lowerUrl.endsWith('.pptx') || lowerUrl.endsWith('.xls') || lowerUrl.endsWith('.xlsx') || lowerUrl.includes('.doc?') || lowerUrl.includes('.docx?') || lowerUrl.includes('.ppt?') || lowerUrl.includes('.pptx?') || lowerUrl.includes('.xls?') || lowerUrl.includes('.xlsx?');
 

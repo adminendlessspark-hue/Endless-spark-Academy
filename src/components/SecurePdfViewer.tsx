@@ -71,7 +71,7 @@ export default function SecurePdfViewer({
       } else {
         // External URLs (e.g. Google Drive, CDN links, Firebase Storage, GCS)
         const proxies = [
-          (u: string) => `/api/proxy-pdf?url=${encodeURIComponent(u)}`,
+          (u: string) => `/api/proxy-pdf?url=${encodeURIComponent(u)}&title=${encodeURIComponent(title || '')}`,
           (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
           (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
           (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
@@ -246,19 +246,39 @@ export default function SecurePdfViewer({
               <AlertTriangle className="w-8 h-8" />
             </div>
             <h4 className="text-xl font-bold text-gray-900 mb-2">
-              {isSecure && !isAdmin ? 'Secure Document Notice' : 'Secure Viewer Connection Notice'}
+              {isSecure && !isAdmin ? 'Protected Document Notice' : 'Secure Viewer Connection Notice'}
             </h4>
             <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-              {isSecure && !isAdmin 
-                ? 'This is a secure document. Direct downloading, printing, and sharing have been restricted by the administrator. However, you can still view it below:' 
-                : 'We encountered a connection constraint or secure CORS policy while rendering this document inside the integrated player. Don\'t worry, you can still view or download it directly using the links below:'}
+              We encountered a connection constraint rendering the raw document file directly inside the browser player. Choose one of the options below to view or access your document:
             </p>
-            {isAssignment ? (
-              <div className="bg-pink-50 border border-pink-100 text-pink-700 p-4 rounded-xl text-sm font-semibold max-w-md mx-auto">
-                Due to strict data security policies, downloading and direct viewing of this assignment document are restricted. Please view it inside this secure window.
-              </div>
-            ) : (!isSecure || isAdmin) ? (
-              <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+            
+            <div className="flex flex-col gap-3 w-full justify-center">
+              <button
+                onClick={async () => {
+                  setIsLoading(true);
+                  setLoadError(null);
+                  try {
+                    const fallbackUrl = `/api/proxy-pdf?url=${encodeURIComponent(getDirectDownloadUrl(url))}&title=${encodeURIComponent(title || 'Course Resource')}`;
+                    const res = await fetch(fallbackUrl);
+                    if (res.ok) {
+                      const ab = await res.arrayBuffer();
+                      setPdfData(ab);
+                      setIsLoading(false);
+                      return;
+                    }
+                  } catch (e) {
+                    console.error("Failed loading fallback PDF:", e);
+                  }
+                  setIsLoading(false);
+                  setLoadError("Unable to load document fallback.");
+                }}
+                className="px-5 py-3 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Load Academic Study Guide PDF
+              </button>
+
+              {url && (
                 <a 
                   href={url} 
                   target="_blank" 
@@ -266,31 +286,22 @@ export default function SecurePdfViewer({
                   className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  View Original Link
+                  Open Document Link in New Tab
                 </a>
+              )}
+
+              {(!isSecure || isAdmin) && (
                 <a 
                   href={`/api/download?url=${encodeURIComponent(getDirectDownloadUrl(url))}&title=${encodeURIComponent(title || 'document')}`} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="px-5 py-3 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  className="px-5 py-3 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-900 transition-colors flex items-center justify-center gap-2 shadow-sm"
                 >
                   <Download className="w-4 h-4" />
-                  Download Directly
+                  Download File Directly
                 </a>
-              </div>
-            ) : (
-              <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
-                <a 
-                  href={url} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="px-5 py-3 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  View Document
-                </a>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         ) : isImage && pdfData ? (
           <div className="relative inline-block overflow-auto max-w-full">

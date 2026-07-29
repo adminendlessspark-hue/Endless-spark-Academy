@@ -502,69 +502,190 @@ async function ensureValidZipBuffer(inputBuffer: Buffer | null, title: string, f
   return zipOutputBuffer;
 }
 
+// Save file buffer to Firestore with chunking support for files of any size
+async function saveFileToFirestoreBackup(canonicalUrl: string, requestedPath: string, originalname: string, mimetype: string, fileBuf: Buffer) {
+  try {
+    const db = getDb();
+    const docId = encodeURIComponent(canonicalUrl).replace(/\./g, '_');
+    const docRef = db.collection("uploaded_files").doc(docId);
+    
+    const totalSize = fileBuf.length;
+
+    if (totalSize <= 600 * 1024) {
+      // Small file: store directly in main document
+      await docRef.set({
+        url: canonicalUrl,
+        path: requestedPath,
+        fileName: originalname,
+        mimeType: mimetype || 'application/pdf',
+        fileData: fileBuf.toString('base64'),
+        totalSize,
+        createdAt: new Date().toISOString()
+      });
+      console.log(`Backend: Saved persistent upload backup (<600KB) to Firestore docId: ${docId}`);
+    } else {
+      // Large file: chunk into subcollection (500KB per chunk)
+      const base64Str = fileBuf.toString('base64');
+      const totalChars = base64Str.length;
+      const CHUNK_CHAR_SIZE = 500 * 1024;
+      const totalChunks = Math.ceil(totalChars / CHUNK_CHAR_SIZE);
+
+      await docRef.set({
+        url: canonicalUrl,
+        path: requestedPath,
+        fileName: originalname,
+        mimeType: mimetype || 'application/pdf',
+        totalChunks,
+        totalSize,
+        createdAt: new Date().toISOString()
+      });
+
+      const chunksCollection = docRef.collection("chunks");
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkData = base64Str.substring(i * CHUNK_CHAR_SIZE, (i + 1) * CHUNK_CHAR_SIZE);
+        await chunksCollection.doc(`chunk_${i}`).set({
+          index: i,
+          data: chunkData
+        });
+      }
+      console.log(`Backend: Saved chunked upload backup (${totalChunks} chunks, ${totalSize} bytes) to Firestore docId: ${docId}`);
+    }
+  } catch (err: any) {
+    console.warn("Backend: Firestore upload backup failed:", err?.message || err);
+  }
+}
+
+async function getFileBufferFromFirestoreDoc(docSnap: any): Promise<Buffer | null> {
+  if (!docSnap.exists) return null;
+  const data = docSnap.data();
+  if (!data) return null;
+
+  if (data.fileData) {
+    return Buffer.from(data.fileData, 'base64');
+  }
+
+  if (data.totalChunks && data.totalChunks > 0) {
+    try {
+      const chunksSnap = await docSnap.ref.collection("chunks").orderBy("index", "asc").get();
+      if (!chunksSnap.empty) {
+        let fullBase64 = "";
+        chunksSnap.docs.forEach((cDoc: any) => {
+          const cData = cDoc.data();
+          if (cData && cData.data) {
+            fullBase64 += cData.data;
+          }
+        });
+        if (fullBase64.length > 0) {
+          return Buffer.from(fullBase64, 'base64');
+        }
+      }
+    } catch (chunkErr) {
+      console.warn("[StorageRestore] Error reading chunks from Firestore:", chunkErr);
+    }
+  }
+  return null;
+}
+
 // Restore a file from GCS or Firestore uploaded_files collection
 async function restoreFileFromFirebaseOrGcs(requestedPathOrUrl: string, filePathOnDisk?: string): Promise<{ buffer: Buffer; contentType: string } | null> {
   if (!requestedPathOrUrl) return null;
   
-  let relativePath = requestedPathOrUrl;
-  if (relativePath.startsWith("/")) relativePath = relativePath.substring(1);
-  if (relativePath.startsWith("uploads/")) relativePath = relativePath.substring("uploads/".length);
+  // Clean up domain or prefix if present
+  let cleanPath = requestedPathOrUrl;
+  const uploadIdx = cleanPath.indexOf('/uploads/');
+  if (uploadIdx !== -1) {
+    cleanPath = cleanPath.substring(uploadIdx);
+  } else if (!cleanPath.startsWith('/uploads/') && !cleanPath.startsWith('uploads/')) {
+    cleanPath = cleanPath.startsWith('/') ? `/uploads${cleanPath}` : `/uploads/${cleanPath}`;
+  }
+  if (!cleanPath.startsWith('/')) cleanPath = '/' + cleanPath;
+
+  const relativePathForGcs = cleanPath.replace(/^\/?uploads\//, '');
 
   // 1. Search candidate Firebase Storage / GCS buckets
   const buckets = getStorageBucketNames();
   for (const bucketName of buckets) {
     try {
       const bucket = admin.storage().bucket(bucketName);
-      const file = bucket.file(relativePath);
-      const [exists] = await file.exists();
-      if (exists) {
-        console.log(`[StorageRestore] Found real file in GCS bucket ${bucketName} at ${relativePath}`);
-        const [metadata] = await file.getMetadata();
-        const [fileBuffer] = await file.download();
-        const contentType = metadata.contentType || "application/pdf";
-        if (filePathOnDisk) {
-          try {
-            const parentDir = path.dirname(filePathOnDisk);
-            if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
-            fs.writeFileSync(filePathOnDisk, fileBuffer);
-            console.log(`[StorageRestore] Successfully replaced local file on disk at ${filePathOnDisk}`);
-          } catch (e) {
-            console.warn(`[StorageRestore] Could not write restored file to disk:`, e);
+      const candidates = [relativePathForGcs, requestedPathOrUrl.replace(/^\//, '')];
+      for (const cand of candidates) {
+        const file = bucket.file(cand);
+        const [exists] = await file.exists();
+        if (exists) {
+          console.log(`[StorageRestore] Found real file in GCS bucket ${bucketName} at ${cand}`);
+          const [metadata] = await file.getMetadata();
+          const [fileBuffer] = await file.download();
+          const contentType = metadata.contentType || "application/pdf";
+          if (filePathOnDisk) {
+            try {
+              const parentDir = path.dirname(filePathOnDisk);
+              if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+              fs.writeFileSync(filePathOnDisk, fileBuffer);
+              console.log(`[StorageRestore] Successfully replaced local file on disk at ${filePathOnDisk}`);
+            } catch (e) {
+              console.warn(`[StorageRestore] Could not write restored file to disk:`, e);
+            }
           }
+          return { buffer: fileBuffer, contentType };
         }
-        return { buffer: fileBuffer, contentType };
       }
-    } catch (gcsErr: any) {
-      // Continue to next bucket
-    }
+    } catch (gcsErr: any) {}
   }
 
   // 2. Search Firestore uploaded_files collection
   try {
     const db = getDb();
-    const sanitizedDocId = encodeURIComponent(requestedPathOrUrl).replace(/\./g, '_');
-    const docRef = db.collection("uploaded_files").doc(sanitizedDocId);
-    const docSnap = await docRef.get();
-    if (docSnap.exists) {
-      const data = docSnap.data();
-      if (data && data.fileData) {
-        console.log(`[StorageRestore] Restored real file from Firestore uploaded_files collection for ${requestedPathOrUrl}`);
-        const fileBuffer = Buffer.from(data.fileData, 'base64');
-        const contentType = data.mimeType || "application/pdf";
+    const candidateDocIds = [
+      encodeURIComponent(cleanPath).replace(/\./g, '_'),
+      encodeURIComponent(cleanPath.substring(1)).replace(/\./g, '_'),
+      encodeURIComponent(requestedPathOrUrl).replace(/\./g, '_'),
+      encodeURIComponent(requestedPathOrUrl.startsWith('/') ? requestedPathOrUrl : '/' + requestedPathOrUrl).replace(/\./g, '_')
+    ];
+
+    for (const docId of candidateDocIds) {
+      const docRef = db.collection("uploaded_files").doc(docId);
+      const docSnap = await docRef.get();
+      if (docSnap.exists) {
+        const fileBuffer = await getFileBufferFromFirestoreDoc(docSnap);
+        if (fileBuffer) {
+          const data = docSnap.data();
+          const contentType = data?.mimeType || "application/pdf";
+          console.log(`[StorageRestore] Restored real file from Firestore uploaded_files via docId (${docId}) for ${cleanPath}`);
+          if (filePathOnDisk) {
+            try {
+              const parentDir = path.dirname(filePathOnDisk);
+              if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+              fs.writeFileSync(filePathOnDisk, fileBuffer);
+              console.log(`[StorageRestore] Wrote restored Firestore file to disk at ${filePathOnDisk}`);
+            } catch (e) {}
+          }
+          return { buffer: fileBuffer, contentType };
+        }
+      }
+    }
+
+    // Fallback collection query by url matching cleanPath
+    const snapshotByUrl = await db.collection("uploaded_files").where("url", "==", cleanPath).limit(1).get();
+    if (!snapshotByUrl.empty) {
+      const docSnap = snapshotByUrl.docs[0];
+      const fileBuffer = await getFileBufferFromFirestoreDoc(docSnap);
+      if (fileBuffer) {
+        const data = snapshotByUrl.docs[0].data();
+        const contentType = data?.mimeType || "application/pdf";
+        console.log(`[StorageRestore] Restored real file from Firestore uploaded_files query by url`);
         if (filePathOnDisk) {
           try {
             const parentDir = path.dirname(filePathOnDisk);
             if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
             fs.writeFileSync(filePathOnDisk, fileBuffer);
-          } catch (e) {
-            console.warn(`[StorageRestore] Could not write restored Firestore file to disk:`, e);
-          }
+          } catch (e) {}
         }
         return { buffer: fileBuffer, contentType };
       }
     }
+
   } catch (dbErr: any) {
-    console.warn(`[StorageRestore] Firestore lookup skipped:`, dbErr?.message || dbErr);
+    console.warn(`[StorageRestore] Firestore lookup error:`, dbErr?.message || dbErr);
   }
 
   return null;
@@ -1712,30 +1833,19 @@ async function startServer() {
       
       console.log("Upload process complete. Final URL:", url);
       
-      // Persist backup copy into Firestore uploaded_files collection for files up to 12MB
-      if (size <= 12 * 1024 * 1024) {
-        try {
-          const db = getDb();
-          let fileBuf: Buffer | null = null;
-          if (isLocalUploaded && url.startsWith("/uploads/")) {
-            const filePathOnDisk = path.join(localUploadsDir, url.substring("/uploads/".length));
-            if (fs.existsSync(filePathOnDisk)) fileBuf = fs.readFileSync(filePathOnDisk);
-          }
-          if (fileBuf) {
-            const sanitizedDocId = encodeURIComponent(url).replace(/\./g, '_');
-            await db.collection("uploaded_files").doc(sanitizedDocId).set({
-              url,
-              path: requestedPath,
-              fileName: originalname,
-              mimeType: mimetype || 'application/pdf',
-              fileData: fileBuf.toString('base64'),
-              createdAt: new Date().toISOString()
-            });
-            console.log("Backend: Saved persistent upload backup to Firestore collection uploaded_files");
-          }
-        } catch (fsBackupErr: any) {
-          console.warn("Backend: Firestore upload backup skipped:", fsBackupErr?.message || fsBackupErr);
+      // Persist backup copy into Firestore uploaded_files collection
+      try {
+        let fileBuf: Buffer | null = null;
+        if (isLocalUploaded && url.startsWith("/uploads/")) {
+          const filePathOnDisk = path.join(localUploadsDir, url.substring("/uploads/".length));
+          if (fs.existsSync(filePathOnDisk)) fileBuf = fs.readFileSync(filePathOnDisk);
         }
+        if (fileBuf) {
+          const canonicalUrl = url.startsWith('/uploads/') ? url : `/uploads${url.startsWith('/') ? url : '/' + url}`;
+          await saveFileToFirestoreBackup(canonicalUrl, requestedPath, originalname, mimetype, fileBuf);
+        }
+      } catch (fsBackupErr: any) {
+        console.warn("Backend: Firestore upload backup skipped:", fsBackupErr?.message || fsBackupErr);
       }
 
       res.json({ url });

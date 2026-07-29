@@ -3,6 +3,8 @@ import { Play, ExternalLink, Download, Video, RefreshCw, ListVideo, ChevronRight
 
 interface SecureVideoPlayerProps {
   url?: string;
+  secondaryVideoUrl?: string;
+  theoreticalVideoUrl?: string;
   videoUrls?: Record<string, string> | Array<string>;
   nativeLanguage?: string;
   title?: string;
@@ -11,6 +13,7 @@ interface SecureVideoPlayerProps {
   userId?: string;
   autoPlay?: boolean;
   thumbnailUrl?: string;
+  defaultActiveIndex?: number;
 }
 
 export interface VideoItem {
@@ -35,7 +38,9 @@ export const getGoogleDriveFileId = (urlStr: string): string | null => {
 
 export const parseMultipleVideoSources = (
   primaryUrl?: string, 
-  videoUrlsProp?: Record<string, string> | Array<string>
+  videoUrlsProp?: Record<string, string> | Array<string>,
+  secondaryUrl?: string,
+  theoreticalUrl?: string
 ): VideoItem[] => {
   const items: VideoItem[] = [];
   const seenUrls = new Set<string>();
@@ -52,12 +57,109 @@ export const parseMultipleVideoSources = (
     });
   };
 
-  // 1. Process videoUrls prop if provided as object or array
+  const hasSecondary = Boolean(secondaryUrl && secondaryUrl.trim());
+  const hasTheoretical = Boolean(theoreticalUrl && theoreticalUrl.trim());
+  const isFullLengthMode = hasTheoretical || hasSecondary;
+
+  // 1. Process explicit full-length theoretical video first if provided
+  if (hasTheoretical && theoreticalUrl) {
+    addUrl('Theoretical Video', theoreticalUrl);
+  }
+
+  // 2. Process explicit full-length practical video next if provided
+  if (hasSecondary && secondaryUrl) {
+    addUrl('Practical Video', secondaryUrl);
+  }
+
+  // If explicit full-length videos are present, return ONLY full-length videos
+  // so short syllabus overview videos (English, Tamil, etc.) do not leak into the full-length player
+  if (isFullLengthMode) {
+    if (!hasTheoretical && primaryUrl && typeof primaryUrl === 'string') {
+      let fallbackUrl = primaryUrl;
+      try {
+        const parsed = JSON.parse(primaryUrl);
+        if (Array.isArray(parsed) && parsed[0]) fallbackUrl = String(parsed[0]);
+      } catch (e) {
+        const lines = primaryUrl.split(/[\r\n,;]+/).map(s => s.trim()).filter(Boolean);
+        if (lines[0]) {
+          const urlMatch = lines[0].match(/(https?:\/\/[^\s]+)/);
+          if (urlMatch) fallbackUrl = urlMatch[1];
+        }
+      }
+      addUrl('Theoretical Video', fallbackUrl);
+    }
+    return items;
+  }
+
+  // 3. Process primaryUrl string
+  if (primaryUrl && typeof primaryUrl === 'string') {
+    try {
+      const parsed = JSON.parse(primaryUrl);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((u, idx) => {
+          let label = parsed.length === 2 ? (idx === 0 ? 'English' : 'Tamil') : `Video ${idx + 1}`;
+          if (hasSecondary && !hasTheoretical) {
+            label = parsed.length === 2 ? (idx === 0 ? 'Theoretical (English)' : 'Theoretical (Tamil)') : 'Theoretical Video';
+          }
+          addUrl(label, String(u));
+        });
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        Object.entries(parsed).forEach(([k, v]) => addUrl(k, String(v)));
+      }
+    } catch (e) {
+      const lines = primaryUrl.split(/[\r\n,;]+/).map(s => s.trim()).filter(Boolean);
+      
+      const parsedLines = lines.map((line, index) => {
+        const urlMatch = line.match(/(https?:\/\/[^\s]+)/) || [line, line];
+        const extractedUrl = urlMatch[1] || line;
+        let label = line.replace(extractedUrl, '').replace(/[:\-–—]/g, '').trim();
+        return { extractedUrl, label, index };
+      });
+
+      if (parsedLines.length === 2) {
+        if (!parsedLines[0].label && parsedLines[1].label) {
+          if (parsedLines[1].label.toLowerCase().includes('tamil')) {
+            parsedLines[0].label = 'English';
+          } else {
+            parsedLines[0].label = 'Video 1';
+          }
+        } else if (parsedLines[0].label && !parsedLines[1].label) {
+          if (parsedLines[0].label.toLowerCase().includes('english')) {
+            parsedLines[1].label = 'Tamil';
+          } else {
+            parsedLines[1].label = 'Video 2';
+          }
+        } else if (!parsedLines[0].label && !parsedLines[1].label) {
+          parsedLines[0].label = 'English';
+          parsedLines[1].label = 'Tamil';
+        }
+      }
+
+      parsedLines.forEach(({ extractedUrl, label, index }) => {
+        let finalLabel = label;
+        if (!finalLabel) {
+          finalLabel = parsedLines.length > 1 ? `Video ${index + 1}` : 'English';
+        }
+
+        if (hasSecondary && !hasTheoretical) {
+          if (parsedLines.length === 1) {
+            finalLabel = 'Theoretical Video';
+          } else {
+            finalLabel = `Theoretical Video (${finalLabel})`;
+          }
+        }
+        addUrl(finalLabel, extractedUrl);
+      });
+    }
+  }
+
+  // 4. Process videoUrls prop if provided as object or array
   if (videoUrlsProp) {
     if (Array.isArray(videoUrlsProp)) {
       videoUrlsProp.forEach((u, idx) => {
         if (typeof u === 'string') {
-          addUrl(`Video ${idx + 1}`, u);
+          const label = videoUrlsProp.length === 2 ? (idx === 0 ? 'English' : 'Tamil') : `Video ${idx + 1}`;
+          addUrl(label, u);
         }
       });
     } else if (typeof videoUrlsProp === 'object') {
@@ -71,34 +173,13 @@ export const parseMultipleVideoSources = (
     }
   }
 
-  // 2. Process primaryUrl string
-  if (primaryUrl && typeof primaryUrl === 'string') {
-    try {
-      const parsed = JSON.parse(primaryUrl);
-      if (Array.isArray(parsed)) {
-        parsed.forEach((u, idx) => addUrl(`Video ${idx + 1}`, String(u)));
-      } else if (typeof parsed === 'object' && parsed !== null) {
-        Object.entries(parsed).forEach(([k, v]) => addUrl(k, String(v)));
-      }
-    } catch (e) {
-      const lines = primaryUrl.split(/[\r\n,;]+/).map(s => s.trim()).filter(Boolean);
-      lines.forEach((line, index) => {
-        const urlMatch = line.match(/(https?:\/\/[^\s]+)/) || [line, line];
-        const extractedUrl = urlMatch[1] || line;
-        let label = line.replace(extractedUrl, '').replace(/[:\-–—]/g, '').trim();
-        if (!label) {
-          label = lines.length > 1 ? `Video ${index + 1}` : 'Main Video';
-        }
-        addUrl(label, extractedUrl);
-      });
-    }
-  }
-
   return items;
 };
 
 export default function SecureVideoPlayer({ 
   url, 
+  secondaryVideoUrl,
+  theoreticalVideoUrl,
   videoUrls, 
   nativeLanguage, 
   title = "Video Player", 
@@ -106,11 +187,12 @@ export default function SecureVideoPlayer({
   userName, 
   userId,
   autoPlay = false,
-  thumbnailUrl
+  thumbnailUrl,
+  defaultActiveIndex
 }: SecureVideoPlayerProps) {
   const playlistItems = useMemo(() => {
-    return parseMultipleVideoSources(url, videoUrls);
-  }, [url, videoUrls]);
+    return parseMultipleVideoSources(url, videoUrls, secondaryVideoUrl, theoreticalVideoUrl);
+  }, [url, videoUrls, secondaryVideoUrl, theoreticalVideoUrl]);
 
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(autoPlay);
@@ -120,6 +202,11 @@ export default function SecureVideoPlayer({
     setIsPlaying(autoPlay);
     setUseIframeEmbed(false);
     
+    if (defaultActiveIndex !== undefined && defaultActiveIndex >= 0 && defaultActiveIndex < playlistItems.length) {
+      setActiveIndex(defaultActiveIndex);
+      return;
+    }
+
     if (nativeLanguage && playlistItems.length > 0) {
       const targetLang = nativeLanguage.toLowerCase();
       const matchIdx = playlistItems.findIndex(item => item.label.toLowerCase().includes(targetLang));
@@ -129,7 +216,7 @@ export default function SecureVideoPlayer({
       }
     }
     setActiveIndex(0);
-  }, [autoPlay, nativeLanguage, playlistItems]);
+  }, [autoPlay, nativeLanguage, playlistItems, defaultActiveIndex]);
 
   if (!playlistItems || playlistItems.length === 0) {
     return (
@@ -372,28 +459,6 @@ export default function SecureVideoPlayer({
               <RefreshCw className="w-3 h-3 text-pink-400" />
               <span>{!useIframeEmbed ? 'Embed Mode' : 'Direct Stream'}</span>
             </button>
-            {directDriveViewUrl && (
-              <a
-                href={directDriveViewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-2.5 py-0.5 bg-pink-600/90 hover:bg-pink-600 text-white rounded text-[11px] flex items-center gap-1 font-semibold transition-colors shadow-sm"
-              >
-                <ExternalLink className="w-3 h-3" />
-                <span>Drive</span>
-              </a>
-            )}
-            {directDriveDownloadUrl && (
-              <a
-                href={directDriveDownloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-2.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] flex items-center gap-1 transition-colors border border-slate-700"
-                title="Download Video File"
-              >
-                <Download className="w-3 h-3" />
-              </a>
-            )}
           </div>
         </div>
       )}

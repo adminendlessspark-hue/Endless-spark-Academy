@@ -1,5 +1,6 @@
 import AdminMarketingSettings from '../components/AdminMarketingSettings';
 import AdminWhatsAppSettings from '../components/AdminWhatsAppSettings';
+import RecordingLinkModal from '../components/RecordingLinkModal';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -681,6 +682,8 @@ export default function AdminPanel() {
     title: '',
     description: '',
     videoUrl: '',
+    secondaryVideoUrl: '',
+    theoreticalVideoUrl: '',
     videoUrls: {} as Record<string, string>,
     duration: '',
     category: 'production-art-engineer' as CourseType,
@@ -703,18 +706,25 @@ export default function AdminPanel() {
     return false;
   };
 
-  const handleModuleFileUpload = async (moduleId: string, field: 'assignmentPaperUrl' | 'mindMapUrl' | 'worksheetUrl' | 'referenceMaterialUrl' | 'slidesUrl' | 'thumbnailUrl') => {
-    if (checkPreview()) return;
-    const fieldName = field.replace('Url', '').replace(/([A-Z])/g, ' $1').trim();
-    const url = prompt(`Enter the ${fieldName} URL (e.g., Google Drive link):`);
-    if (!url) return;
+  const [uploadModalState, setUploadModalState] = useState<{
+    moduleId: string;
+    field: 'assignmentPaperUrl' | 'mindMapUrl' | 'worksheetUrl' | 'referenceMaterialUrl' | 'slidesUrl' | 'thumbnailUrl' | 'secondaryVideoUrl';
+    fieldLabel: string;
+    currentUrl: string;
+  } | null>(null);
 
-    try {
-      await updateDoc(doc(db, 'course_modules', moduleId), { [field]: url });
-      alert(`${fieldName} updated successfully.`);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `course_modules/${moduleId}`);
+  const handleModuleFileUpload = async (moduleId: string, field: 'assignmentPaperUrl' | 'mindMapUrl' | 'worksheetUrl' | 'referenceMaterialUrl' | 'slidesUrl' | 'thumbnailUrl' | 'secondaryVideoUrl') => {
+    if (checkPreview()) return;
+    const fieldLabel = field.replace('Url', '').replace(/([A-Z])/g, ' $1').trim();
+    let currentUrl = '';
+    for (const cat of courseModules) {
+      const found = cat.modules.find(m => m.id === moduleId);
+      if (found && (found as any)[field]) {
+        currentUrl = (found as any)[field];
+        break;
+      }
     }
+    setUploadModalState({ moduleId, field, fieldLabel, currentUrl });
   };
 
   useEffect(() => {
@@ -2657,6 +2667,8 @@ export default function AdminPanel() {
         title: '',
         description: '',
         videoUrl: '',
+        secondaryVideoUrl: '',
+        theoreticalVideoUrl: '',
         videoUrls: {},
         duration: '',
         category: 'production-art-engineer',
@@ -5800,33 +5812,165 @@ export default function AdminPanel() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="col-span-1 md:col-span-2">
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Video URLs (Bilingual Support)</label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {['english', 'tamil', 'kannada', 'malayalam', 'telugu', 'hindi'].map((lang) => (
-                            <div key={lang}>
-                              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">{lang}</label>
-                              <input 
-                                type="text"
-                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm"
-                                value={lang === 'english' ? (editingModule.module.videoUrls?.english || editingModule.module.videoUrl || '') : (editingModule.module.videoUrls?.[lang] || '')}
-                                onChange={(e) => {
-                                  const updatedUrls = { ...(editingModule.module.videoUrls || {}) };
-                                  updatedUrls[lang] = e.target.value;
-                                  setEditingModule({
-                                    ...editingModule,
-                                    module: { 
-                                      ...editingModule.module, 
-                                      videoUrls: updatedUrls,
-                                      // Keep videoUrl synced with english for backward compatibility
-                                      ...(lang === 'english' ? { videoUrl: e.target.value } : {})
-                                    }
-                                  });
-                                }}
-                                placeholder={`URL for ${lang}`}
-                              />
+                      {/* Section 1: Quick Introduction Videos (Dual Language) */}
+                      <div className="col-span-1 md:col-span-2 bg-purple-50/50 p-4 rounded-2xl border border-purple-100">
+                        <label className="block text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">Quick Introduction Video URLs (Short Overview - Dual Language)</label>
+                        <p className="text-xs text-gray-500 mb-3">Upload or paste Google Drive / direct video links for short quick introduction videos in dual languages (English, Tamil, and regional languages).</p>
+                        
+                        <div className="space-y-4">
+                          {/* English Quick Introduction Video */}
+                          <div className="bg-white p-3.5 rounded-xl border border-purple-200/60 shadow-sm">
+                            <label className="block text-xs font-bold text-pink-600 uppercase tracking-wider mb-1">Quick Introduction Video - English (Main Overview)</label>
+                            <input 
+                              type="text"
+                              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2 text-sm"
+                              value={editingModule.module.videoUrls?.english || editingModule.module.videoUrl || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const updatedUrls = { ...(editingModule.module.videoUrls || {}), english: val };
+                                setEditingModule({
+                                  ...editingModule,
+                                  module: { 
+                                    ...editingModule.module, 
+                                    videoUrl: val,
+                                    videoUrls: updatedUrls
+                                  }
+                                });
+                              }}
+                              placeholder="Google Drive / MP4 video link for English Quick Introduction Video"
+                            />
+                            <FileUploader 
+                              path="course_modules/videos"
+                              accept="video/*,.mp4,.webm,.mkv,.mov"
+                              onUploadComplete={(url) => {
+                                const updatedUrls = { ...(editingModule.module.videoUrls || {}), english: url };
+                                setEditingModule({
+                                  ...editingModule,
+                                  module: { 
+                                    ...editingModule.module, 
+                                    videoUrl: url,
+                                    videoUrls: updatedUrls
+                                  }
+                                });
+                              }}
+                            />
+                          </div>
+
+                          {/* Tamil Quick Introduction Video */}
+                          <div className="bg-white p-3.5 rounded-xl border border-purple-200/60 shadow-sm">
+                            <label className="block text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">Quick Introduction Video - Tamil</label>
+                            <input 
+                              type="text"
+                              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2 text-sm"
+                              value={editingModule.module.videoUrls?.tamil || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const updatedUrls = { ...(editingModule.module.videoUrls || {}), tamil: val };
+                                setEditingModule({
+                                  ...editingModule,
+                                  module: { 
+                                    ...editingModule.module, 
+                                    videoUrls: updatedUrls
+                                  }
+                                });
+                              }}
+                              placeholder="Google Drive / MP4 video link for Tamil Quick Introduction Video"
+                            />
+                            <FileUploader 
+                              path="course_modules/videos"
+                              accept="video/*,.mp4,.webm,.mkv,.mov"
+                              onUploadComplete={(url) => {
+                                const updatedUrls = { ...(editingModule.module.videoUrls || {}), tamil: url };
+                                setEditingModule({
+                                  ...editingModule,
+                                  module: { 
+                                    ...editingModule.module, 
+                                    videoUrls: updatedUrls
+                                  }
+                                });
+                              }}
+                            />
+                          </div>
+
+                          {/* Regional Languages */}
+                          <div className="pt-1">
+                            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Additional Regional Language Quick Introduction Videos</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {['kannada', 'malayalam', 'telugu', 'hindi'].map((lang) => (
+                                <div key={lang} className="bg-white p-2.5 rounded-lg border border-gray-200">
+                                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">{lang}</label>
+                                  <input 
+                                    type="text"
+                                    className="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-xs focus:ring-1 focus:ring-pink-500 outline-none"
+                                    value={editingModule.module.videoUrls?.[lang] || ''}
+                                    onChange={(e) => {
+                                      const updatedUrls = { ...(editingModule.module.videoUrls || {}) };
+                                      updatedUrls[lang] = e.target.value;
+                                      setEditingModule({
+                                        ...editingModule,
+                                        module: { ...editingModule.module, videoUrls: updatedUrls }
+                                      });
+                                    }}
+                                    placeholder={`URL for ${lang}`}
+                                  />
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section 2: Full-Length Videos (Theoretical & Practical) */}
+                      <div className="col-span-1 md:col-span-2 bg-pink-50/50 p-4 rounded-2xl border border-pink-100 space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-pink-700 uppercase tracking-wider mb-1">Full-Length Masterclass Videos (Theoretical & Practical)</label>
+                          <p className="text-xs text-gray-500">Upload or paste Google Drive / direct video links for both Theoretical Model Video and Practical Demonstration Video.</p>
+                        </div>
+
+                        {/* Full Length Theoretical Video */}
+                        <div className="bg-white p-3.5 rounded-xl border border-pink-200/80 shadow-sm">
+                          <label className="block text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">1. Full-Length Theoretical Model Video URL</label>
+                          <input 
+                            type="text"
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2 text-sm"
+                            value={editingModule.module.theoreticalVideoUrl || ''}
+                            onChange={(e) => setEditingModule({
+                              ...editingModule,
+                              module: { ...editingModule.module, theoreticalVideoUrl: e.target.value }
+                            })}
+                            placeholder="Upload or paste link for Full-Length Theoretical Video"
+                          />
+                          <FileUploader 
+                            path="course_modules/videos"
+                            accept="video/*,.mp4,.webm,.mkv,.mov"
+                            onUploadComplete={(url) => setEditingModule({
+                              ...editingModule,
+                              module: { ...editingModule.module, theoreticalVideoUrl: url }
+                            })}
+                          />
+                        </div>
+
+                        {/* Full Length Practical Video */}
+                        <div className="bg-white p-3.5 rounded-xl border border-pink-200/80 shadow-sm">
+                          <label className="block text-xs font-bold text-pink-700 uppercase tracking-wider mb-1">2. Full-Length Practical Demonstration Video URL</label>
+                          <input 
+                            type="text"
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2 text-sm"
+                            value={editingModule.module.secondaryVideoUrl || ''}
+                            onChange={(e) => setEditingModule({
+                              ...editingModule,
+                              module: { ...editingModule.module, secondaryVideoUrl: e.target.value }
+                            })}
+                            placeholder="Upload or paste link for Full-Length Practical Video"
+                          />
+                          <FileUploader 
+                            path="course_modules/videos"
+                            accept="video/*,.mp4,.webm,.mkv,.mov"
+                            onUploadComplete={(url) => setEditingModule({
+                              ...editingModule,
+                              module: { ...editingModule.module, secondaryVideoUrl: url }
+                            })}
+                          />
                         </div>
                       </div>
                       <div>
@@ -6435,6 +6579,87 @@ export default function AdminPanel() {
               </div>
             )}
 
+            {uploadModalState && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                <div className="bg-white p-6 md:p-8 rounded-3xl shadow-2xl w-full max-w-lg relative">
+                  <button 
+                    onClick={() => setUploadModalState(null)}
+                    className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5 text-gray-400" />
+                  </button>
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">
+                    Upload {uploadModalState.fieldLabel}
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-6">
+                    Upload a file directly from your device (PDF, ZIP, DOCX) or paste a Google Drive / web link below:
+                  </p>
+                  
+                  <div className="space-y-5">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 1: Drag & Drop or Browse File</label>
+                      <FileUploader
+                        path={`course_modules/${uploadModalState.field}`}
+                        accept={uploadModalState.field === 'thumbnailUrl' ? 'image/*' : '.pdf,.doc,.docx,.zip,.rar,.7z,.pptx,.ppt'}
+                        onUploadComplete={async (url) => {
+                          try {
+                            await updateDoc(doc(db, 'course_modules', uploadModalState.moduleId), { [uploadModalState.field]: url });
+                            setUploadModalState(null);
+                            alert(`${uploadModalState.fieldLabel} updated and saved successfully!`);
+                          } catch (err) {
+                            handleFirestoreError(err, OperationType.UPDATE, `course_modules/${uploadModalState.moduleId}`);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="relative flex py-1 items-center">
+                      <div className="flex-grow border-t border-gray-200"></div>
+                      <span className="flex-shrink mx-4 text-gray-400 text-xs font-bold uppercase">OR</span>
+                      <div className="flex-grow border-t border-gray-200"></div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 2: Google Drive / Direct Web Link</label>
+                      <input
+                        type="text"
+                        className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm"
+                        placeholder="https://drive.google.com/..."
+                        value={uploadModalState.currentUrl}
+                        onChange={(e) => setUploadModalState({ ...uploadModalState, currentUrl: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setUploadModalState(null)}
+                        className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!uploadModalState.currentUrl) return;
+                          try {
+                            await updateDoc(doc(db, 'course_modules', uploadModalState.moduleId), { [uploadModalState.field]: uploadModalState.currentUrl });
+                            setUploadModalState(null);
+                            alert(`${uploadModalState.fieldLabel} link updated and saved successfully!`);
+                          } catch (err) {
+                            handleFirestoreError(err, OperationType.UPDATE, `course_modules/${uploadModalState.moduleId}`);
+                          }
+                        }}
+                        className="flex-1 py-3 bg-pink-600 text-white rounded-xl text-sm font-bold hover:bg-pink-700 transition-colors shadow-sm"
+                      >
+                        Save Link
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {isAddingModule && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
                 <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
@@ -6500,29 +6725,141 @@ export default function AdminPanel() {
                         required
                       />
                     </div>
-                    <div className="col-span-1 md:col-span-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Video URLs (Bilingual Support)</label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {['english', 'tamil', 'kannada', 'malayalam', 'telugu', 'hindi'].map((lang) => (
-                          <div key={lang}>
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">{lang}</label>
-                            <input 
-                              type="text"
-                              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 text-sm"
-                              value={lang === 'english' ? (newModuleData.videoUrls?.english || newModuleData.videoUrl || '') : (newModuleData.videoUrls?.[lang] || '')}
-                              onChange={(e) => {
-                                const updatedUrls = { ...(newModuleData.videoUrls || {}) };
-                                updatedUrls[lang] = e.target.value;
-                                setNewModuleData({
-                                  ...newModuleData,
-                                  videoUrls: updatedUrls,
-                                  ...(lang === 'english' ? { videoUrl: e.target.value } : {})
-                                });
-                              }}
-                              placeholder={`URL for ${lang}`}
-                            />
+                    {/* Section 1: Quick Introduction Videos (Dual Language) */}
+                    <div className="col-span-1 md:col-span-2 bg-purple-50/50 p-4 rounded-2xl border border-purple-100">
+                      <label className="block text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">Quick Introduction Video URLs (Short Overview - Dual Language)</label>
+                      <p className="text-xs text-gray-500 mb-3">Upload or paste Google Drive / direct video links for short quick introduction videos in dual languages (English, Tamil, and regional languages).</p>
+                      
+                      <div className="space-y-4">
+                        {/* English Quick Introduction Video */}
+                        <div className="bg-white p-3.5 rounded-xl border border-purple-200/60 shadow-sm">
+                          <label className="block text-xs font-bold text-pink-600 uppercase tracking-wider mb-1">Quick Introduction Video - English (Main Overview)</label>
+                          <input 
+                            type="text"
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2 text-sm"
+                            value={newModuleData.videoUrls?.english || newModuleData.videoUrl || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const updatedUrls = { ...(newModuleData.videoUrls || {}), english: val };
+                              setNewModuleData({
+                                ...newModuleData,
+                                videoUrl: val,
+                                videoUrls: updatedUrls
+                              });
+                            }}
+                            placeholder="Google Drive / MP4 video link for English Quick Introduction Video"
+                          />
+                          <FileUploader 
+                            path="course_modules/videos"
+                            accept="video/*,.mp4,.webm,.mkv,.mov"
+                            onUploadComplete={(url) => {
+                              const updatedUrls = { ...(newModuleData.videoUrls || {}), english: url };
+                              setNewModuleData({
+                                ...newModuleData,
+                                videoUrl: url,
+                                videoUrls: updatedUrls
+                              });
+                            }}
+                          />
+                        </div>
+
+                        {/* Tamil Quick Introduction Video */}
+                        <div className="bg-white p-3.5 rounded-xl border border-purple-200/60 shadow-sm">
+                          <label className="block text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">Quick Introduction Video - Tamil</label>
+                          <input 
+                            type="text"
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2 text-sm"
+                            value={newModuleData.videoUrls?.tamil || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const updatedUrls = { ...(newModuleData.videoUrls || {}), tamil: val };
+                              setNewModuleData({
+                                ...newModuleData,
+                                videoUrls: updatedUrls
+                              });
+                            }}
+                            placeholder="Google Drive / MP4 video link for Tamil Quick Introduction Video"
+                          />
+                          <FileUploader 
+                            path="course_modules/videos"
+                            accept="video/*,.mp4,.webm,.mkv,.mov"
+                            onUploadComplete={(url) => {
+                              const updatedUrls = { ...(newModuleData.videoUrls || {}), tamil: url };
+                              setNewModuleData({
+                                ...newModuleData,
+                                videoUrls: updatedUrls
+                              });
+                            }}
+                          />
+                        </div>
+
+                        {/* Regional Languages */}
+                        <div className="pt-1">
+                          <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Additional Regional Language Quick Introduction Videos</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {['kannada', 'malayalam', 'telugu', 'hindi'].map((lang) => (
+                              <div key={lang} className="bg-white p-2.5 rounded-lg border border-gray-200">
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">{lang}</label>
+                                <input 
+                                  type="text"
+                                  className="w-full p-2 bg-gray-50 border border-gray-200 rounded-md text-xs focus:ring-1 focus:ring-pink-500 outline-none"
+                                  value={newModuleData.videoUrls?.[lang] || ''}
+                                  onChange={(e) => {
+                                    const updatedUrls = { ...(newModuleData.videoUrls || {}) };
+                                    updatedUrls[lang] = e.target.value;
+                                    setNewModuleData({
+                                      ...newModuleData,
+                                      videoUrls: updatedUrls
+                                    });
+                                  }}
+                                  placeholder={`URL for ${lang}`}
+                                />
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 2: Full-Length Videos (Theoretical & Practical) */}
+                    <div className="col-span-1 md:col-span-2 bg-pink-50/50 p-4 rounded-2xl border border-pink-100 space-y-4 mb-2">
+                      <div>
+                        <label className="block text-xs font-bold text-pink-700 uppercase tracking-wider mb-1">Full-Length Masterclass Videos (Theoretical & Practical)</label>
+                        <p className="text-xs text-gray-500">Upload or paste Google Drive / direct video links for both Theoretical Model Video and Practical Demonstration Video.</p>
+                      </div>
+
+                      {/* Full Length Theoretical Video */}
+                      <div className="bg-white p-3.5 rounded-xl border border-pink-200/80 shadow-sm">
+                        <label className="block text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">1. Full-Length Theoretical Model Video URL</label>
+                        <input 
+                          type="text"
+                          className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2 text-sm"
+                          value={newModuleData.theoreticalVideoUrl || ''}
+                          onChange={(e) => setNewModuleData({ ...newModuleData, theoreticalVideoUrl: e.target.value })}
+                          placeholder="Upload or paste link for Full-Length Theoretical Video"
+                        />
+                        <FileUploader 
+                          path="course_modules/videos"
+                          accept="video/*,.mp4,.webm,.mkv,.mov"
+                          onUploadComplete={(url) => setNewModuleData({ ...newModuleData, theoreticalVideoUrl: url })}
+                        />
+                      </div>
+
+                      {/* Full Length Practical Video */}
+                      <div className="bg-white p-3.5 rounded-xl border border-pink-200/80 shadow-sm">
+                        <label className="block text-xs font-bold text-pink-700 uppercase tracking-wider mb-1">2. Full-Length Practical Demonstration Video URL</label>
+                        <input 
+                          type="text"
+                          className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-pink-500 mb-2 text-sm"
+                          value={newModuleData.secondaryVideoUrl || ''}
+                          onChange={(e) => setNewModuleData({ ...newModuleData, secondaryVideoUrl: e.target.value })}
+                          placeholder="Upload or paste link for Full-Length Practical Video"
+                        />
+                        <FileUploader 
+                          path="course_modules/videos"
+                          accept="video/*,.mp4,.webm,.mkv,.mov"
+                          onUploadComplete={(url) => setNewModuleData({ ...newModuleData, secondaryVideoUrl: url })}
+                        />
                       </div>
                     </div>
                     <div>
@@ -11224,60 +11561,23 @@ export default function AdminPanel() {
       )}
 
       {/* Update Recording URL Modal */}
-      {sessionToUpdateRecording && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in duration-300">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-blue-600 text-white">
-              <div>
-                <h3 className="text-xl font-bold">Add Recording Link</h3>
-                <p className="text-blue-100 text-xs mt-1">Provide a Google Drive link to the recording</p>
-              </div>
-              <button 
-                onClick={() => setSessionToUpdateRecording(null)}
-                className="p-2 hover:bg-white/10 rounded-full transition-colors"
-              >
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="p-6">
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Google Drive Video Link(s)</label>
-                <textarea
-                  rows={4}
-                  value={recordingUrl}
-                  onChange={(e) => setRecordingUrl(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-mono text-sm"
-                  placeholder="https://drive.google.com/file/d/...&#10;Part 2: https://drive.google.com/file/d/..."
-                />
-                <p className="text-xs text-gray-500 mt-1.5">
-                  <strong>Multiple Videos Tip:</strong> Put each video link on a new line. You can also add labels like <code>Part 1: https://...</code> or <code>Part 2: https://...</code>
-                </p>
-              </div>
-            </div>
-            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-              <button 
-                onClick={() => setSessionToUpdateRecording(null)}
-                className="px-6 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  updateDoc(doc(db, 'live_sessions', sessionToUpdateRecording), {
-                    recordingUrl
-                  }).then(() => {
-                    setSessionToUpdateRecording(null);
-                    setRecordingUrl('');
-                  }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `live_sessions/${sessionToUpdateRecording}`));
-                }}
-                className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100"
-              >
-                Save Link
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RecordingLinkModal
+        isOpen={!!sessionToUpdateRecording}
+        initialUrl={recordingUrl}
+        onClose={() => {
+          setSessionToUpdateRecording(null);
+          setRecordingUrl('');
+        }}
+        onSave={(formattedUrl) => {
+          if (!sessionToUpdateRecording) return;
+          return updateDoc(doc(db, 'live_sessions', sessionToUpdateRecording), {
+            recordingUrl: formattedUrl
+          }).then(() => {
+            setSessionToUpdateRecording(null);
+            setRecordingUrl('');
+          }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `live_sessions/${sessionToUpdateRecording}`));
+        }}
+      />
       {/* Payout Modal */}
       {payoutModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">

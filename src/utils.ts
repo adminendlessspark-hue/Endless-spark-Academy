@@ -27,7 +27,7 @@ export const getDirectDownloadUrl = (url: string) => {
     if (absoluteUrl.includes('drive.google.com')) {
       const driveMatch = absoluteUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || absoluteUrl.match(/id=([a-zA-Z0-9_-]+)/);
       if (driveMatch && driveMatch[1]) {
-        return `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+        return `https://drive.google.com/uc?export=download&confirm=t&id=${driveMatch[1]}`;
       }
     }
     

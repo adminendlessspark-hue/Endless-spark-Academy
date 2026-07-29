@@ -138,23 +138,39 @@ export default function SoftwareLibrary() {
           {/* Pantone Books */}
           <div className="bg-slate-50 border border-gray-200/60 rounded-2xl p-6 flex flex-col justify-between hover:shadow-md transition-all border-t-4 border-t-indigo-500 relative overflow-hidden group">
             <div>
-              <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4">
-                <BookOpen className="w-5 h-5" />
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase bg-pink-100 text-pink-700 rounded-md tracking-wider">
+                  .ZIP Archive
+                </span>
               </div>
-              <h3 className="text-base font-bold text-gray-900 mb-2">Pantone Color Books</h3>
+              <h3 className="text-base font-bold text-gray-900 mb-1">Pantone Color Books</h3>
               <p className="text-xs text-gray-500 leading-relaxed mb-4">
-                Color Libraries: Import professional PMS color swatch libraries into your design workspace for color-accurate print verification.
+                Color Libraries: Download the official Pantone spot color swatch libraries (.ase / .acb) ZIP archive for Adobe Illustrator & Photoshop.
               </p>
             </div>
-            <a 
-              href={pantoneBooksUrl} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="mt-2 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors"
-            >
-              Get Swatch Books
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
+            <div className="mt-2 space-y-2">
+              <a 
+                href={`/api/download?url=${encodeURIComponent(pantoneBooksUrl || 'https://www.pantone.com/connect')}&title=${encodeURIComponent('Pantone_Color_Books_Library.zip')}`}
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-100 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                Download Pantone ZIP Package
+              </a>
+              <a 
+                href={pantoneBooksUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="w-full py-2 bg-white border border-gray-200 hover:border-indigo-300 text-gray-700 hover:text-indigo-600 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 transition-colors"
+              >
+                <span>View Web Link</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
           </div>
 
           {/* TeamViewer Remote Assistance */}

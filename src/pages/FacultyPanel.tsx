@@ -11,6 +11,7 @@ import Reports from '../components/Reports';
 import { useNotifications } from '../useNotifications';
 import SecureVideoPlayer from '../components/SecureVideoPlayer';
 import FacultyRoadmapPlanner from '../components/FacultyRoadmapPlanner';
+import RecordingLinkModal from '../components/RecordingLinkModal';
 
 export default function FacultyPanel() {
   const { user: facultyUser } = useAuth();
@@ -1063,60 +1064,23 @@ export default function FacultyPanel() {
       )}
 
       {/* Update Recording URL Modal */}
-      {sessionToUpdateRecording && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in duration-300">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-blue-600 text-white">
-              <div>
-                <h3 className="text-xl font-bold">Add Recording Link</h3>
-                <p className="text-blue-100 text-xs mt-1">Provide a Google Drive link to the recording</p>
-              </div>
-              <button 
-                onClick={() => setSessionToUpdateRecording(null)}
-                className="p-2 hover:bg-white/10 rounded-full transition-colors"
-              >
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="p-6">
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Google Drive Video Link(s)</label>
-                <textarea
-                  rows={4}
-                  value={recordingUrl}
-                  onChange={(e) => setRecordingUrl(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-mono text-sm"
-                  placeholder="https://drive.google.com/file/d/...&#10;Part 2: https://drive.google.com/file/d/..."
-                />
-                <p className="text-xs text-gray-500 mt-1.5">
-                  <strong>Multiple Videos Tip:</strong> Put each video link on a new line. You can also add labels like <code>Part 1: https://...</code> or <code>Part 2: https://...</code>
-                </p>
-              </div>
-            </div>
-            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-              <button 
-                onClick={() => setSessionToUpdateRecording(null)}
-                className="btn-secondary px-6 py-2"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  updateDoc(doc(db, 'live_sessions', sessionToUpdateRecording), {
-                    recordingUrl
-                  }).then(() => {
-                    setSessionToUpdateRecording(null);
-                    setRecordingUrl('');
-                  }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `live_sessions/${sessionToUpdateRecording}`));
-                }}
-                className="btn-primary bg-blue-600 hover:bg-blue-700 shadow-blue-100 px-6 py-2"
-              >
-                Save Link
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RecordingLinkModal
+        isOpen={!!sessionToUpdateRecording}
+        initialUrl={recordingUrl}
+        onClose={() => {
+          setSessionToUpdateRecording(null);
+          setRecordingUrl('');
+        }}
+        onSave={(formattedUrl) => {
+          if (!sessionToUpdateRecording) return;
+          return updateDoc(doc(db, 'live_sessions', sessionToUpdateRecording), {
+            recordingUrl: formattedUrl
+          }).then(() => {
+            setSessionToUpdateRecording(null);
+            setRecordingUrl('');
+          }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `live_sessions/${sessionToUpdateRecording}`));
+        }}
+      />
     </div>
   );
 }

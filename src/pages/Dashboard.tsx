@@ -169,7 +169,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
     return true;
   } : authChangePassword;
 
-  const { logoUrl, branches, financialSettings, wellnessEnabled, wellnessVideoUrl } = useSettings();
+  const { logoUrl, branches, financialSettings, wellnessEnabled, wellnessVideoUrl, pantoneBooksUrl } = useSettings();
   const { requestPermission } = useNotifications();
   const [showIDCard, setShowIDCard] = useState(false);
   const [showWellness, setShowWellness] = useState(false);
@@ -941,20 +941,36 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
               </div>
 
               {/* Check 2 */}
-              <div className="bg-slate-50 border border-gray-150 rounded-2xl p-4 flex items-start gap-3 hover:border-pink-200 transition-colors">
-                <div className="mt-1 shrink-0">
-                  <input 
-                    type="checkbox" 
-                    id="setup-pantone" 
-                    defaultChecked={localStorage.getItem('setup_pantone') === 'true'}
-                    onChange={(e) => localStorage.setItem('setup_pantone', String(e.target.checked))}
-                    className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 cursor-pointer" 
-                  />
+              <div className="bg-slate-50 border border-gray-150 rounded-2xl p-4 flex flex-col justify-between hover:border-pink-200 transition-colors">
+                <div className="flex items-start gap-3">
+                  <div className="mt-1 shrink-0">
+                    <input 
+                      type="checkbox" 
+                      id="setup-pantone" 
+                      defaultChecked={localStorage.getItem('setup_pantone') === 'true'}
+                      onChange={(e) => localStorage.setItem('setup_pantone', String(e.target.checked))}
+                      className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 cursor-pointer" 
+                    />
+                  </div>
+                  <label htmlFor="setup-pantone" className="cursor-pointer select-none flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-gray-900 block">Pantone Color Books</span>
+                      <span className="px-1.5 py-0.2 text-[9px] font-black bg-pink-100 text-pink-700 rounded">ZIP</span>
+                    </div>
+                    <span className="text-[11px] text-gray-500 block mt-0.5">PMS Swatch library (.ase)</span>
+                  </label>
                 </div>
-                <label htmlFor="setup-pantone" className="cursor-pointer select-none">
-                  <span className="text-sm font-bold text-gray-900 block">Pantone Color Books</span>
-                  <span className="text-[11px] text-gray-500 block mt-0.5">PMS Swatch library files</span>
-                </label>
+                <div className="mt-2.5 pt-2 border-t border-gray-200/60 flex items-center justify-between">
+                  <a 
+                    href={`/api/download?url=${encodeURIComponent(pantoneBooksUrl || 'https://www.pantone.com/connect')}&title=${encodeURIComponent('Pantone_Color_Books_Library.zip')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline"
+                  >
+                    <Download className="w-3 h-3" />
+                    Download ZIP Archive
+                  </a>
+                </div>
               </div>
 
               {/* Check 3 */}

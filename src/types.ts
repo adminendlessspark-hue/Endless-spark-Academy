@@ -305,6 +305,8 @@ export interface CourseModule {
   title: string;
   description: string;
   videoUrl: string;
+  secondaryVideoUrl?: string; // Practical Video URL
+  theoreticalVideoUrl?: string; // Theoretical Video URL
   videoUrls?: Record<string, string>; // e.g., { english: 'url', tamil: 'url' }
   duration: string;
   category: CourseType;

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { CourseModule, TopicScore, CourseType, TrainingRecord, TrainingPlanRow } from '../types';
-import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2, Presentation, Languages } from 'lucide-react';
+import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2, Presentation, Languages, ShieldCheck } from 'lucide-react';
 import { cn, getDirectDownloadUrl, formatCourseName, getOrdinalSuffix } from '../utils';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
@@ -144,7 +144,7 @@ export default function CourseModules() {
   const worksheetInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<'syllabus' | 'training-plan'>('syllabus');
+  const [activeSubTab, setActiveSubTab] = useState<'syllabus' | 'full-length-video'>('syllabus');
   const [trainingPlans, setTrainingPlans] = useState<TrainingPlanRow[]>([]);
 
   useEffect(() => {
@@ -377,161 +377,133 @@ export default function CourseModules() {
       </div>
 
       {/* Sub-navigation Tabs */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex flex-wrap border-b border-gray-200">
         <button
           onClick={() => setActiveSubTab('syllabus')}
           className={cn(
-            "px-6 py-3 text-sm font-bold border-b-2 transition-all cursor-pointer",
+            "px-6 py-3 text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2",
             activeSubTab === 'syllabus'
               ? "border-pink-600 text-pink-600"
               : "border-transparent text-gray-500 hover:text-gray-700"
           )}
         >
-          Syllabus Modules
+          <VideoIcon className="w-4 h-4 text-pink-500" />
+          Quick Introduction
         </button>
         <button
-          onClick={() => setActiveSubTab('training-plan')}
+          onClick={() => setActiveSubTab('full-length-video')}
           className={cn(
-            "px-6 py-3 text-sm font-bold border-b-2 transition-all cursor-pointer",
-            activeSubTab === 'training-plan'
-              ? "border-pink-600 text-pink-600"
+            "px-6 py-3 text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2",
+            activeSubTab === 'full-length-video'
+              ? "border-pink-600 text-pink-600 font-extrabold shadow-sm"
               : "border-transparent text-gray-500 hover:text-gray-700"
           )}
         >
-          Detailed Training Plan
+          <Play className="w-4 h-4 text-pink-500 fill-current" />
+          Complete Course | Theory & Practical
         </button>
       </div>
 
-      {activeSubTab === 'training-plan' && (
-        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-100 space-y-6">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">
-              {formatCourseName(category as any)} - Detailed Training Plan
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Course-wise schedule and syllabus breakdown.
-            </p>
+      {activeSubTab === 'full-length-video' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900 text-white p-6 sm:p-8 rounded-2xl shadow-xl border border-slate-800 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 mb-2">
+                  <VideoIcon className="w-3.5 h-3.5" /> Complete Course | Theory & Practical (Overall Module)
+                </span>
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                  {activeModule.title}
+                </h2>
+                <p className="text-sm text-slate-300 mt-1 max-w-3xl">
+                  {activeModule.description} — Complete masterclass video session covering full theoretical and practical execution of this module.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs bg-pink-950/80 text-pink-300 border border-pink-700/50 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-pink-400" /> Protected Stream (No Download Access)
+                </span>
+                <span className="text-xs bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 font-medium">
+                  Duration: {activeModule.duration}
+                </span>
+              </div>
+            </div>
+
+            <div className="aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 shadow-2xl relative">
+              <SecureVideoPlayer
+                url={activeModule.videoUrl}
+                theoreticalVideoUrl={activeModule.theoreticalVideoUrl}
+                secondaryVideoUrl={activeModule.secondaryVideoUrl}
+                videoUrls={activeModule.videoUrls}
+                nativeLanguage={user?.nativeLanguage}
+                title={`Full-Length Video: ${activeModule.title}`}
+                userName={user?.name}
+                userId={user?.studentId || user?.id}
+                thumbnailUrl={activeModule.thumbnailUrl}
+              />
+            </div>
+
+            {/* Status notice */}
+            {(activeModule.theoreticalVideoUrl || activeModule.secondaryVideoUrl) ? (
+              <div className="p-4 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-200 text-xs flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Dedicated Full-Length Masterclass Videos (Theoretical & Practical) loaded for this module. Use the video selector inside the player to switch between Theoretical and Practical videos.</span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-300 text-xs flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 text-pink-400 shrink-0" />
+                  <span>Streaming main module video. Administrators can attach dedicated Full-Length Theoretical & Practical Video URLs in the Admin Panel for this module.</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="border border-slate-150 rounded-2xl overflow-hidden bg-white">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-150 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    <th className="px-4 py-4 w-12 text-center">S.No</th>
-                    <th className="px-4 py-4 min-w-[180px]">Course Subject</th>
-                    <th className="px-4 py-4 w-28">Training Level</th>
-                    <th className="px-4 py-4 min-w-[280px]">Topics Covered</th>
-                    <th className="px-4 py-4 w-32">Trainer (SME)</th>
-                    <th className="px-4 py-4 w-24">Duration</th>
-                    <th className="px-4 py-4 w-32">Target Date</th>
-                    <th className="px-4 py-4 w-32">Material Type</th>
-                    <th className="px-4 py-4 w-28">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {trainingPlans
-                    .filter(tp => tp.courseId === category)
-                    .sort((a, b) => {
-                      if (a.sNo !== b.sNo) return a.sNo - b.sNo;
-                      return a.level.localeCompare(b.level);
-                    })
-                    .map((row) => (
-                      <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-5 py-4 text-center font-mono text-xs font-semibold text-slate-500">
-                          {row.sNo}
-                        </td>
-                        <td className="px-5 py-4 text-sm font-semibold text-slate-800">
-                          {row.courseSubject}
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className={cn(
-                            "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium",
-                            row.level === 'Level 1' 
-                              ? "bg-blue-50 text-blue-700 border border-blue-100" 
-                              : row.level === 'Level 2'
-                              ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
-                              : "bg-purple-50 text-purple-700 border border-purple-100"
-                          )}>
-                            {row.level}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-sm text-slate-600">
-                          <ul className="list-disc pl-4 space-y-1">
-                            {row.topics.map((t, i) => (
-                              <li key={i}>{t}</li>
-                            ))}
-                          </ul>
-                        </td>
-                        <td className="px-5 py-4 text-sm font-medium text-slate-700">
-                          {row.trainerSme || <span className="text-slate-400 italic">Unassigned</span>}
-                        </td>
-                        <td className="px-5 py-4 text-sm font-mono text-slate-600">
-                          {row.durationHrs || <span className="text-slate-400 italic">-</span>}
-                        </td>
-                        <td className="px-5 py-4 text-sm text-slate-700 font-mono">
-                          {row.targetDate ? (
-                            new Date(row.targetDate).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric'
-                            })
-                          ) : (
-                            <span className="text-slate-400 italic">Not set</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="flex flex-wrap gap-1.5 max-w-[180px]">
-                            {(row.materialType || 'Power Point')
-                              .split(',')
-                              .map(s => s.trim())
-                              .filter(Boolean)
-                              .map((type) => (
-                                <span
-                                  key={type}
-                                  className={cn(
-                                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border whitespace-nowrap",
-                                    type === 'Power Point'
-                                      ? "bg-orange-50 text-orange-700 border-orange-100"
-                                      : type === 'Video'
-                                      ? "bg-teal-50 text-teal-700 border-teal-100"
-                                      : type === 'Exercise file'
-                                      ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                                      : "bg-slate-50 text-slate-700 border-slate-100"
-                                  )}
-                                >
-                                  {type}
-                                </span>
-                              ))}
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className={cn(
-                            "inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold border leading-normal",
-                            row.status === 'Completed'
-                              ? "bg-green-50 text-green-700 border-green-100"
-                              : row.status === 'WIP'
-                              ? "bg-amber-50 text-amber-700 border-amber-100"
-                              : "bg-slate-50 text-slate-600 border-slate-100"
-                          )}>
-                            {row.status || 'To Do'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  {trainingPlans.filter(tp => tp.courseId === category).length === 0 && (
-                    <tr>
-                      <td colSpan={9} className="px-5 py-12 text-center text-slate-500">
-                        <BookOpen className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-                        <p className="font-semibold text-slate-700">No training plans finalized yet</p>
-                        <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">
-                          The administration has not published the training plan for this course yet. Please check back later.
-                        </p>
-                      </td>
-                    </tr>
+          {/* Module Switcher for Full-Length Videos */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-pink-600" />
+              Select Module for Full-Length Masterclass (Theoretical & Practical)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredModules.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setActiveModule(m)}
+                  className={cn(
+                    "p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-3",
+                    activeModule?.id === m.id
+                      ? "border-pink-500 bg-pink-50/50 ring-2 ring-pink-500/20"
+                      : "border-gray-200 hover:border-pink-300 bg-white"
                   )}
-                </tbody>
-              </table>
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-pink-600 bg-pink-100 px-2 py-0.5 rounded">
+                        Module #{m.order || 1}
+                      </span>
+                      {(m.theoreticalVideoUrl || m.secondaryVideoUrl) ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3 text-emerald-600" /> Full Length Available
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-400">Main Video</span>
+                      )}
+                    </div>
+                    <h4 className="font-bold text-gray-900 text-sm line-clamp-1">{m.title}</h4>
+                    <p className="text-xs text-gray-500 line-clamp-2 mt-1">{m.description}</p>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {m.duration}</span>
+                    <span className="font-bold text-pink-600 text-xs flex items-center gap-1">
+                      Play Full Video <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -539,7 +511,20 @@ export default function CourseModules() {
 
       <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-8", activeSubTab !== 'syllabus' && "hidden")}>
         {/* Video Player Section */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex flex-wrap items-center justify-between bg-slate-900 p-3 px-4 rounded-xl text-white shadow-sm border border-slate-800 gap-2">
+            <div className="flex items-center gap-2">
+              <VideoIcon className="w-4 h-4 text-pink-400" />
+              <span className="text-xs font-bold tracking-wider text-slate-200">Quick Introduction</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] bg-pink-950 text-pink-300 border border-pink-700/50 px-2 py-0.5 rounded font-bold flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-pink-400" /> Protected (No Download Access)
+              </span>
+              <span className="text-[11px] font-medium text-slate-400">Quick Introduction Video</span>
+            </div>
+          </div>
+
           <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-lg relative group">
             <SecureVideoPlayer 
               url={activeModule.videoUrl} 
@@ -690,41 +675,6 @@ export default function CourseModules() {
                         rel="noopener noreferrer"
                         className="p-4 bg-orange-50 border border-orange-100 rounded-xl hover:bg-orange-100 transition-colors text-orange-600 shadow-sm flex items-center justify-center cursor-pointer"
                         title="Download Worksheet"
-                      >
-                        <Download className="w-5 h-5" />
-                      </a>
-                    </div>
-                  </div>
-                )}
-
-                {activeModule.slidesUrl && (
-                  <div className="space-y-4">
-                    <h4 className="font-bold text-gray-900 flex items-center gap-2">
-                      <Presentation className="w-4 h-4 text-pink-600" />
-                      PowerPoint Presentation Slides
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => handleOpenDocument(activeModule.slidesUrl!, `Slides Presentation: ${activeModule.title}`, true)}
-                        className="flex-1 flex items-center justify-between p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors group text-left cursor-pointer"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-pink-600 shadow-sm">
-                            <Presentation className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-gray-900">View Presentation Slides</p>
-                            <p className="text-xs text-gray-500">PowerPoint (.pptx) / PDF Slides Deck</p>
-                          </div>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-pink-400 group-hover:translate-x-1 transition-transform" />
-                      </button>
-                      <a 
-                        href={`/api/download?url=${encodeURIComponent(activeModule.slidesUrl!)}&title=${encodeURIComponent(`Slides - ${activeModule.title}`)}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="p-4 bg-pink-50 border border-pink-100 rounded-xl hover:bg-pink-100 transition-colors text-pink-600 shadow-sm flex items-center justify-center cursor-pointer"
-                        title="Download Slides"
                       >
                         <Download className="w-5 h-5" />
                       </a>

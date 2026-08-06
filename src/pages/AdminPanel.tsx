@@ -7,7 +7,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Users, BookOpen, GraduationCap, CheckCircle, XCircle, Upload, Plus, Trash2, Video, Clock, ShieldCheck, Calendar, UserCheck, X, Download, FileText, Map, FileSpreadsheet, HelpCircle, Eye, Check, ExternalLink, User as UserIcon, PhoneCall, MapPin, Edit2, Edit, IndianRupee, Image, MoreVertical, Key, Ban, RefreshCw, Briefcase, Calculator, Bot, Loader2, FolderKanban, Copy, UserPlus, AlertCircle, FileCheck, ChevronDown, ChevronUp, Sparkles, Printer, Wind, Cloud, Layers, Wallet, CheckSquare, Globe, MessageCircle, Info, ChevronLeft, ChevronRight, Award, Search, Instagram, Facebook, Youtube, Linkedin } from 'lucide-react';
 import { User, CourseModule, QuizQuestion, CourseType, TopicScore, Holiday, ApplicationData, TeamMember, TrainingPlanRow } from '../types';
 import { DEFAULT_TRAINING_PLANS } from '../defaultTrainingPlans';
-import { cn, compressImage, calculateSLADate, formatCourseName, getScoreKey, getOrdinalSuffix } from '../utils';
+import { cn, compressImage, calculateSLADate, formatCourseName, getScoreKey, getCourseFromScoreKey, getStudentCourseScores, getOrdinalSuffix } from '../utils';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { FileUploader } from '../components/FileUploader';
 import FacultyRoadmapPlanner from '../components/FacultyRoadmapPlanner';
@@ -691,6 +691,7 @@ export default function AdminPanel() {
     mindMapUrl: '',
     worksheetUrl: '',
     referenceMaterialUrl: '',
+    videoScript: '',
     slidesUrl: '',
     thumbnailUrl: '',
     additionalReferenceMaterials: [] as {title: string, url: string}[],
@@ -1909,20 +1910,31 @@ export default function AdminPanel() {
       const student = students.find(s => s.id === studentId);
       if (!student) return;
 
-      const newScores = JSON.parse(JSON.stringify(student.scores));
-      const categoryKey = course === 'production-art-engineer' ? 'productionArtEngineer' : (course === 'print-ready-engineer' ? 'printReadyEngineer' : 'qualityControlEngineer');
+      const newScores = JSON.parse(JSON.stringify(student.scores || {}));
+      let targetKey = getScoreKey(course);
+
+      // Look if student has scores under legacy key matching course
+      for (const k of Object.keys(newScores)) {
+        if (getCourseFromScoreKey(k) === getCourseFromScoreKey(course)) {
+          targetKey = k;
+          break;
+        }
+      }
       
-      if (!newScores[categoryKey][topic]) {
-        newScores[categoryKey][topic] = { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
+      if (!newScores[targetKey]) {
+        newScores[targetKey] = {};
+      }
+      if (!newScores[targetKey][topic]) {
+        newScores[targetKey][topic] = { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
       }
 
       const statusKey = `${type}Status` as keyof TopicScore;
-      (newScores[categoryKey][topic] as any)[statusKey] = status;
+      (newScores[targetKey][topic] as any)[statusKey] = status;
 
       if (status === 'approved') {
         const scoreKey = type as keyof TopicScore;
         const maxScore = type === 'video' ? 20 : (type === 'assignment' ? 10 : (type === 'mindMap' ? 10 : 20)); // Adjust max scores as needed
-        (newScores[categoryKey][topic] as any)[scoreKey] = mark !== undefined ? mark : maxScore;
+        (newScores[targetKey][topic] as any)[scoreKey] = mark !== undefined ? mark : maxScore;
       }
 
       const studentRef = doc(db, 'users', studentId);
@@ -1938,12 +1950,49 @@ export default function AdminPanel() {
 
   const getAllSubmissions = () => {
     const submissions: any[] = [];
+    const allCourseTopicsMap: Record<string, string[]> = {
+      'production-art-engineer': productionArtEngineerTopics,
+      'print-ready-engineer': printReadyEngineerTopics,
+      'packaging-engineer': packagingEngineerTopics,
+      'plate-ready-engineer': plateReadyEngineerTopics,
+      'colour-retouching-engineer': colourRetouchingEngineerTopics,
+      'printing-and-packaging-cross-courses': printingAndPackagingTopics,
+      'quality-control-engineer': qualityControlEngineerTopics,
+    };
+
     students.forEach(student => {
       if (!student.scores) return;
       
+      const studentAssignedCourses: string[] = student.assignedCourses || (student.assignedCourse ? [student.assignedCourse] : []);
+
       Object.entries(student.scores).forEach(([categoryKey, topics]) => {
-        const course = categoryKey === 'productionArtEngineer' ? 'production-art-engineer' : (categoryKey === 'printReadyEngineer' ? 'print-ready-engineer' : 'quality-control-engineer');
-        Object.entries(topics).forEach(([topic, score]) => {
+        if (!topics || typeof topics !== 'object') return;
+        
+        Object.entries(topics as Record<string, TopicScore>).forEach(([topic, score]) => {
+          if (!score || typeof score !== 'object') return;
+
+          let course = getCourseFromScoreKey(categoryKey);
+
+          // If course is fallback or not in student's assigned courses, match topic against student's assigned courses or global topics
+          if (!studentAssignedCourses.includes(course)) {
+            let matched = false;
+            for (const cId of studentAssignedCourses) {
+              if (allCourseTopicsMap[cId]?.includes(topic)) {
+                course = cId as any;
+                matched = true;
+                break;
+              }
+            }
+            if (!matched) {
+              for (const [cId, topicsList] of Object.entries(allCourseTopicsMap)) {
+                if (topicsList.includes(topic)) {
+                  course = cId as any;
+                  break;
+                }
+              }
+            }
+          }
+
           const types = ['assignment', 'video', 'worksheet', 'project', 'mindMap'] as const;
           types.forEach(type => {
             const statusKey = `${type}Status` as keyof TopicScore;
@@ -2542,7 +2591,7 @@ export default function AdminPanel() {
 
     try {
       const scores = { ...student.scores };
-      const categoryKey = course === 'production-art-engineer' ? 'productionArtEngineer' : (course === 'print-ready-engineer' ? 'printReadyEngineer' : 'qualityControlEngineer');
+      const categoryKey = getScoreKey(course);
       const courseScores = { ...(scores[categoryKey] || {}) };
       const topicScore = { ...(courseScores[topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 }) } as TopicScore;
       
@@ -2676,6 +2725,7 @@ export default function AdminPanel() {
         mindMapUrl: '',
         worksheetUrl: '',
         referenceMaterialUrl: '',
+        videoScript: '',
         slidesUrl: '',
         thumbnailUrl: '',
         additionalReferenceMaterials: [],
@@ -5517,7 +5567,7 @@ export default function AdminPanel() {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h4 className="font-bold text-gray-900">{sub.studentName}</h4>
-                      <p className="text-xs text-gray-500 capitalize">{sub.course.replace('-', ' ')} - {sub.topic}</p>
+                      <p className="text-xs text-gray-500 font-medium">{formatCourseName(sub.course)} - {sub.topic}</p>
                     </div>
                     <span className={cn(
                       "px-2 py-1 text-xs font-bold rounded-full capitalize",
@@ -6070,6 +6120,30 @@ export default function AdminPanel() {
                           })}
                         />
                       </div>
+                      <div className="col-span-1 md:col-span-2 bg-gradient-to-r from-indigo-50 to-purple-50 p-4.5 rounded-2xl border-2 border-indigo-200/80 space-y-2.5 my-2">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <BookOpen className="w-4 h-4 text-indigo-600" />
+                            Video Script & Reference Material Text Content (Auto-Translates to Native Language)
+                          </label>
+                          <span className="px-2.5 py-0.5 bg-indigo-200 text-indigo-900 text-[10px] font-black rounded-full uppercase tracking-wider">
+                            ✨ Native Auto-Translate Enabled
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          Paste your English video script, lecture transcript, or reference material text below. Students will be able to view this content and <strong>auto-translate it into their native language (Tamil, Hindi, Kannada, Malayalam, Telugu, etc.)</strong> in the Course Modules viewer & AI Communication Coach!
+                        </p>
+                        <textarea 
+                          className="w-full p-4 bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[140px] text-xs font-mono leading-relaxed"
+                          value={editingModule.module.videoScript || ''}
+                          onChange={(e) => setEditingModule({
+                            ...editingModule,
+                            module: { ...editingModule.module, videoScript: e.target.value }
+                          })}
+                          placeholder="Paste English video script or reference text here...&#10;e.g. [00:00 - Greeting]: Hello students, today we will present..."
+                        />
+                      </div>
+
                       <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Reference Material URL / ZIP Archive</label>
                         <input 
@@ -6907,6 +6981,27 @@ export default function AdminPanel() {
                         onUploadComplete={(url) => setNewModuleData({ ...newModuleData, worksheetUrl: url })}
                       />
                     </div>
+                    <div className="col-span-1 md:col-span-2 bg-gradient-to-r from-indigo-50 to-purple-50 p-4.5 rounded-2xl border-2 border-indigo-200/80 space-y-2.5 my-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <BookOpen className="w-4 h-4 text-indigo-600" />
+                          Video Script & Reference Material Text Content (Auto-Translates to Native Language)
+                        </label>
+                        <span className="px-2.5 py-0.5 bg-indigo-200 text-indigo-900 text-[10px] font-black rounded-full uppercase tracking-wider">
+                          ✨ Native Auto-Translate Enabled
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        Paste your English video script, lecture transcript, or reference material text below. Students will be able to view this content and <strong>auto-translate it into their native language (Tamil, Hindi, Kannada, Malayalam, Telugu, etc.)</strong> in the Course Modules viewer & AI Communication Coach!
+                      </p>
+                      <textarea 
+                        className="w-full p-4 bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[140px] text-xs font-mono leading-relaxed"
+                        value={newModuleData.videoScript || ''}
+                        onChange={(e) => setNewModuleData({ ...newModuleData, videoScript: e.target.value })}
+                        placeholder="Paste English video script or reference text here...&#10;e.g. [00:00 - Greeting]: Hello students, today we will present..."
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Reference Material URL / ZIP Archive</label>
                       <input 

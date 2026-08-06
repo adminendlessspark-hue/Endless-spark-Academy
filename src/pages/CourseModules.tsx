@@ -1,8 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import { CourseModule, TopicScore, CourseType, TrainingRecord, TrainingPlanRow } from '../types';
-import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2, Presentation, Languages, ShieldCheck, ExternalLink } from 'lucide-react';
-import { cn, getDirectDownloadUrl, formatCourseName, getOrdinalSuffix } from '../utils';
+import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2, Presentation, Languages, ShieldCheck, ExternalLink, RefreshCw, Sparkles, Copy, Check, Volume2, VolumeX } from 'lucide-react';
+import { generateGeminiContent } from '../services/gemini';
+import { ParagraphicScriptReader } from '../components/ParagraphicScriptReader';
+import { cn, getDirectDownloadUrl, formatCourseName, getOrdinalSuffix, getScoreKey } from '../utils';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import VideoRecorder from '../components/VideoRecorder';
@@ -153,6 +156,64 @@ export default function CourseModules() {
   const [activeSubTab, setActiveSubTab] = useState<'syllabus' | 'full-length-video'>('syllabus');
   const [trainingPlans, setTrainingPlans] = useState<TrainingPlanRow[]>([]);
 
+  // Module Video Script Auto-Translation State
+  const [moduleScriptTargetLang, setModuleScriptTargetLang] = useState<string>('Tamil');
+  const [moduleScriptTranslating, setModuleScriptTranslating] = useState<boolean>(false);
+  const [moduleScriptTranslation, setModuleScriptTranslation] = useState<string>('');
+  const [copiedModuleScript, setCopiedModuleScript] = useState<boolean>(false);
+  const [playingScriptAudio, setPlayingScriptAudio] = useState<boolean>(false);
+
+  const handleTranslateActiveModuleScript = async (text: string) => {
+    if (!text || !text.trim()) return;
+    setModuleScriptTranslating(true);
+    try {
+      const prompt = `Translate the following English video reference script/material into ${moduleScriptTargetLang} for a student. 
+
+Provide:
+1. Complete, natural translation in ${moduleScriptTargetLang}.
+2. Line-by-line breakdown (English original line -> ${moduleScriptTargetLang} translation).
+3. Phonetic Pronunciation Guide in brackets for key English words so non-native speakers can speak fluently.
+
+Title: ${activeModule?.title || 'Course Video Script Reference'}
+English Script/Reference Material:
+${text}`;
+
+      const res = await generateGeminiContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        systemInstruction: 'You are an expert bilingual speech and translation coach helping students learn english video scripts.'
+      });
+
+      setModuleScriptTranslation(res.text || 'Translation completed.');
+    } catch (e) {
+      console.error('Failed to translate video script:', e);
+      setModuleScriptTranslation('Failed to translate script. Please try again.');
+    } finally {
+      setModuleScriptTranslating(false);
+    }
+  };
+
+  const handleCopyModuleScriptText = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedModuleScript(true);
+    setTimeout(() => setCopiedModuleScript(false), 2000);
+  };
+
+  const handleToggleModuleScriptAudio = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+    if (playingScriptAudio) {
+      window.speechSynthesis.cancel();
+      setPlayingScriptAudio(false);
+    } else {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.onend = () => setPlayingScriptAudio(false);
+      utterance.onerror = () => setPlayingScriptAudio(false);
+      setPlayingScriptAudio(true);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
   useEffect(() => {
     if (!user?.id) return;
     const q = query(collection(db, 'training_records'), where('studentId', '==', user.id));
@@ -190,7 +251,7 @@ export default function CourseModules() {
       const newCompleted = [...completedIds, module.id];
       
       // Update score card for video completion (20 marks)
-      const categoryKey = formatCourseName(module.category as any).replace(/\s+/g, '').replace(/&/g, 'And') as keyof typeof user.scores;
+      const categoryKey = getScoreKey(module.category) as keyof typeof user.scores;
       const currentTopicScores = (scores[categoryKey] as any)?.[module.title] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
       
       const newScores = {
@@ -263,8 +324,8 @@ export default function CourseModules() {
     }
   };
 
-  const handleUrlSubmit = (type: 'assignment' | 'worksheet' | 'project' | 'mindMap' | 'video') => {
-    setUrlModal({ isOpen: true, type, url: '' });
+  const handleUrlSubmit = (type: 'assignment' | 'worksheet' | 'project' | 'mindMap' | 'video', existingUrl?: string) => {
+    setUrlModal({ isOpen: true, type, url: existingUrl || '' });
   };
 
   const processUrlSubmit = () => {
@@ -274,7 +335,7 @@ export default function CourseModules() {
     const type = urlModal.type;
     const url = urlModal.url.trim();
     
-    const categoryKey = formatCourseName(activeModule!.category as any).replace(/\s+/g, '').replace(/&/g, 'And') as keyof typeof user.scores;
+    const categoryKey = getScoreKey(activeModule!.category) as keyof typeof user.scores;
     const currentTopicScores = (scores[categoryKey] as any)?.[activeModule!.title] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
     
     const statusKey = `${type}Status` as keyof typeof currentTopicScores;
@@ -317,7 +378,7 @@ export default function CourseModules() {
     const score = Math.round((correctCount / questions.length) * 20);
     setQuizResults({ score, total: 20 });
 
-    const categoryKey = formatCourseName(activeModule!.category as any).replace(/\s+/g, '').replace(/&/g, 'And') as keyof typeof user.scores;
+    const categoryKey = getScoreKey(activeModule!.category) as keyof typeof user.scores;
     const currentTopicScores = (scores[categoryKey] as any)?.[activeModule!.title] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
     
     const newScores = {
@@ -337,7 +398,7 @@ export default function CourseModules() {
 
   const handleMindMapValidation = (score: number) => {
     if (!activeModule) return;
-    const categoryKey = formatCourseName(activeModule.category as any).replace(/\s+/g, '').replace(/&/g, 'And') as keyof typeof user.scores;
+    const categoryKey = getScoreKey(activeModule.category) as keyof typeof user.scores;
     const currentTopicScores = (scores[categoryKey] as any)?.[activeModule.title] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
     
     const newScores = {
@@ -353,7 +414,7 @@ export default function CourseModules() {
 
   if (!activeModule) return null;
 
-  const categoryKey = formatCourseName(category as any).replace(/\s+/g, '').replace(/&/g, 'And') as keyof typeof user.scores;
+  const categoryKey = getScoreKey(category) as keyof typeof user.scores;
   const currentScore = (scores[categoryKey] as any)?.[activeModule.title] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, attendance: 0, onlineTest: 0 } as TopicScore;
 
   return (
@@ -688,6 +749,21 @@ export default function CourseModules() {
                   </div>
                 )}
 
+                {/* Module Video Script & Reference Text Section */}
+                {activeModule.videoScript && (
+                  <ParagraphicScriptReader
+                    title={`Video Script & Reference Material - ${activeModule.title}`}
+                    scriptText={activeModule.videoScript}
+                    category="Instructor Video Script"
+                    targetLang={moduleScriptTargetLang}
+                    translatedText={moduleScriptTranslation}
+                    isTranslating={moduleScriptTranslating}
+                    onTranslate={(lang) => handleTranslateActiveModuleScript(activeModule.videoScript!)}
+                    onTargetLangChange={(lang) => setModuleScriptTargetLang(lang)}
+                    onPracticeInCoach={() => navigate('/communication-coach')}
+                  />
+                )}
+
                 {activeModule.referenceMaterialUrl && (() => {
                   const isZip = activeModule.referenceMaterialUrl.toLowerCase().endsWith('.zip') || 
                                 activeModule.referenceMaterialUrl.toLowerCase().endsWith('.rar') || 
@@ -844,26 +920,69 @@ export default function CourseModules() {
                   </h4>
                   <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                     {currentScore.videoStatus === 'approved' ? (
-                      <div className="flex flex-col items-center text-orange-600 py-4">
-                        <CheckCircle className="w-8 h-8 mb-2" />
+                      <div className="flex flex-col items-center text-green-700 py-3">
+                        <CheckCircle className="w-8 h-8 mb-2 text-green-600" />
                         <p className="text-sm font-bold">Video Approved</p>
-                        <p className="text-xs opacity-75">Score: {currentScore.video}/20</p>
+                        <p className="text-xs text-gray-500 mb-2">Score: {currentScore.video}/20</p>
+                        {currentScore.videoData && (
+                          <a 
+                            href={currentScore.videoData} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                          </a>
+                        )}
+                        <button 
+                          onClick={() => handleUrlSubmit('video', currentScore.videoData)}
+                          className="px-3.5 py-1.5 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95"
+                          title="Click to reshare if you uploaded an incorrect link"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" /> Reshare Link
+                        </button>
                       </div>
                     ) : currentScore.videoStatus === 'pending' ? (
-                      <div className="flex flex-col items-center text-orange-600 py-4">
+                      <div className="flex flex-col items-center text-orange-600 py-3">
                         <Clock className="w-8 h-8 mb-2" />
                         <p className="text-sm font-bold">Pending Approval</p>
-                        <p className="text-xs opacity-75">Submitted for review</p>
+                        <p className="text-xs opacity-75 mb-2">Submitted for review</p>
+                        {currentScore.videoData && (
+                          <a 
+                            href={currentScore.videoData} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                          </a>
+                        )}
+                        <button 
+                          onClick={() => handleUrlSubmit('video', currentScore.videoData)}
+                          className="px-3 py-1.5 bg-orange-100 text-orange-800 hover:bg-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" /> Reshare / Update Link
+                        </button>
                       </div>
                     ) : currentScore.videoStatus === 'rejected' ? (
-                      <div className="flex flex-col items-center text-red-600 py-4">
+                      <div className="flex flex-col items-center text-red-600 py-3">
                         <XCircle className="w-8 h-8 mb-2" />
                         <p className="text-sm font-bold">Video Rejected</p>
+                        {currentScore.videoData && (
+                          <a 
+                            href={currentScore.videoData} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-xs text-red-500 hover:underline flex items-center gap-1 my-1"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" /> View Rejected Link
+                          </a>
+                        )}
                         <button 
-                          onClick={() => handleUrlSubmit('video')}
-                          className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-3"
+                          onClick={() => handleUrlSubmit('video', currentScore.videoData)}
+                          className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-2 flex items-center gap-1.5"
                         >
-                          Upload Again
+                          <RefreshCw className="w-4 h-4" /> Reshare Link
                         </button>
                       </div>
                     ) : (
@@ -888,26 +1007,69 @@ export default function CourseModules() {
                   <div className="p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-pink-300 transition-colors bg-gray-50/50">
                     <div className="text-center">
                       {currentScore.assignmentStatus === 'approved' ? (
-                        <div className="flex flex-col items-center text-orange-600">
-                          <FileCheck className="w-8 h-8 mb-2" />
+                        <div className="flex flex-col items-center text-green-700 py-2">
+                          <FileCheck className="w-8 h-8 mb-2 text-green-600" />
                           <p className="text-sm font-bold">Assignment Approved</p>
-                          <p className="text-xs opacity-75">Score: {currentScore.assignment}/10</p>
+                          <p className="text-xs text-gray-500 mb-2">Score: {currentScore.assignment}/10</p>
+                          {currentScore.assignmentFile && (
+                            <a 
+                              href={currentScore.assignmentFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                            </a>
+                          )}
+                          <button 
+                            onClick={() => handleUrlSubmit('assignment', currentScore.assignmentFile)}
+                            className="px-3.5 py-1.5 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 mx-auto active:scale-95"
+                            title="Click to reshare if you uploaded an incorrect link"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Reshare Link
+                          </button>
                         </div>
                       ) : currentScore.assignmentStatus === 'pending' ? (
-                        <div className="flex flex-col items-center text-orange-600">
+                        <div className="flex flex-col items-center text-orange-600 py-2">
                           <Clock className="w-8 h-8 mb-2" />
                           <p className="text-sm font-bold">Pending Approval</p>
-                          <p className="text-xs opacity-75">Submitted for review</p>
+                          <p className="text-xs opacity-75 mb-2">Submitted for review</p>
+                          {currentScore.assignmentFile && (
+                            <a 
+                              href={currentScore.assignmentFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                            </a>
+                          )}
+                          <button 
+                            onClick={() => handleUrlSubmit('assignment', currentScore.assignmentFile)}
+                            className="px-3 py-1.5 bg-orange-100 text-orange-800 hover:bg-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 mx-auto active:scale-95"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Reshare / Update Link
+                          </button>
                         </div>
                       ) : currentScore.assignmentStatus === 'rejected' ? (
-                        <div className="flex flex-col items-center text-red-600">
+                        <div className="flex flex-col items-center text-red-600 py-2">
                           <XCircle className="w-8 h-8 mb-2" />
                           <p className="text-sm font-bold">Assignment Rejected</p>
+                          {currentScore.assignmentFile && (
+                            <a 
+                              href={currentScore.assignmentFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-red-500 hover:underline flex items-center gap-1 my-1 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Rejected Link
+                            </a>
+                          )}
                           <button 
-                            onClick={() => handleUrlSubmit('assignment')}
-                            className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-3"
+                            onClick={() => handleUrlSubmit('assignment', currentScore.assignmentFile)}
+                            className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-2 flex items-center gap-1.5 mx-auto"
                           >
-                            Upload Again
+                            <RefreshCw className="w-4 h-4" /> Reshare Link
                           </button>
                         </div>
                       ) : (
@@ -933,26 +1095,69 @@ export default function CourseModules() {
                   <div className="p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-orange-300 transition-colors bg-gray-50/50">
                     <div className="text-center">
                       {currentScore.worksheetStatus === 'approved' ? (
-                        <div className="flex flex-col items-center text-orange-600">
-                          <FileCheck className="w-8 h-8 mb-2" />
+                        <div className="flex flex-col items-center text-green-700 py-2">
+                          <FileCheck className="w-8 h-8 mb-2 text-green-600" />
                           <p className="text-sm font-bold">Worksheet Approved</p>
-                          <p className="text-xs opacity-75">Score: {currentScore.worksheet}/20</p>
+                          <p className="text-xs text-gray-500 mb-2">Score: {currentScore.worksheet}/20</p>
+                          {currentScore.worksheetFile && (
+                            <a 
+                              href={currentScore.worksheetFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                            </a>
+                          )}
+                          <button 
+                            onClick={() => handleUrlSubmit('worksheet', currentScore.worksheetFile)}
+                            className="px-3.5 py-1.5 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 mx-auto active:scale-95"
+                            title="Click to reshare if you uploaded an incorrect link"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Reshare Link
+                          </button>
                         </div>
                       ) : currentScore.worksheetStatus === 'pending' ? (
-                        <div className="flex flex-col items-center text-orange-600">
+                        <div className="flex flex-col items-center text-orange-600 py-2">
                           <Clock className="w-8 h-8 mb-2" />
                           <p className="text-sm font-bold">Pending Approval</p>
-                          <p className="text-xs opacity-75">Submitted for review</p>
+                          <p className="text-xs opacity-75 mb-2">Submitted for review</p>
+                          {currentScore.worksheetFile && (
+                            <a 
+                              href={currentScore.worksheetFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                            </a>
+                          )}
+                          <button 
+                            onClick={() => handleUrlSubmit('worksheet', currentScore.worksheetFile)}
+                            className="px-3 py-1.5 bg-orange-100 text-orange-800 hover:bg-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 mx-auto active:scale-95"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Reshare / Update Link
+                          </button>
                         </div>
                       ) : currentScore.worksheetStatus === 'rejected' ? (
-                        <div className="flex flex-col items-center text-red-600">
+                        <div className="flex flex-col items-center text-red-600 py-2">
                           <XCircle className="w-8 h-8 mb-2" />
                           <p className="text-sm font-bold">Worksheet Rejected</p>
+                          {currentScore.worksheetFile && (
+                            <a 
+                              href={currentScore.worksheetFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-red-500 hover:underline flex items-center gap-1 my-1 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Rejected Link
+                            </a>
+                          )}
                           <button 
-                            onClick={() => handleUrlSubmit('worksheet')}
-                            className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-3"
+                            onClick={() => handleUrlSubmit('worksheet', currentScore.worksheetFile)}
+                            className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-2 flex items-center gap-1.5 mx-auto"
                           >
-                            Upload Again
+                            <RefreshCw className="w-4 h-4" /> Reshare Link
                           </button>
                         </div>
                       ) : (
@@ -978,26 +1183,69 @@ export default function CourseModules() {
                   <div className="p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-pink-300 transition-colors bg-gray-50/50">
                     <div className="text-center">
                       {currentScore.projectStatus === 'approved' ? (
-                        <div className="flex flex-col items-center text-orange-600">
-                          <FileCheck className="w-8 h-8 mb-2" />
+                        <div className="flex flex-col items-center text-green-700 py-2">
+                          <FileCheck className="w-8 h-8 mb-2 text-green-600" />
                           <p className="text-sm font-bold">Project Approved</p>
-                          <p className="text-xs opacity-75">Score: {currentScore.project}/20</p>
+                          <p className="text-xs text-gray-500 mb-2">Score: {currentScore.project}/20</p>
+                          {currentScore.projectFile && (
+                            <a 
+                              href={currentScore.projectFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                            </a>
+                          )}
+                          <button 
+                            onClick={() => handleUrlSubmit('project', currentScore.projectFile)}
+                            className="px-3.5 py-1.5 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 mx-auto active:scale-95"
+                            title="Click to reshare if you uploaded an incorrect link"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Reshare Link
+                          </button>
                         </div>
                       ) : currentScore.projectStatus === 'pending' ? (
-                        <div className="flex flex-col items-center text-orange-600">
+                        <div className="flex flex-col items-center text-orange-600 py-2">
                           <Clock className="w-8 h-8 mb-2" />
                           <p className="text-sm font-bold">Pending Approval</p>
-                          <p className="text-xs opacity-75">Submitted for review</p>
+                          <p className="text-xs opacity-75 mb-2">Submitted for review</p>
+                          {currentScore.projectFile && (
+                            <a 
+                              href={currentScore.projectFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                            </a>
+                          )}
+                          <button 
+                            onClick={() => handleUrlSubmit('project', currentScore.projectFile)}
+                            className="px-3 py-1.5 bg-orange-100 text-orange-800 hover:bg-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 mx-auto active:scale-95"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Reshare / Update Link
+                          </button>
                         </div>
                       ) : currentScore.projectStatus === 'rejected' ? (
-                        <div className="flex flex-col items-center text-red-600">
+                        <div className="flex flex-col items-center text-red-600 py-2">
                           <XCircle className="w-8 h-8 mb-2" />
                           <p className="text-sm font-bold">Project Rejected</p>
+                          {currentScore.projectFile && (
+                            <a 
+                              href={currentScore.projectFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-red-500 hover:underline flex items-center gap-1 my-1 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Rejected Link
+                            </a>
+                          )}
                           <button 
-                            onClick={() => handleUrlSubmit('project')}
-                            className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-3"
+                            onClick={() => handleUrlSubmit('project', currentScore.projectFile)}
+                            className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-2 flex items-center gap-1.5 mx-auto"
                           >
-                            Upload Again
+                            <RefreshCw className="w-4 h-4" /> Reshare Link
                           </button>
                         </div>
                       ) : (
@@ -1023,26 +1271,69 @@ export default function CourseModules() {
                   <div className="p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-purple-300 transition-colors bg-gray-50/50">
                     <div className="text-center">
                       {currentScore.mindMapStatus === 'approved' ? (
-                        <div className="flex flex-col items-center text-orange-600">
-                          <FileCheck className="w-8 h-8 mb-2" />
+                        <div className="flex flex-col items-center text-green-700 py-2">
+                          <FileCheck className="w-8 h-8 mb-2 text-green-600" />
                           <p className="text-sm font-bold">Mind Map Approved</p>
-                          <p className="text-xs opacity-75">Score: {currentScore.mindMap}/10</p>
+                          <p className="text-xs text-gray-500 mb-2">Score: {currentScore.mindMap}/10</p>
+                          {currentScore.mindMapFile && (
+                            <a 
+                              href={currentScore.mindMapFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                            </a>
+                          )}
+                          <button 
+                            onClick={() => handleUrlSubmit('mindMap', currentScore.mindMapFile)}
+                            className="px-3.5 py-1.5 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 mx-auto active:scale-95"
+                            title="Click to reshare if you uploaded an incorrect link"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Reshare Link
+                          </button>
                         </div>
                       ) : currentScore.mindMapStatus === 'pending' ? (
-                        <div className="flex flex-col items-center text-orange-600">
+                        <div className="flex flex-col items-center text-orange-600 py-2">
                           <Clock className="w-8 h-8 mb-2" />
                           <p className="text-sm font-bold">Pending Approval</p>
-                          <p className="text-xs opacity-75">Submitted for review</p>
+                          <p className="text-xs opacity-75 mb-2">Submitted for review</p>
+                          {currentScore.mindMapFile && (
+                            <a 
+                              href={currentScore.mindMapFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-pink-600 hover:underline flex items-center gap-1 mb-3 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Submitted Link
+                            </a>
+                          )}
+                          <button 
+                            onClick={() => handleUrlSubmit('mindMap', currentScore.mindMapFile)}
+                            className="px-3 py-1.5 bg-orange-100 text-orange-800 hover:bg-orange-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 mx-auto active:scale-95"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Reshare / Update Link
+                          </button>
                         </div>
                       ) : currentScore.mindMapStatus === 'rejected' ? (
-                        <div className="flex flex-col items-center text-red-600">
+                        <div className="flex flex-col items-center text-red-600 py-2">
                           <XCircle className="w-8 h-8 mb-2" />
                           <p className="text-sm font-bold">Mind Map Rejected</p>
+                          {currentScore.mindMapFile && (
+                            <a 
+                              href={currentScore.mindMapFile} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-red-500 hover:underline flex items-center gap-1 my-1 justify-center"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Rejected Link
+                            </a>
+                          )}
                           <button 
-                            onClick={() => handleUrlSubmit('mindMap')}
-                            className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-3"
+                            onClick={() => handleUrlSubmit('mindMap', currentScore.mindMapFile)}
+                            className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold transition-all active:scale-95 mt-2 flex items-center gap-1.5 mx-auto"
                           >
-                            Upload Again
+                            <RefreshCw className="w-4 h-4" /> Reshare Link
                           </button>
                         </div>
                       ) : (
@@ -1291,8 +1582,8 @@ export default function CourseModules() {
           <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-pink-50">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <Upload className="w-5 h-5 text-pink-600" />
-                Submit {urlModal.type?.charAt(0).toUpperCase()}{urlModal.type?.slice(1)}
+                <RefreshCw className="w-5 h-5 text-pink-600" />
+                {urlModal.url ? 'Reshare / Update' : 'Submit'} {urlModal.type?.charAt(0).toUpperCase()}{urlModal.type?.slice(1)} Link
               </h3>
               <button 
                 onClick={() => setUrlModal({ isOpen: false, type: null, url: '' })}
@@ -1303,8 +1594,8 @@ export default function CourseModules() {
               </button>
             </div>
             <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-600">
-                Please paste the Google Drive or YouTube link for your {urlModal.type}. Make sure the link is set to "Anyone with the link can view".
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Paste or update the Google Drive or YouTube link for your {urlModal.type}. If you uploaded an incorrect material or link earlier, paste the correct URL below to reshare it for faculty approval. Ensure link permission is set to <strong>"Anyone with the link can view"</strong>.
               </p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Submission URL</label>
@@ -1312,17 +1603,18 @@ export default function CourseModules() {
                   type="url"
                   value={urlModal.url}
                   onChange={(e) => setUrlModal(prev => ({ ...prev, url: e.target.value }))}
-                  placeholder="https://..."
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all"
+                  placeholder="https://drive.google.com/..."
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition-all text-sm"
                   disabled={uploading}
                 />
               </div>
               <button
                 onClick={processUrlSubmit}
                 disabled={uploading || !urlModal.url.trim()}
-                className="w-full bg-pink-500 text-white py-3 rounded-xl font-bold hover:bg-pink-600 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
+                className="w-full bg-pink-600 text-white py-3 rounded-xl font-bold hover:bg-pink-700 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 shadow-sm"
               >
-                {uploading ? 'Submitting...' : 'Submit Link'}
+                <RefreshCw className="w-4 h-4" />
+                {uploading ? 'Submitting...' : (urlModal.url ? 'Reshare / Update Link' : 'Submit Link')}
               </button>
             </div>
           </div>

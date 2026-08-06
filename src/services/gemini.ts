@@ -26,22 +26,13 @@ async function callGeminiDirectly(apiKey: string, params: {
   contents: any;
   config?: any;
 }) {
-  let modelName = params.model || "gemini-1.5-flash";
+  let modelName = params.model || "gemini-2.5-flash";
   if (modelName.startsWith("models/")) {
     modelName = modelName.substring(7);
   }
   
-  // Support both 1.5-flash and 3.5-flash mappings exactly
-  if (modelName.includes("gemini-3.5-flash")) {
-    modelName = "gemini-3.5-flash";
-  } else if (modelName.includes("gemini-1.5-flash")) {
-    modelName = "gemini-1.5-flash";
-  } else if (modelName.includes("gemini-1.5-pro")) {
-    modelName = "gemini-1.5-pro";
-  } else if (modelName.includes("gemini-2.5-flash")) {
+  if (modelName.includes("gemini-1.5") || modelName.includes("gemini-3")) {
     modelName = "gemini-2.5-flash";
-  } else if (modelName.includes("gemini-3")) {
-    modelName = "gemini-3.5-flash";
   }
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;

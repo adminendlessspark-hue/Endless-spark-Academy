@@ -838,14 +838,19 @@ async function startServer() {
   // Generic Gemini Generate Content API
   app.post("/api/gemini/generate-content", async (req: any, res: any) => {
     try {
-      const { model, contents, config } = req.body;
-      if (!model || !contents) {
-        return res.status(400).json({ error: "model and contents are required" });
+      let { model, contents, config } = req.body;
+      if (!contents) {
+        return res.status(400).json({ error: "contents is required" });
       }
 
-      console.log(`Gemini API: Generating content with model ${model}`);
+      let modelName = model || "gemini-2.5-flash";
+      if (modelName.includes("gemini-1.5") || modelName.includes("gemini-3-flash-preview")) {
+        modelName = "gemini-2.5-flash";
+      }
+
+      console.log(`Gemini API: Generating content with model ${modelName}`);
       const response = await ai.models.generateContent({
-        model,
+        model: modelName,
         contents,
         config
       });

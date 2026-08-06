@@ -315,6 +315,7 @@ export interface CourseModule {
   worksheetUrl?: string;
   projectTemplateUrl?: string;
   referenceMaterialUrl?: string;
+  videoScript?: string; // Video Script / Reference Material text content for native language auto-translation
   slidesUrl?: string;
   thumbnailUrl?: string;
   additionalReferenceMaterials?: { title: string, url: string }[];

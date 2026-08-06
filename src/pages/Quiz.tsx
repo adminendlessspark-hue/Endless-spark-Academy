@@ -292,7 +292,7 @@ export default function Quiz() {
     
     // Update score card regardless of passing
     if (user) {
-      const categoryKey = category === 'print-ready-engineer' ? 'printReadyEngineer' : 'productionArtEngineer';
+      const categoryKey = getScoreKey(category);
       const scores = user.scores || { productionArtEngineer: {}, printReadyEngineer: {}, qualityControlEngineer: {} };
       const currentScores = (scores as any)[categoryKey] || {};
       const topicScores = currentScores[topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;

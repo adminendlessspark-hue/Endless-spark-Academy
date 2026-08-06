@@ -2,6 +2,7 @@ import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { onSnapshot, doc } from 'firebase/firestore';
 import { db } from './firebase';
+import { CourseType, TopicScore } from './types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -154,17 +155,66 @@ try {
   console.error("Initialization of financial settings stream failed:", e);
 }
 
+export const getCourseFromScoreKey = (key: string): CourseType => {
+  if (!key) return 'production-art-engineer';
+  
+  if (key === 'productionArtEngineer' || key === 'production-art-engineer') return 'production-art-engineer';
+  if (key === 'printReadyEngineer' || key === 'print-ready-engineer') return 'print-ready-engineer';
+  if (key === 'plateReadyEngineer' || key === 'plate-ready-engineer') return 'plate-ready-engineer';
+  if (key === 'colourRetouchingEngineer' || key === 'colour-retouching-engineer') return 'colour-retouching-engineer';
+  if (key === 'qualityControlEngineer' || key === 'quality-control-engineer') return 'quality-control-engineer';
+  if (key === 'packagingEngineer' || key === 'packaging-engineer') return 'packaging-engineer';
+  if (key === 'printingAndPackagingCrossCourses' || key === 'printing-and-packaging-cross-courses') return 'printing-and-packaging-cross-courses';
+
+  const k = key.toLowerCase();
+  if (k.includes('production')) return 'production-art-engineer';
+  if (k.includes('printready') || k.includes('print-ready') || (k.includes('print') && k.includes('ready'))) return 'print-ready-engineer';
+  if (k.includes('plateready') || k.includes('plate-ready') || (k.includes('plate') && k.includes('ready'))) return 'plate-ready-engineer';
+  if (k.includes('colour') || k.includes('color') || k.includes('retouching')) return 'colour-retouching-engineer';
+  if (k.includes('quality') || k.includes('control')) return 'quality-control-engineer';
+  if (k.includes('cross')) return 'printing-and-packaging-cross-courses';
+  if (k.includes('packaging')) return 'packaging-engineer';
+
+  return 'production-art-engineer';
+};
+
 export const formatCourseName = (course: string) => {
-  const title = courseTitlesMap[course] || course.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  if (!course) return 'Diploma in Premedia Engineer';
+  if (courseTitlesMap[course]) return courseTitlesMap[course];
+
+  const courseId = getCourseFromScoreKey(course);
+  if (courseTitlesMap[courseId]) return courseTitlesMap[courseId];
+
+  const clean = course.replace(/^Diploma\s+in\s+/i, '').replace(/^Diplomain/i, '');
+  const title = clean.split(/[-_ ]+/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   if (title && !title.startsWith('Diploma in')) {
     return `Diploma in ${title}`;
   }
-  return title;
+  return title || 'Diploma in Premedia Engineer';
 };
 
 export const getScoreKey = (course: string): string => {
-  if (course === 'printing-and-packaging-cross-courses') return 'printingAndPackagingCrossCourses';
-  return course.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+  if (!course) return 'productionArtEngineer';
+  if (['packagingEngineer', 'productionArtEngineer', 'printReadyEngineer', 'plateReadyEngineer', 'colourRetouchingEngineer', 'qualityControlEngineer', 'printingAndPackagingCrossCourses'].includes(course)) {
+    return course;
+  }
+  const courseId = getCourseFromScoreKey(course);
+  if (courseId === 'printing-and-packaging-cross-courses') return 'printingAndPackagingCrossCourses';
+  return courseId.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+};
+
+export const getStudentCourseScores = (scores: Record<string, any> | undefined, course: string): Record<string, TopicScore> => {
+  if (!scores) return {};
+  const targetKey = getScoreKey(course);
+  if (scores[targetKey]) return scores[targetKey];
+
+  const targetCourseId = getCourseFromScoreKey(course);
+  for (const [key, topicScores] of Object.entries(scores)) {
+    if (getCourseFromScoreKey(key) === targetCourseId) {
+      return topicScores as Record<string, TopicScore>;
+    }
+  }
+  return {};
 };
 
 export function getOrdinalSuffix(num: number | string): string {

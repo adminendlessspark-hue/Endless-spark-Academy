@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, CheckCircle, XCircle, Clock, Calendar, FileText, Video, UserCheck, Eye, CircleCheck, Zap, Layers } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { User, LeaveRequest, CourseType, TopicScore, ApplicationData } from '../types';
-import { cn, getScoreKey, formatCourseName } from '../utils';
+import { cn, getScoreKey, formatCourseName, getStudentCourseScores, getCourseFromScoreKey } from '../utils';
 import { useAuth } from '../AuthContext';
 import { collection, doc, onSnapshot, query, updateDoc, where, addDoc, deleteDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
@@ -322,7 +322,7 @@ export default function FacultyPanel() {
                   {students.flatMap(student => {
                     const courses: CourseType[] = student.assignedCourses || (student.assignedCourse ? [student.assignedCourse] : []);
                     return courses.flatMap(course => {
-                      const courseScores = (student.scores || {})[getScoreKey(course) as keyof typeof student.scores] || {};
+                      const courseScores = getStudentCourseScores(student.scores, course);
                       return Object.entries(courseScores).flatMap(([topic, score]) => {
                         const s = score as TopicScore;
                         const items = [];

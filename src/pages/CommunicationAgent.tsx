@@ -1,12 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Square, Zap, Loader2, Volume2, VolumeX, User as UserIcon, Globe, BookOpen, ExternalLink, Sparkles, Languages, Copy, Check, RefreshCw, Send, MessageSquareQuote, ArrowRight, Play, Bot, BarChart3, TrendingUp, Activity, Award, Headphones, Target, Clock, CheckCircle2, Crown, ShieldCheck, Lock, Info, Sparkle, Trash2 } from 'lucide-react';
+import { Mic, MicOff, Square, Zap, Loader2, Volume2, VolumeX, User as UserIcon, Globe, BookOpen, ExternalLink, Sparkles, Languages, Copy, Check, RefreshCw, Send, MessageSquareQuote, ArrowRight, Play, Bot, BarChart3, TrendingUp, Activity, Award, Headphones, Target, Clock, CheckCircle2, Crown, ShieldCheck, Lock, Info, Sparkle, Trash2, GraduationCap, Layers } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { generateGeminiContent } from '../services/gemini';
 import ReactMarkdown from 'react-markdown';
 import { ParagraphicScriptReader } from '../components/ParagraphicScriptReader';
+import { SelfRecordingStudio, COURSE_MODULE_SCRIPTS } from '../components/SelfRecordingStudio';
+import { useSettings } from '../hooks/useSettings';
+import { CourseModule } from '../types';
+
+function formatCourseName(cat: string): string {
+  if (!cat) return 'General Course';
+  return cat
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 interface TranscriptLine {
   id: string;
@@ -18,6 +29,7 @@ interface ReferenceScript {
   id: string;
   title: string;
   category: string;
+  module?: string;
   duration: string;
   suggestedTone: string;
   englishText: string;
@@ -29,6 +41,7 @@ const REFERENCE_VIDEO_SCRIPTS: ReferenceScript[] = [
     id: 'script_course_assignment',
     title: '🎓 Student Course Assignment Video Presentation',
     category: 'Academic Video Submission',
+    module: 'General Presentation',
     duration: '30-45 Seconds',
     suggestedTone: 'Confident & Professional',
     keyPhrases: ['excited to present', 'our tests show', 'valuable feedback'],
@@ -42,6 +55,7 @@ const REFERENCE_VIDEO_SCRIPTS: ReferenceScript[] = [
     id: 'script_self_intro',
     title: '👤 Student Self-Introduction & Skill Showcase',
     category: 'Personal Branding & Portfolio',
+    module: 'General Self Introduction',
     duration: '45 Seconds',
     suggestedTone: 'Enthusiastic & Clear',
     keyPhrases: ['passionate about', 'built interactive applications', 'solve real-world problems'],
@@ -55,6 +69,7 @@ const REFERENCE_VIDEO_SCRIPTS: ReferenceScript[] = [
     id: 'script_project_pitch',
     title: '🚀 Technical Project & App Elevator Pitch',
     category: 'Startup & Hackathon Demo',
+    module: 'Project Pitch',
     duration: '60 Seconds',
     suggestedTone: 'Engaging & Persuasive',
     keyPhrases: ['struggled with', 'to solve this challenge', 'boost your confidence'],
@@ -70,6 +85,7 @@ const REFERENCE_VIDEO_SCRIPTS: ReferenceScript[] = [
     id: 'script_hr_interview',
     title: '💼 HR Interview "Tell Me About Yourself"',
     category: 'Job & Campus Placement',
+    module: 'HR Interview Preparation',
     duration: '40 Seconds',
     suggestedTone: 'Polite & Structure-Focused',
     keyPhrases: ['opportunity to introduce', 'greatest strength is', 'eager to contribute'],
@@ -83,17 +99,42 @@ const REFERENCE_VIDEO_SCRIPTS: ReferenceScript[] = [
 
 export default function CommunicationAgent() {
   const { user } = useAuth();
+  const { financialSettings } = useSettings();
   const [isActive, setIsActive] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
   const [micActive, setMicActive] = useState(false);
   const [inputText, setInputText] = useState('');
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   const [feedbackNotes, setFeedbackNotes] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'chat' | 'analytics' | 'translator' | 'notes' | 'resources'>('chat');
+  const [activeTab, setActiveTab] = useState<'studio' | 'chat' | 'analytics' | 'translator' | 'notes' | 'resources'>('studio');
   const [error, setError] = useState<string | null>(null);
   const [knowledgeBase, setKnowledgeBase] = useState<string>('');
   const [gender, setGender] = useState<'Male' | 'Female'>('Male');
   const [accent, setAccent] = useState<'US' | 'UK' | 'Australia'>('US');
+
+  // Firestore course_modules live synchronization
+  const [dbModules, setDbModules] = useState<CourseModule[]>([]);
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>('All Course Titles');
+  const [selectedModuleFilter, setSelectedModuleFilter] = useState<string>('All Modules');
+  const [selectedQuickScriptId, setSelectedQuickScriptId] = useState<string>('');
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'course_modules'), (snapshot) => {
+      const list: CourseModule[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as CourseModule);
+      });
+      setDbModules(list);
+    }, (err) => {
+      console.error('Failed to subscribe to course_modules in CommunicationAgent:', err);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const configuredCourses = React.useMemo(() => [
+    ...(financialSettings?.coursesConfig || []),
+    { courseId: 'printing-and-packaging-cross-courses', title: 'Diploma in Printing and Packaging Cross Courses' }
+  ], [financialSettings?.coursesConfig]);
 
   // ChatGPT Video & Speech Translator State
   const [translatorInput, setTranslatorInput] = useState('');
@@ -112,10 +153,7 @@ export default function CommunicationAgent() {
   const [scriptViewMode, setScriptViewMode] = useState<Record<string, 'english' | 'native' | 'both'>>({});
   const [playingScriptAudioId, setPlayingScriptAudioId] = useState<string | null>(null);
 
-  // Admin / Instructor Reference Material Paste State
-  const [adminPastedTitle, setAdminPastedTitle] = useState('');
-  const [adminPastedCategory, setAdminPastedCategory] = useState('Course Video Assignment');
-  const [adminPastedContent, setAdminPastedContent] = useState('');
+  // Custom Reference Scripts
   const [customScripts, setCustomScripts] = useState<ReferenceScript[]>(() => {
     try {
       const saved = localStorage.getItem('communication_coach_custom_scripts');
@@ -124,6 +162,112 @@ export default function CommunicationAgent() {
       return [];
     }
   });
+
+  // Combine custom scripts, static reference scripts, COURSE_MODULE_SCRIPTS, and dbModules into All Course Titles & Module Scripts
+  const allCourseModuleScripts: ReferenceScript[] = React.useMemo(() => {
+    const list: ReferenceScript[] = [];
+
+    customScripts.forEach(s => {
+      list.push({
+        ...s,
+        module: s.module || 'Custom Scripts'
+      });
+    });
+
+    REFERENCE_VIDEO_SCRIPTS.forEach(s => list.push(s));
+
+    COURSE_MODULE_SCRIPTS.forEach(s => {
+      list.push({
+        id: `static_${s.id}`,
+        title: s.title,
+        category: s.course,
+        module: s.module,
+        duration: s.duration,
+        suggestedTone: s.tone,
+        keyPhrases: [s.module, s.course],
+        englishText: s.scriptText
+      });
+    });
+
+    // Sort dbModules according to Edit Module Details > Sequence / Order
+    const sortedDbModules = [...dbModules].sort((a, b) => {
+      const orderA = a.order !== undefined && a.order !== null && !isNaN(Number(a.order)) ? Number(a.order) : 999;
+      const orderB = b.order !== undefined && b.order !== null && !isNaN(Number(b.order)) ? Number(b.order) : 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.title || '').localeCompare(b.title || '');
+    });
+
+    sortedDbModules.forEach((mod) => {
+      const matchedConfig = configuredCourses.find(c => c.courseId === mod.category);
+      const courseTitle = matchedConfig ? matchedConfig.title : formatCourseName(mod.category);
+      const scriptContent = mod.scriptText || mod.videoScript || mod.overview || `Module script for ${mod.title}`;
+
+      const moduleLabel = mod.order !== undefined && mod.order !== null ? `Module ${mod.order}` : (mod.moduleNumber || 'Module');
+      const fullModuleTitle = `${moduleLabel}: ${mod.title}`;
+
+      list.push({
+        id: `db_mod_${mod.id}`,
+        title: mod.title,
+        category: courseTitle,
+        module: fullModuleTitle,
+        duration: mod.duration || '30-45 Seconds',
+        suggestedTone: 'Professional & Clear',
+        keyPhrases: [mod.title, courseTitle],
+        englishText: scriptContent
+      });
+    });
+
+    return list;
+  }, [customScripts, dbModules, configuredCourses]);
+
+  const allCourseTitles = React.useMemo(() => {
+    const set = new Set<string>();
+    set.add('All Course Titles');
+    configuredCourses.forEach(c => set.add(c.title));
+    allCourseModuleScripts.forEach(s => {
+      if (s.category) set.add(s.category);
+    });
+    return Array.from(set);
+  }, [configuredCourses, allCourseModuleScripts]);
+
+  const availableModuleOptions = React.useMemo(() => {
+    const set = new Set<string>();
+    set.add('All Modules');
+
+    const filteredByCourse = selectedCourseFilter === 'All Course Titles'
+      ? allCourseModuleScripts
+      : allCourseModuleScripts.filter(s =>
+          s.category === selectedCourseFilter ||
+          s.category.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
+          selectedCourseFilter.toLowerCase().includes(s.category.toLowerCase())
+        );
+
+    filteredByCourse.forEach(s => {
+      if (s.module) set.add(s.module);
+    });
+
+    return Array.from(set);
+  }, [selectedCourseFilter, allCourseModuleScripts]);
+
+  const availableQuickScripts = React.useMemo(() => {
+    return allCourseModuleScripts.filter(s => {
+      // Course filter
+      const matchesCourse = selectedCourseFilter === 'All Course Titles' ||
+        s.category === selectedCourseFilter ||
+        s.category.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
+        selectedCourseFilter.toLowerCase().includes(s.category.toLowerCase());
+
+      if (!matchesCourse) return false;
+
+      // Module filter
+      const matchesModule = selectedModuleFilter === 'All Modules' ||
+        s.module === selectedModuleFilter ||
+        (s.module && s.module.toLowerCase().includes(selectedModuleFilter.toLowerCase())) ||
+        (selectedModuleFilter && selectedModuleFilter.toLowerCase().includes((s.module || '').toLowerCase()));
+
+      return matchesModule;
+    });
+  }, [selectedCourseFilter, selectedModuleFilter, allCourseModuleScripts]);
 
   useEffect(() => {
     try {
@@ -524,24 +668,6 @@ ${script.englishText}`;
     }
   };
 
-  const handleSaveAdminScript = () => {
-    if (!adminPastedContent.trim()) return;
-    const newScript: ReferenceScript = {
-      id: `custom_script_${Date.now()}`,
-      title: adminPastedTitle.trim() || '📌 Admin / Instructor Reference Material',
-      category: adminPastedCategory,
-      duration: 'Pasted Reference Material',
-      suggestedTone: 'Clear & Educational',
-      keyPhrases: ['Reference Material', 'Instructor Script', 'Key Concepts'],
-      englishText: adminPastedContent.trim()
-    };
-    setCustomScripts(prev => [newScript, ...prev]);
-    // Auto-translate immediately so student sees output right away
-    handleTranslateReferenceScript(newScript);
-    setAdminPastedContent('');
-    setAdminPastedTitle('');
-  };
-
   const handleDeleteCustomScript = (id: string) => {
     setCustomScripts(prev => prev.filter(s => s.id !== id));
   };
@@ -800,12 +926,24 @@ ${script.englishText}`;
         {/* Tabs */}
         <div className="flex border-b border-gray-100 bg-white overflow-x-auto">
           <button
+            onClick={() => setActiveTab('studio')}
+            className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'studio' ? 'border-purple-600 text-purple-700 font-extrabold bg-purple-50/60' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-purple-600" />
+            <span>📹 Self-Recording Studio</span>
+            <span className="bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase shadow-xs">
+              PRACTICE
+            </span>
+          </button>
+          <button
             onClick={() => setActiveTab('chat')}
             className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'chat' ? 'border-blue-600 text-blue-600 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            Conversation
+            Live AI Conversation
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
@@ -814,7 +952,7 @@ ${script.englishText}`;
             }`}
           >
             <BarChart3 className="w-4 h-4 text-indigo-600" />
-            <span>Audio Analytics & Charts</span>
+            <span>Audio Analytics</span>
             <span className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase">
               ChatGPT
             </span>
@@ -855,8 +993,12 @@ ${script.englishText}`;
           </button>
         </div>
 
-        {/* Chat / Notes Area */}
+        {/* Tab Content Area */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/50">
+
+          {activeTab === 'studio' && (
+            <SelfRecordingStudio />
+          )}
           
           {activeTab === 'chat' && (
             <>
@@ -1286,6 +1428,119 @@ ${script.englishText}`;
                   </div>
                 </div>
 
+                {/* Quick Select from All Course Titles & Module Scripts */}
+                <div className="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-purple-700" />
+                      <span className="text-xs font-black text-purple-900 uppercase tracking-wider">
+                        All Course Titles & Module Scripts
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold bg-purple-200/80 text-purple-800 px-2.5 py-0.5 rounded-full">
+                      {availableQuickScripts.length} Scripts Available
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Select Course Title */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-gray-700 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
+                          Select Course Title:
+                        </span>
+                        <span className="text-[10px] text-purple-600 font-semibold">Synced Live</span>
+                      </label>
+                      <select
+                        value={selectedCourseFilter}
+                        onChange={(e) => {
+                          setSelectedCourseFilter(e.target.value);
+                          setSelectedModuleFilter('All Modules');
+                          setSelectedQuickScriptId('');
+                        }}
+                        className="w-full bg-white border border-purple-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm"
+                      >
+                        {allCourseTitles.map((title) => (
+                          <option key={title} value={title}>
+                            {title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Filter Module */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-gray-700 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Layers className="w-3.5 h-3.5 text-purple-600" />
+                          Filter Module:
+                        </span>
+                        <span className="text-[10px] text-gray-500">{availableModuleOptions.length - 1} Modules</span>
+                      </label>
+                      <select
+                        value={selectedModuleFilter}
+                        onChange={(e) => {
+                          setSelectedModuleFilter(e.target.value);
+                          setSelectedQuickScriptId('');
+                        }}
+                        className="w-full bg-white border border-purple-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm"
+                      >
+                        {availableModuleOptions.map((mod) => (
+                          <option key={mod} value={mod}>
+                            {mod}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Select Module Script */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-gray-700 flex items-center justify-between">
+                        <span>Select Quick Script:</span>
+                        <span className="text-[10px] text-indigo-600 font-semibold">{availableQuickScripts.length} Found</span>
+                      </label>
+                      <select
+                        value={selectedQuickScriptId}
+                        onChange={(e) => {
+                          const scriptId = e.target.value;
+                          setSelectedQuickScriptId(scriptId);
+                          const found = availableQuickScripts.find(s => s.id === scriptId);
+                          if (found) {
+                            setTranslatorInput(found.englishText);
+                          }
+                        }}
+                        className="w-full bg-white border border-purple-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm"
+                      >
+                        <option value="">-- Choose Script ({availableQuickScripts.length}) --</option>
+                        {availableQuickScripts.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.module ? `${s.module} - ${s.title}` : s.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {selectedQuickScriptId && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs bg-white/90 border border-purple-200 p-2.5 rounded-xl text-purple-900 font-medium">
+                      <span className="truncate max-w-md">
+                        ⚡ Loaded Script: <strong>{availableQuickScripts.find(s => s.id === selectedQuickScriptId)?.title}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const found = availableQuickScripts.find(s => s.id === selectedQuickScriptId);
+                          if (found) setTranslatorInput(found.englishText);
+                        }}
+                        className="text-[11px] font-extrabold bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg transition shadow-sm cursor-pointer"
+                      >
+                        Re-load Script Text
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Target Mode Selector */}
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Select Translation Format:</label>
@@ -1457,102 +1712,9 @@ ${script.englishText}`;
                 )}
               </div>
 
-              {/* Admin / Instructor Direct Reference Material Paste Section */}
-              <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-purple-950 text-white rounded-3xl p-6 shadow-xl space-y-4 border border-indigo-700/50 relative overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-800/80 pb-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 bg-yellow-400 text-slate-950 text-[10px] font-black rounded-full uppercase tracking-wider">
-                        Admin / Instructor Tool
-                      </span>
-                      <h3 className="font-extrabold text-white text-base flex items-center gap-2">
-                        <BookOpen className="w-5 h-5 text-indigo-400" />
-                        Paste Custom Reference Material for Video Script
-                      </h3>
-                    </div>
-                    <p className="text-xs text-indigo-200">
-                      Directly paste your English video reference script or course material content below (no documents or external links needed). Students can auto-translate it instantly into <strong>{sourceLang}</strong> with line-by-line bilingual breakdown & phonetic speech guides!
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="md:col-span-2 space-y-1">
-                    <label className="text-[11px] font-extrabold text-indigo-300 uppercase tracking-wider">
-                      Reference Material Title / Topic Name:
-                    </label>
-                    <input
-                      type="text"
-                      value={adminPastedTitle}
-                      onChange={(e) => setAdminPastedTitle(e.target.value)}
-                      placeholder='e.g. "Week 4 Course Project Video Presentation Script"'
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-800/90 border border-indigo-700/70 text-white placeholder-slate-400 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-extrabold text-indigo-300 uppercase tracking-wider">
-                      Category:
-                    </label>
-                    <select
-                      value={adminPastedCategory}
-                      onChange={(e) => setAdminPastedCategory(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-800/90 border border-indigo-700/70 text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    >
-                      <option value="Course Video Assignment">🎓 Course Video Assignment</option>
-                      <option value="Lecture Script Reference">📖 Lecture Script Reference</option>
-                      <option value="Project Pitch & Demo">🚀 Project Pitch & Demo</option>
-                      <option value="Interview & Self Intro">💼 Interview & Self Intro</option>
-                      <option value="Custom Instructor Notes">📌 Custom Instructor Notes</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-extrabold text-indigo-300 uppercase tracking-wider">
-                      English Reference Material Content (Paste Text Content Directly):
-                    </label>
-                    {adminPastedContent && (
-                      <button
-                        onClick={() => setAdminPastedContent('')}
-                        className="text-[10px] text-slate-400 hover:text-red-400 font-bold"
-                      >
-                        Clear Text
-                      </button>
-                    )}
-                  </div>
-                  <textarea
-                    value={adminPastedContent}
-                    onChange={(e) => setAdminPastedContent(e.target.value)}
-                    rows={4}
-                    placeholder="Paste English video script content, reference notes, or assignment prompt directly here e.g. [00:00 - Greeting]: Good morning professor, today I am presenting..."
-                    className="w-full p-4 rounded-2xl bg-slate-950/80 border border-indigo-800 text-white placeholder-slate-500 text-xs font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                  <div className="text-[11px] text-indigo-300 font-medium flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-                    <span>Click to save and generate immediate <strong>{sourceLang}</strong> auto-translation!</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleSaveAdminScript}
-                      disabled={!adminPastedContent.trim()}
-                      className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-xl text-xs transition shadow-md disabled:opacity-40 flex items-center gap-1.5 active:scale-95"
-                    >
-                      <BookOpen className="w-4 h-4" />
-                      <span>Save & Auto-Translate into {sourceLang}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {/* Student Reference Video Scripts Library */}
               <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-5">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 pb-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <BookOpen className="w-5 h-5 text-indigo-600" />
@@ -1564,45 +1726,129 @@ ${script.englishText}`;
                       </span>
                     </div>
                     <p className="text-xs text-gray-500">
-                      High-quality English video scripts & instructor reference materials. Click <strong>Auto-Translate ({sourceLang})</strong> or <strong>Open in New Window</strong> to view full paragraphic script!
+                      High-quality English video scripts & instructor reference materials for all course titles. Filter by <strong>Course</strong> & <strong>Module</strong> below!
                     </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Filter Course */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                        <GraduationCap className="w-3.5 h-3.5 text-indigo-600" /> Course:
+                      </span>
+                      <select
+                        value={selectedCourseFilter}
+                        onChange={(e) => {
+                          setSelectedCourseFilter(e.target.value);
+                          setSelectedModuleFilter('All Modules');
+                          setSelectedQuickScriptId('');
+                        }}
+                        className="bg-gray-50 border border-gray-200 text-xs font-bold rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-xs truncate shadow-sm"
+                      >
+                        {allCourseTitles.map((title) => (
+                          <option key={title} value={title}>
+                            {title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Filter Module */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                        <Layers className="w-3.5 h-3.5 text-purple-600" /> Module:
+                      </span>
+                      <select
+                        value={selectedModuleFilter}
+                        onChange={(e) => {
+                          setSelectedModuleFilter(e.target.value);
+                          setSelectedQuickScriptId('');
+                        }}
+                        className="bg-gray-50 border border-gray-200 text-xs font-bold rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer max-w-xs truncate shadow-sm"
+                      >
+                        {availableModuleOptions.map((mod) => (
+                          <option key={mod} value={mod}>
+                            {mod}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">
-                  {[...customScripts, ...REFERENCE_VIDEO_SCRIPTS].map((script) => {
-                    const isTranslatingThis = scriptTranslatingId === script.id;
-                    const translatedText = scriptTranslations[script.id];
-                    const isCustom = script.id.startsWith('custom_');
+                  {availableQuickScripts.length === 0 ? (
+                    <div className="p-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200 space-y-3">
+                      <p className="text-xs font-bold text-gray-500">
+                        No scripts found matching Course: "{selectedCourseFilter}"
+                        {selectedModuleFilter !== 'All Modules' && ` & Module: "${selectedModuleFilter}"`}.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setSelectedCourseFilter('All Course Titles');
+                          setSelectedModuleFilter('All Modules');
+                        }}
+                        className="px-3 py-1.5 bg-indigo-600 text-white font-bold text-xs rounded-xl hover:bg-indigo-700 transition cursor-pointer"
+                      >
+                        Reset Filters
+                      </button>
+                    </div>
+                  ) : (
+                    availableQuickScripts.map((script) => {
+                      const isTranslatingThis = scriptTranslatingId === script.id;
+                      const translatedText = scriptTranslations[script.id];
+                      const isCustom = script.id.startsWith('custom_');
 
-                    return (
-                      <div key={script.id} className="relative">
-                        {isCustom && (
-                          <div className="absolute top-4 right-4 z-10">
-                            <button
-                              onClick={() => handleDeleteCustomScript(script.id)}
-                              className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] rounded-lg transition shadow-md flex items-center gap-1 cursor-pointer"
-                              title="Delete Custom Script"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                              <span>Delete</span>
-                            </button>
+                      return (
+                        <div key={script.id} className="relative space-y-2 bg-slate-50/70 p-3.5 rounded-2xl border border-gray-200/90 shadow-2xs hover:shadow-xs transition">
+                          {/* Header Badges: Course & Module */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200/60 pb-2.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="px-2.5 py-1 bg-indigo-100/90 text-indigo-900 text-xs font-extrabold rounded-lg border border-indigo-200/80 flex items-center gap-1.5">
+                                <GraduationCap className="w-3.5 h-3.5 text-indigo-700" />
+                                Course: {script.category}
+                              </span>
+                              {script.module && (
+                                <span className="px-2.5 py-1 bg-purple-100/90 text-purple-900 text-xs font-extrabold rounded-lg border border-purple-200/80 flex items-center gap-1.5">
+                                  <Layers className="w-3.5 h-3.5 text-purple-700" />
+                                  Module: {script.module}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs font-bold rounded-lg border border-gray-200 flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-gray-500" />
+                                {script.duration}
+                              </span>
+
+                              {isCustom && (
+                                <button
+                                  onClick={() => handleDeleteCustomScript(script.id)}
+                                  className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] rounded-lg transition shadow-md flex items-center gap-1 cursor-pointer"
+                                  title="Delete Custom Script"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Delete</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        )}
 
-                        <ParagraphicScriptReader
-                          title={script.title}
-                          scriptText={script.englishText}
-                          category={`${script.category} (${script.duration})`}
-                          targetLang={sourceLang}
-                          translatedText={translatedText}
-                          isTranslating={isTranslatingThis}
-                          onTranslate={() => handleTranslateReferenceScript(script)}
-                          onTargetLangChange={(lang) => setSourceLang(lang as any)}
-                        />
-                      </div>
-                    );
-                  })}
+                          <ParagraphicScriptReader
+                            title={script.title}
+                            scriptText={script.englishText}
+                            category={`${script.category} - ${script.module || 'Reference Script'}`}
+                            targetLang={sourceLang}
+                            translatedText={translatedText}
+                            isTranslating={isTranslatingThis}
+                            onTranslate={() => handleTranslateReferenceScript(script)}
+                            onTargetLangChange={(lang) => setSourceLang(lang as any)}
+                          />
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 

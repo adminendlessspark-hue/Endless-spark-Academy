@@ -323,8 +323,8 @@ async function activateRazorpay() {
         updatedBy: "system-auto-activation"
       });
     }
-  } catch (err) {
-    console.warn("Could not automatically activate Razorpay settings in Firestore:", err);
+  } catch (err: any) {
+    console.log("Razorpay auto-activation in Firestore skipped (defaulting to sandbox / environment mode):", err?.message || err);
   }
 }
 

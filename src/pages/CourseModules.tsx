@@ -750,19 +750,32 @@ ${text}`;
                 )}
 
                 {/* Module Video Script & Reference Text Section */}
-                {activeModule.videoScript && (
-                  <ParagraphicScriptReader
-                    title={`Video Script & Reference Material - ${activeModule.title}`}
-                    scriptText={activeModule.videoScript}
-                    category="Instructor Video Script"
-                    targetLang={moduleScriptTargetLang}
-                    translatedText={moduleScriptTranslation}
-                    isTranslating={moduleScriptTranslating}
-                    onTranslate={(lang) => handleTranslateActiveModuleScript(activeModule.videoScript!)}
-                    onTargetLangChange={(lang) => setModuleScriptTargetLang(lang)}
-                    onPracticeInCoach={() => navigate('/communication-coach')}
-                  />
-                )}
+                {(() => {
+                  const effectiveScriptText = (activeModule.videoScript && activeModule.videoScript.trim()) 
+                    ? activeModule.videoScript 
+                    : `Hello Professor and classmates! Today I am presenting my video presentation for ${activeModule.title}.
+
+In this module, we studied the following key concepts:
+${activeModule.description || 'Core technical specifications, production guidelines, and quality standards for ' + activeModule.title + '.'}
+
+I have thoroughly reviewed the reference materials and integrated the core principles into my practical assignment and presentation.
+
+Thank you for watching my presentation video!`;
+
+                  return (
+                    <ParagraphicScriptReader
+                      title={`Video Script & Reference Material - ${activeModule.title}`}
+                      scriptText={effectiveScriptText}
+                      category="Instructor Video Script & Reference Material"
+                      targetLang={moduleScriptTargetLang}
+                      translatedText={moduleScriptTranslation}
+                      isTranslating={moduleScriptTranslating}
+                      onTranslate={(lang) => handleTranslateActiveModuleScript(effectiveScriptText)}
+                      onTargetLangChange={(lang) => setModuleScriptTargetLang(lang)}
+                      onPracticeInCoach={() => navigate('/self-recording-studio')}
+                    />
+                  );
+                })()}
 
                 {activeModule.referenceMaterialUrl && (() => {
                   const isZip = activeModule.referenceMaterialUrl.toLowerCase().endsWith('.zip') || 

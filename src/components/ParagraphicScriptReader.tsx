@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, Maximize2, Minimize2, ExternalLink, Copy, Check, Volume2, 
   VolumeX, Sparkles, Languages, Search, Type, Printer, X, ArrowRight,
-  Clock, Film, CheckCircle2, FileText, Presentation, Loader2
+  Clock, Film, CheckCircle2, FileText, Presentation, Loader2, Globe
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { generateGeminiContent } from '../services/gemini';
@@ -38,8 +38,7 @@ export function parseScriptToParagraphs(rawText: string): ParagraphBlock[] {
   // Normalize newlines
   const text = rawText.replace(/\r\n/g, '\n').trim();
 
-  // Look for any Part/Section/Timestamp pattern inline and split cleanly
-  // Regex matches before timestamps, "Part 1", "Part 5:", "Part:", "Section 2", "[Action:"
+  // Split cleanly on double newlines or explicit [Action:] / Part / Timestamp markers
   const splitRegex = /(?=\[\d{1,2}:\d{2}(?:\s*[-–—]\s*\d{1,2}:\d{2})?\]|\b(?:Part|Section|Lesson|Module)\s+\d+|\bPart\b\s*[:\-–—]|\[Action:)/gi;
 
   const initialChunks = text.split(/\n\s*\n/);
@@ -54,28 +53,11 @@ export function parseScriptToParagraphs(rawText: string): ParagraphBlock[] {
     }
   }
 
-  // Further process blocks: if any block is longer than 350 chars without Part markers, split by sentences
-  const finalBlocks: string[] = [];
-  for (const block of rawBlocks) {
-    if (block.length > 350 && !block.toLowerCase().includes('[action:') && !block.match(/\bPart\s+\d+/i)) {
-      // Split by sentence boundaries (. ! ?)
-      const sentences = block.split(/(?<=[.!?])\s+(?=[A-Z0-9"])/);
-      let currentChunk = '';
-      for (const sentence of sentences) {
-        if ((currentChunk + ' ' + sentence).length > 250) {
-          if (currentChunk.trim()) finalBlocks.push(currentChunk.trim());
-          currentChunk = sentence;
-        } else {
-          currentChunk = currentChunk ? currentChunk + ' ' + sentence : sentence;
-        }
-      }
-      if (currentChunk.trim()) finalBlocks.push(currentChunk.trim());
-    } else {
-      finalBlocks.push(block);
-    }
-  }
+  // Preserve every single non-empty block with zero content deletion or aggressive merging
+  const result: ParagraphBlock[] = [];
 
-  return finalBlocks.map((blockStr, index) => {
+  for (let index = 0; index < rawBlocks.length; index++) {
+    const blockStr = rawBlocks[index];
     let content = blockStr.trim();
     let timestamp: string | undefined;
     let title: string | undefined;
@@ -100,28 +82,41 @@ export function parseScriptToParagraphs(rawText: string): ParagraphBlock[] {
     const partMatch = content.match(/^((?:Part|Section|Lesson|Module)\s+\d+(?:\s*[:\-–—]\s*[^\n"]+|\s+[^\n"]+)?|Part\s*[:\-–—][^\n"]+|[A-Z\s]{4,}:)/i);
     if (partMatch) {
       title = partMatch[1].trim();
-      content = content.replace(partMatch[0], '').trim();
+      const afterTitle = content.slice(partMatch[0].length).replace(/^[:\-–—\s"'“”]+/, '').trim();
+      if (afterTitle) {
+        content = afterTitle;
+      }
     }
 
     // Extract Speaker Cue e.g. "Speaker 1:" or "Presenter:"
     const speakerMatch = content.match(/^([A-Z][a-z0-9\s]+:)/);
     if (speakerMatch && !title) {
       speaker = speakerMatch[1];
-      content = content.replace(speakerMatch[0], '').trim();
+      const afterSpeaker = content.slice(speakerMatch[0].length).trim();
+      if (afterSpeaker) {
+        content = afterSpeaker;
+      }
     }
 
-    // Clean up leftover outer quotes or leading/trailing punctuation if empty
-    content = content.replace(/^["'“”]+|["'“”]+$/g, '').trim();
+    // Clean up leftover outer quotes or leading/trailing punctuation if needed
+    content = content.replace(/^["'“”:]+|["'“”:]+$/g, '').trim();
 
-    return {
+    // If title exists and content starts with title, strip title from content to prevent duplicate title rendering
+    if (title && content.toLowerCase().startsWith(title.toLowerCase())) {
+      content = content.slice(title.length).replace(/^[:\-–—\s"'“”]+/, '').trim();
+    }
+
+    result.push({
       id: `p_${index}_${Date.now()}`,
       timestamp,
       title,
       actionNote,
       speaker,
-      content: content || blockStr.trim()
-    };
-  });
+      content: content || (title ? title : blockStr.trim())
+    });
+  }
+
+  return result;
 }
 
 export const ParagraphicScriptReader: React.FC<ParagraphicScriptReaderProps> = ({
@@ -140,6 +135,77 @@ export const ParagraphicScriptReader: React.FC<ParagraphicScriptReaderProps> = (
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
   const [playingAudio, setPlayingAudio] = useState(false);
+  const [selectedAccent, setSelectedAccent] = useState<'US' | 'UK' | 'IN' | 'AU'>('UK');
+  const [speechPitch, setSpeechPitch] = useState<number>(1.0);
+  const [speechRate, setSpeechRate] = useState<number>(0.95);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  // Load available voices on mount
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const updateVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+    };
+    updateVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+  }, []);
+
+  const getVoiceForAccent = (accent: 'US' | 'UK' | 'IN' | 'AU') => {
+    if (!availableVoices.length) return null;
+    const langCodes: Record<string, string[]> = {
+      US: ['en-US', 'en_US', 'en'],
+      UK: ['en-GB', 'en_GB', 'en-UK'],
+      IN: ['en-IN', 'en_IN', 'hi-IN'],
+      AU: ['en-AU', 'en_AU']
+    };
+    const targetLangs = langCodes[accent] || ['en'];
+
+    // Collect candidate voices matching any of the target language tags
+    const matchedVoices = availableVoices.filter(v =>
+      targetLangs.some(lang => v.lang.replace('_', '-').toLowerCase().includes(lang.toLowerCase()))
+    );
+
+    if (matchedVoices.length > 0) {
+      // Prioritize natural, neural, google, enhanced, or online high-definition voices
+      const qualityKeywords = [
+        'natural', 'neural', 'google', 'online', 'enhanced', 'premium',
+        'sonia', 'jenny', 'guy', 'aria', 'daniel', 'rishi', 'neerja', 'karen', 'oliver', 'catherine'
+      ];
+      
+      const highQualityVoice = matchedVoices.find(v =>
+        qualityKeywords.some(kw => v.name.toLowerCase().includes(kw))
+      );
+      if (highQualityVoice) return highQualityVoice;
+
+      return matchedVoices[0];
+    }
+
+    // Secondary fallback: Any natural/google voice
+    return availableVoices.find(v => 
+      v.name.toLowerCase().includes('natural') || 
+      v.name.toLowerCase().includes('google') || 
+      v.name.toLowerCase().includes('neural')
+    ) || availableVoices.find(v => v.lang.toLowerCase().startsWith('en')) || availableVoices[0] || null;
+  };
+
+  const cleanTextForSpeech = (rawText: string): string => {
+    return rawText
+      .replace(/\[(?:Action|Note|Scene|Visual|Audio|Stage):?[^\]]*\]/gi, '')
+      .replace(/🎬\s*Action:[^\n]*/gi, '')
+      .replace(/⏱️\s*\d+:\d+/g, '')
+      .replace(/Paragraph\s*\d+:?/gi, '')
+      .replace(/^#+\s+/gm, '') // Remove markdown headings
+      .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1') // Bold/italic formatting
+      .replace(/[`~#]/g, '')
+      .replace(/&/g, ' and ')
+      .replace(/\+/g, ' plus ')
+      .replace(/%/g, ' percent ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
 
   // Unified translation state support (props or internal fallback)
   const [localTargetLang, setLocalTargetLang] = useState<string>(targetLang || 'Tamil');
@@ -207,8 +273,19 @@ ${scriptText}`;
       setPlayingAudio(false);
     } else {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(textToRead);
-      utterance.rate = 0.9;
+      const cleaned = cleanTextForSpeech(textToRead);
+      if (!cleaned) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleaned);
+      utterance.rate = speechRate;
+      utterance.pitch = speechPitch;
+
+      const voice = getVoiceForAccent(selectedAccent);
+      if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang;
+      }
+
       utterance.onend = () => setPlayingAudio(false);
       utterance.onerror = () => setPlayingAudio(false);
       setPlayingAudio(true);
@@ -234,7 +311,7 @@ ${scriptText}`;
         </div>
         ${p.actionNote ? `<div style="font-size: 12px; font-style: italic; color: #047857; background: #d1fae5; padding: 6px 12px; border-radius: 8px; margin-bottom: 10px;">🎬 Action: ${p.actionNote}</div>` : ''}
         ${p.speaker ? `<div style="font-size: 13px; font-weight: 700; color: #312e81; margin-bottom: 4px;">${p.speaker}</div>` : ''}
-        <p style="font-size: 16px; line-height: 1.7; color: #1e293b; margin: 0; white-space: pre-wrap;">${p.content}</p>
+        ${p.content && p.content.trim() !== '' && p.content.trim().toLowerCase() !== (p.title || '').trim().toLowerCase() ? `<p style="font-size: 16px; line-height: 1.7; color: #1e293b; margin: 0; white-space: pre-wrap;">${p.content}</p>` : ''}
       </div>
     `).join('');
 
@@ -314,8 +391,66 @@ ${scriptText}`;
           </h3>
         </div>
 
-        {/* Primary Action Buttons */}
+        {/* Primary Action Buttons & Accent Voice Selector */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Accent Selection Pills */}
+          <div className="flex items-center bg-slate-900/90 border border-indigo-700/60 rounded-xl p-1 gap-1">
+            <span className="text-[10px] font-black text-indigo-300 px-1.5 uppercase flex items-center gap-1">
+              <Globe className="w-3 h-3 text-amber-400" />
+              <span>Voice Accent:</span>
+            </span>
+            {(
+              [
+                { code: 'UK', label: '🇬🇧 UK Native' },
+                { code: 'US', label: '🇺🇸 US Natural' },
+                { code: 'IN', label: '🇮🇳 Indian Eng' },
+                { code: 'AU', label: '🇦🇺 Australian' }
+              ] as const
+            ).map((accent) => (
+              <button
+                key={accent.code}
+                type="button"
+                onClick={() => {
+                  setSelectedAccent(accent.code);
+                  if (playingAudio) {
+                    window.speechSynthesis?.cancel();
+                    setPlayingAudio(false);
+                  }
+                }}
+                className={`px-2 py-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer flex items-center gap-1 ${
+                  selectedAccent === accent.code
+                    ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                    : 'text-indigo-200 hover:bg-indigo-900/60 hover:text-white'
+                }`}
+              >
+                <span>{accent.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Speed Rate Control Pills */}
+          <div className="flex items-center bg-slate-900/90 border border-indigo-700/60 rounded-xl p-1 gap-1">
+            <span className="text-[10px] font-black text-indigo-300 px-1 uppercase">Pace:</span>
+            {[
+              { rate: 0.85, label: '0.85x Calm' },
+              { rate: 0.95, label: '0.95x Natural' },
+              { rate: 1.1, label: '1.1x Crisp' }
+            ].map((item) => (
+              <button
+                key={item.rate}
+                type="button"
+                onClick={() => setSpeechRate(item.rate)}
+                className={`px-1.5 py-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer ${
+                  speechRate === item.rate
+                    ? 'bg-indigo-500 text-white shadow font-black'
+                    : 'text-indigo-200 hover:bg-indigo-900/60 hover:text-white'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
           {/* OPEN IN NEW WINDOW BUTTON */}
           <button
             onClick={handleOpenInNewPopoutWindow}
@@ -336,13 +471,27 @@ ${scriptText}`;
             <span>Fullscreen Reader</span>
           </button>
 
-          {/* LISTEN AUDIO */}
+          {/* LISTEN AUDIO WITH ACCENT */}
           <button
             onClick={() => handleToggleSpeech(scriptText)}
-            className="p-2 bg-slate-800/90 hover:bg-slate-700 text-indigo-200 rounded-xl border border-indigo-700/50 transition cursor-pointer"
-            title="Listen to full English speech narration"
+            className={`px-3 py-2 rounded-xl border transition cursor-pointer flex items-center gap-1.5 text-xs font-bold ${
+              playingAudio
+                ? 'bg-red-600/90 text-white border-red-500 shadow-md animate-pulse'
+                : 'bg-indigo-900/90 hover:bg-indigo-800 text-amber-300 border-indigo-600/80'
+            }`}
+            title={`Listen to full English speech narration (${selectedAccent} Accent)`}
           >
-            {playingAudio ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-yellow-300" />}
+            {playingAudio ? (
+              <>
+                <VolumeX className="w-4 h-4 text-white" />
+                <span>Stop Narration</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-4 h-4 text-amber-300" />
+                <span>Listen Narration ({selectedAccent})</span>
+              </>
+            )}
           </button>
 
           {/* COPY TEXT */}
@@ -403,10 +552,11 @@ ${scriptText}`;
 
                   <button
                     onClick={() => handleToggleSpeech(p.content)}
-                    className="opacity-60 group-hover:opacity-100 text-indigo-300 hover:text-yellow-300 transition text-[10px] font-bold flex items-center gap-1"
+                    className="opacity-70 group-hover:opacity-100 text-indigo-300 hover:text-yellow-300 transition text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                    title={`Listen to Paragraph ${idx + 1} (${selectedAccent} Accent)`}
                   >
-                    <Volume2 className="w-3 h-3" />
-                    <span>Listen</span>
+                    <Volume2 className="w-3 h-3 text-amber-300" />
+                    <span>Listen ({selectedAccent})</span>
                   </button>
                 </div>
 
@@ -426,9 +576,11 @@ ${scriptText}`;
                 )}
 
                 {/* Main Paragraph Content */}
-                <p className="text-sm sm:text-base leading-relaxed text-slate-100 font-normal whitespace-pre-line tracking-normal">
-                  {p.content}
-                </p>
+                {p.content && p.content.trim() !== '' && p.content.trim().toLowerCase() !== (p.title || '').trim().toLowerCase() && (
+                  <p className="text-sm sm:text-base leading-relaxed text-slate-100 font-normal whitespace-pre-line tracking-normal">
+                    {p.content}
+                  </p>
+                )}
               </div>
             ))
           )}
@@ -534,6 +686,41 @@ ${scriptText}`;
 
               {/* Reader Controls Toolbar */}
               <div className="flex items-center gap-2 flex-wrap">
+                {/* Voice Accent Pills in Modal */}
+                <div className="flex items-center bg-slate-950 border border-indigo-700/60 rounded-xl p-1 gap-1">
+                  <span className="text-[10px] font-black text-indigo-300 px-1 uppercase flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-amber-400" />
+                    <span className="hidden sm:inline">Accent:</span>
+                  </span>
+                  {(
+                    [
+                      { code: 'UK', label: '🇬🇧 UK' },
+                      { code: 'US', label: '🇺🇸 US' },
+                      { code: 'IN', label: '🇮🇳 IN' },
+                      { code: 'AU', label: '🇦🇺 AU' }
+                    ] as const
+                  ).map((accent) => (
+                    <button
+                      key={`modal_${accent.code}`}
+                      type="button"
+                      onClick={() => {
+                        setSelectedAccent(accent.code);
+                        if (playingAudio) {
+                          window.speechSynthesis?.cancel();
+                          setPlayingAudio(false);
+                        }
+                      }}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                        selectedAccent === accent.code
+                          ? 'bg-amber-400 text-slate-950 shadow'
+                          : 'text-indigo-200 hover:bg-indigo-900/60 hover:text-white'
+                      }`}
+                    >
+                      {accent.label}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Modal Translation Trigger */}
                 <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded-xl border border-slate-700 text-xs font-bold text-indigo-200">
                   <Languages className="w-3.5 h-3.5 text-purple-300" />
@@ -679,9 +866,11 @@ ${scriptText}`;
 
                           <button
                             onClick={() => handleToggleSpeech(p.content)}
-                            className="text-indigo-300 hover:text-yellow-300 text-xs font-bold flex items-center gap-1"
+                            className="text-indigo-300 hover:text-yellow-300 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            title={`Listen in ${selectedAccent} Accent`}
                           >
-                            <Volume2 className="w-3.5 h-3.5" />
+                            <Volume2 className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Listen ({selectedAccent})</span>
                           </button>
                         </div>
 
@@ -691,9 +880,11 @@ ${scriptText}`;
                           </div>
                         )}
 
-                        <p className={`${getFontSizeClass()} text-slate-100 font-normal whitespace-pre-line`}>
-                          {p.content}
-                        </p>
+                        {p.content && p.content.trim() !== '' && p.content.trim().toLowerCase() !== (p.title || '').trim().toLowerCase() && (
+                          <p className={`${getFontSizeClass()} text-slate-100 font-normal whitespace-pre-line`}>
+                            {p.content}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>

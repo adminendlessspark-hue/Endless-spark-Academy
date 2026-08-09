@@ -21,6 +21,8 @@ const navItems = [
   { name: 'Application', path: '/apply', icon: FileText },
   { name: 'Video Intro', path: '/video-intro', icon: Video },
   { name: 'Course Modules', path: '/modules', icon: BookOpen },
+  { name: 'Interactive E-Books', path: '/ebook-studio', icon: BookOpen },
+  { name: 'Course Studio', path: '/course-studio', icon: Video },
   { name: 'Software Library', path: '/software-library', icon: Video },
   { name: 'Morning Routine', path: '/morning-routine', icon: Sparkles },
 
@@ -77,7 +79,7 @@ export default function Layout({ children }: LayoutProps) {
       if (item.accountsOnly && (user?.role === 'accounts_executive' || isAdmin)) return true;
       
       // Common items for staff
-      return ['/dashboard', '/modules', '/software-library', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
+      return ['/dashboard', '/modules', '/ebook-studio', '/course-studio', '/software-library', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
     }
 
     if (user?.role === 'student') {
@@ -88,17 +90,17 @@ export default function Layout({ children }: LayoutProps) {
       
       // 2nd stage: show dashboard, application and software library
       if (!user.applicationStatus || user.applicationStatus === 'pending' || user.applicationStatus === 'none') {
-        return item.path === '/dashboard' || item.path === '/apply' || item.path === '/software-library' || item.path === '/queries' || item.path === '/help-desk' || item.path === '/adobe-toolkit';
+        return item.path === '/dashboard' || item.path === '/apply' || item.path === '/ebook-studio' || item.path === '/course-studio' || item.path === '/software-library' || item.path === '/queries' || item.path === '/help-desk' || item.path === '/adobe-toolkit';
       }
       
       // 3rd stage: show dashboard and software library
       if (user.applicationStatus === 'submitted' && !user.isApproved) {
-        return item.path === '/dashboard' || item.path === '/software-library' || item.path === '/queries' || item.path === '/help-desk' || item.path === '/adobe-toolkit';
+        return item.path === '/dashboard' || item.path === '/ebook-studio' || item.path === '/course-studio' || item.path === '/software-library' || item.path === '/queries' || item.path === '/help-desk' || item.path === '/adobe-toolkit';
       }
       
       // 4th stage (Approved): show Dashboard, Video intro, Course Module, Software Library, Templates, Master, My Projects, Online Test
       if (user.isApproved) {
-        return ['/dashboard', '/video-intro', '/modules', '/software-library', '/projects', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
+        return ['/dashboard', '/video-intro', '/modules', '/ebook-studio', '/course-studio', '/software-library', '/projects', '/online-tests', '/resume-builder', '/queries', '/help-desk', '/adobe-toolkit'].includes(item.path);
       }
     }
     
@@ -115,7 +117,7 @@ export default function Layout({ children }: LayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row print:block print:bg-white">
+    <div className="min-h-screen md:h-screen bg-slate-50 flex flex-col md:flex-row overflow-x-hidden md:overflow-hidden print:block print:bg-white print:h-auto">
       {/* Mobile Header */}
       <div className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between sticky top-0 z-50 print:hidden">
         <div className="flex items-center gap-3">
@@ -248,7 +250,7 @@ export default function Layout({ children }: LayoutProps) {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 print:block">
+      <main className="flex-1 flex flex-col min-w-0 md:h-screen md:overflow-hidden print:block print:h-auto">
         <header className="hidden md:flex h-16 bg-white border-b border-gray-200 items-center justify-between px-8 shrink-0 no-print">
           <h2 className="text-lg font-semibold text-gray-800">
             {filteredNavItems.find(item => item.path === location.pathname)?.name || 'Welcome'}
@@ -269,7 +271,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </header>
         
-        <div className="flex-1 p-4 md:p-8 overflow-y-auto overflow-x-auto relative print:p-0 print:overflow-visible">
+        <div className="flex-1 p-4 md:p-8 overflow-y-auto overflow-x-hidden relative print:p-0 print:overflow-visible">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -277,7 +279,7 @@ export default function Layout({ children }: LayoutProps) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
-              className="h-full"
+              className="min-h-full flex flex-col"
             >
               {children}
             </motion.div>

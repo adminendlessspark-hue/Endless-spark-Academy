@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, CheckCircle, XCircle, Clock, Calendar, FileText, Video, UserCheck, Eye, CircleCheck, Zap, Layers } from 'lucide-react';
+import { Users, CheckCircle, XCircle, Clock, Calendar, FileText, Video, UserCheck, Eye, CircleCheck, Zap, Layers, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { User, LeaveRequest, CourseType, TopicScore, ApplicationData } from '../types';
 import { cn, getScoreKey, formatCourseName, getStudentCourseScores, getCourseFromScoreKey } from '../utils';
@@ -12,11 +12,12 @@ import { useNotifications } from '../useNotifications';
 import SecureVideoPlayer from '../components/SecureVideoPlayer';
 import FacultyRoadmapPlanner from '../components/FacultyRoadmapPlanner';
 import RecordingLinkModal from '../components/RecordingLinkModal';
+import InteractiveFlipbookStudio from '../components/InteractiveFlipbookStudio';
 
 export default function FacultyPanel() {
   const { user: facultyUser } = useAuth();
   const { requestPermission } = useNotifications();
-  const [activeTab, setActiveTab] = useState<'students' | 'approvals' | 'applications' | 'leaves' | 'schedule' | 'live-classes' | 'roadmap'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'approvals' | 'applications' | 'leaves' | 'schedule' | 'live-classes' | 'roadmap' | 'ebook-studio'>('students');
   const [students, setStudents] = useState<User[]>([]);
   const [pendingApplications, setPendingApplications] = useState<User[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
@@ -266,6 +267,13 @@ export default function FacultyPanel() {
         >
           <Layers className="w-4 h-4" />
           Curriculum Roadmap
+        </button>
+        <button
+          onClick={() => setActiveTab('ebook-studio')}
+          className={cn("btn-tab", activeTab === 'ebook-studio' ? "btn-tab-active bg-amber-500 text-slate-950" : "btn-tab-inactive")}
+        >
+          <BookOpen className="w-4 h-4 text-amber-500" />
+          Interactive E-Book & PPT
         </button>
       </div>
 
@@ -717,6 +725,12 @@ export default function FacultyPanel() {
         {activeTab === 'roadmap' && (
           <div className="p-6 bg-gray-50">
             <FacultyRoadmapPlanner isAdmin={false} />
+          </div>
+        )}
+
+        {activeTab === 'ebook-studio' && (
+          <div className="p-0 bg-slate-950">
+            <InteractiveFlipbookStudio />
           </div>
         )}
       </div>

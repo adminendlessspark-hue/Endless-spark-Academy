@@ -15,6 +15,7 @@ import { db } from '../firebase';
 import { CourseModule } from '../types';
 import { FALLBACK_COURSE_MODULES } from '../fallbackData';
 import { formatCourseName } from '../utils';
+import LoomCourseStudio from './LoomCourseStudio';
 
 export interface ModuleScript {
   id: string;
@@ -100,7 +101,7 @@ export function SelfRecordingStudio() {
   }, [user, isAdminUser]);
 
   // Guidance step state
-  const [activeGuidanceTab, setActiveGuidanceTab] = useState<'method' | 'script' | 'coach' | 'studio'>('method');
+  const [activeGuidanceTab, setActiveGuidanceTab] = useState<'method' | 'script' | 'coach' | 'studio' | 'loom'>('studio');
   const [showGuidanceBanner, setShowGuidanceBanner] = useState(true);
 
   // Script selection state
@@ -184,6 +185,13 @@ export function SelfRecordingStudio() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isTeleprompterFullscreen]);
+
+  // Auto-enable practice mode when entering fullscreen if camera is inactive
+  useEffect(() => {
+    if (isTeleprompterFullscreen && !cameraActive) {
+      setIsPracticeMode(true);
+    }
+  }, [isTeleprompterFullscreen, cameraActive]);
 
   // Fetch Firestore Course Modules or Fallback
   useEffect(() => {
@@ -382,14 +390,22 @@ Thank you for watching my presentation video!`;
     let scrollInterval: any = null;
     if (teleprompterScroll) {
       scrollInterval = setInterval(() => {
-        const step = scrollSpeed * 0.8;
+        const step = Math.max(0.4, scrollSpeed * 0.8);
         if (teleprompterContainerRef.current) {
-          teleprompterContainerRef.current.scrollTop += step;
+          const el = teleprompterContainerRef.current;
+          el.scrollTop += step;
+          if (el.scrollBy) {
+            el.scrollBy({ top: step, behavior: 'instant' as any });
+          }
         }
         if (fullscreenPrompterRef.current) {
-          fullscreenPrompterRef.current.scrollTop += step;
+          const el = fullscreenPrompterRef.current;
+          el.scrollTop += step;
+          if (el.scrollBy) {
+            el.scrollBy({ top: step, behavior: 'instant' as any });
+          }
         }
-      }, 50);
+      }, 40);
     } else {
       clearInterval(scrollInterval);
     }
@@ -602,7 +618,28 @@ Please give:
 
           {/* STEP-BY-STEP METHODOLOGY ACCORDION/BANNER */}
           {showGuidanceBanner && (
-            <div className="mt-4 pt-4 border-t border-indigo-800/80 grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="mt-4 pt-4 border-t border-indigo-800/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <div 
+                onClick={() => setActiveGuidanceTab('loom')}
+                className={`p-3.5 rounded-2xl border transition cursor-pointer relative overflow-hidden ${
+                  activeGuidanceTab === 'loom' 
+                    ? 'bg-gradient-to-br from-purple-900 to-pink-900 border-pink-400 text-white shadow-xl ring-2 ring-pink-500/50' 
+                    : 'bg-slate-900/90 border-pink-500/40 text-pink-200 hover:bg-slate-800'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1 font-black text-xs text-pink-300 uppercase tracking-wider mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-pink-400" />
+                    <span>Loom Studio</span>
+                  </div>
+                  <span className="text-[9px] bg-pink-500 text-white px-1.5 py-0.5 rounded-full font-extrabold">NEW</span>
+                </div>
+                <p className="text-[11px] font-bold text-white">Screen + PIP Webcam</p>
+                <p className="text-[10px] text-pink-200/80 mt-1 leading-normal">
+                  In-app Loom clone: Screen, webcam bubble, cursor halo & captions.
+                </p>
+              </div>
+
               <div 
                 onClick={() => setActiveGuidanceTab('method')}
                 className={`p-3.5 rounded-2xl border transition cursor-pointer ${
@@ -631,7 +668,7 @@ Please give:
               >
                 <div className="flex items-center gap-2 font-black text-xs text-purple-300 uppercase tracking-wider mb-1">
                   <Layers className="w-4 h-4 text-purple-400" />
-                  <span>Stage 2: Script Selection</span>
+                  <span>Stage 2: Script</span>
                 </div>
                 <p className="text-[11px] font-bold text-white">Course & Module Scripts</p>
                 <p className="text-[10px] text-indigo-200 mt-1 leading-normal">
@@ -649,11 +686,11 @@ Please give:
               >
                 <div className="flex items-center gap-2 font-black text-xs text-emerald-300 uppercase tracking-wider mb-1">
                   <Languages className="w-4 h-4 text-emerald-400" />
-                  <span>Stage 3: Language Coach</span>
+                  <span>Stage 3: Coach</span>
                 </div>
-                <p className="text-[11px] font-bold text-white">Grammar & Pronunciation</p>
+                <p className="text-[11px] font-bold text-white">Grammar & Accent</p>
                 <p className="text-[10px] text-indigo-200 mt-1 leading-normal">
-                  Phonetic guides, stress points & sentence structures.
+                  Phonetic guides & sentence structure tips.
                 </p>
               </div>
 
@@ -667,17 +704,24 @@ Please give:
               >
                 <div className="flex items-center gap-2 font-black text-xs text-sky-300 uppercase tracking-wider mb-1">
                   <Camera className="w-4 h-4 text-sky-400" />
-                  <span>Stage 4: Live Teleprompter</span>
+                  <span>Stage 4: Teleprompter</span>
                 </div>
                 <p className="text-[11px] font-bold text-white">Record & Self-Review</p>
                 <p className="text-[10px] text-indigo-200 mt-1 leading-normal">
-                  Live webcam teleprompter, speed controls & video save.
+                  Live webcam teleprompter & speech practice.
                 </p>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* LOOM COURSE STUDIO MODE */}
+      {activeGuidanceTab === 'loom' && (
+        <div className="animate-in fade-in duration-300">
+          <LoomCourseStudio defaultModuleTitle={selectedModuleScript.title} />
+        </div>
+      )}
 
       {/* EDUCATIONAL METHODOLOGY DETAIL BOX */}
       {activeGuidanceTab === 'method' && (
@@ -788,33 +832,7 @@ Please give:
                     </span>
                   </div>
 
-                  {/* REFERENCE MATERIAL BADGES IF AVAILABLE */}
-                  {(s.referenceMaterialUrl || s.assignmentPaperUrl || s.worksheetUrl) && (
-                    <div className="pt-1 flex flex-wrap gap-1.5">
-                      {s.referenceMaterialUrl && (
-                        <a
-                          href={s.referenceMaterialUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[9px] font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md hover:bg-amber-200 flex items-center gap-1"
-                        >
-                          <FileText className="w-3 h-3 text-amber-700" /> Reference Material
-                        </a>
-                      )}
-                      {s.assignmentPaperUrl && (
-                        <a
-                          href={s.assignmentPaperUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[9px] font-bold bg-blue-100 text-blue-900 px-2 py-0.5 rounded-md hover:bg-blue-200 flex items-center gap-1"
-                        >
-                          <FileText className="w-3 h-3 text-blue-700" /> Video Script & Assignment
-                        </a>
-                      )}
-                    </div>
-                  )}
+
                 </div>
               ))}
             </div>
@@ -954,7 +972,12 @@ Please give:
                 <div className="h-4 w-[1px] bg-slate-800 mx-1" />
 
                 <button
-                  onClick={() => setIsTeleprompterFullscreen(true)}
+                  onClick={() => {
+                    setIsTeleprompterFullscreen(true);
+                    if (!cameraActive) {
+                      setIsPracticeMode(true);
+                    }
+                  }}
                   className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition text-[10px] font-bold flex items-center gap-1 cursor-pointer shadow-md"
                   title="Open Teleprompter in Full Screen Mode"
                 >
@@ -1368,14 +1391,19 @@ Please give:
                 {/* TELEPROMPTER OVERLAY IN FULLSCREEN */}
                 <div
                   ref={fullscreenPrompterRef}
-                  className="absolute inset-x-6 sm:inset-x-16 bottom-6 top-12 bg-slate-950/85 backdrop-blur-md rounded-3xl p-6 sm:p-10 border border-indigo-500/40 text-yellow-300 overflow-y-auto scrollbar-none shadow-2xl transition-all flex flex-col"
+                  className="absolute inset-x-4 sm:inset-x-12 bottom-4 top-10 bg-slate-950/90 backdrop-blur-md rounded-3xl p-6 sm:p-10 border border-indigo-500/50 text-yellow-300 overflow-y-auto scrollbar-none shadow-2xl transition-all"
                 >
-                  <div className="text-center font-extrabold text-xs text-indigo-300 uppercase tracking-widest mb-4 border-b border-indigo-800/80 pb-2 flex items-center justify-center gap-2">
+                  <div className="text-center font-extrabold text-xs text-indigo-300 uppercase tracking-widest mb-4 border-b border-indigo-800/80 pb-2 flex items-center justify-center gap-2 sticky top-0 bg-slate-950/90 py-2 z-10 backdrop-blur-md">
                     <Sparkles className="w-4 h-4 text-yellow-400" />
                     <span>Auto-Scrolling Live Script Reader</span>
                     <span className="text-[10px] bg-indigo-900/80 text-indigo-200 px-2 py-0.5 rounded-full font-mono">
                       Speed {scrollSpeed}
                     </span>
+                    {teleprompterScroll && (
+                      <span className="px-2 py-0.5 bg-emerald-500 text-slate-950 text-[10px] font-black rounded-full animate-pulse">
+                        SCROLLING
+                      </span>
+                    )}
                   </div>
 
                   <div className={`font-medium leading-relaxed transition-all tracking-wide space-y-4 max-w-4xl mx-auto text-center ${

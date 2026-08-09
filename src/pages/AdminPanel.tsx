@@ -5582,13 +5582,31 @@ export default function AdminPanel() {
                   
                   <div className="mb-6">
                     {sub.fileData ? (
-                      sub.type === 'video' || sub.fileData.includes('.webm') || sub.fileData.includes('.mp4') || sub.fileData.startsWith('data:video') ? (
-                        <div className="rounded-lg overflow-hidden bg-black aspect-video flex items-center justify-center">
-                          <video 
-                            src={sub.fileData} 
-                            controls 
-                            className="w-full h-full object-contain"
-                          />
+                      sub.type === 'video' || 
+                      sub.fileData.includes('.webm') || 
+                      sub.fileData.includes('.mp4') || 
+                      sub.fileData.startsWith('data:video') ||
+                      sub.fileData.includes('drive.google.com') ||
+                      sub.fileData.includes('youtube.com') ||
+                      sub.fileData.includes('youtu.be') ||
+                      sub.fileData.includes('vimeo.com') ||
+                      sub.fileData.includes('loom.com') ? (
+                        <div className="space-y-2">
+                          <div className="rounded-xl overflow-hidden bg-black aspect-video border border-gray-200 shadow-sm relative">
+                            <SecureVideoPlayer 
+                              url={sub.fileData} 
+                              title={`${sub.studentName} - ${sub.topic}`}
+                            />
+                          </div>
+                          <a 
+                            href={sub.fileData} 
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-1.5 w-full py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-xs font-semibold text-purple-700 transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Open Submission Video Link
+                          </a>
                         </div>
                       ) : (
                         <a 

@@ -362,6 +362,17 @@ export default function VirtualClassroom() {
 
         {/* Jitsi Mode Controller & Settings */}
         <div className="flex flex-wrap items-center gap-3">
+          <a
+            href="/ebook-studio"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shadow-amber-500/20"
+            title="Open Interactive E-Book & Presentation Studio in a new window"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Interactive E-Book Studio</span>
+          </a>
+
           {/* Screen Share Optimization Selector */}
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
             <Monitor className="w-3.5 h-3.5 text-pink-500 shrink-0" />

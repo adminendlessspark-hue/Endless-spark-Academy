@@ -3,7 +3,8 @@
   "description": "A comprehensive training and collaboration platform under Endless Spark Creative Hub, featuring a virtual classroom, AI agent, student application workflow, webinars, and more.",
   "requestFramePermissions": [
     "camera",
-    "microphone"
+    "microphone",
+    "display-capture"
   ],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -45,6 +45,9 @@ import WebinarRegistration from './pages/WebinarRegistration';
 import AdobeScriptToolkit from './pages/AdobeScriptToolkit';
 import BookConsultation from './pages/BookConsultation';
 import DemoOnePager from './pages/DemoOnePager';
+import CourseLoomStudioPage from './pages/CourseLoomStudioPage';
+import CourseStudio from './pages/CourseStudio';
+import EBookStudioPage from './pages/EBookStudioPage';
 import { useSettings } from './hooks/useSettings';
 
 function ClassroomRoute({ children }: { children: React.ReactNode }) {
@@ -218,6 +221,13 @@ function AppContent() {
         <Route path="/public-qc" element={<PublicQcPanel />} />
         <Route path="/book-consultation" element={<BookConsultation />} />
         <Route path="/demo" element={<DemoOnePager />} />
+        <Route path="/course-recorder" element={<CourseLoomStudioPage />} />
+        <Route path="/course-loom" element={<CourseLoomStudioPage />} />
+        <Route path="/course-studio" element={
+          <ProtectedRoute allowAdmin>
+            <Layout><CourseStudio /></Layout>
+          </ProtectedRoute>
+        } />
         
         <Route path="/" element={<Home />} />
         
@@ -259,6 +269,9 @@ function AppContent() {
         } />
         <Route path="/adobe-toolkit" element={
           <Layout><AdobeScriptToolkit /></Layout>
+        } />
+        <Route path="/ebook-studio" element={
+          <Layout><EBookStudioPage /></Layout>
         } />
         <Route path="/admin" element={
           <AdminRoute>

@@ -16,9 +16,40 @@ export default defineConfig(({mode}) => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
+    },
+    build: {
+      sourcemap: false,
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 3000,
+      target: 'esnext',
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('lucide-react')) {
+                return 'vendor-lucide';
+              }
+              if (id.includes('firebase')) {
+                return 'vendor-firebase';
+              }
+              if (id.includes('jspdf') || id.includes('react-pdf') || id.includes('pdfjs-dist')) {
+                return 'vendor-pdf';
+              }
+              if (id.includes('framer-motion') || id.includes('motion')) {
+                return 'vendor-motion';
+              }
+              if (id.includes('googleapis')) {
+                return 'vendor-googleapis';
+              }
+              if (id.includes('recharts') || id.includes('d3')) {
+                return 'vendor-charts';
+              }
+              return 'vendor';
+            }
+          },
+        },
+      },
     },
   };
 });

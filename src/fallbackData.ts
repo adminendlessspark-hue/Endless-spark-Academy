@@ -195,5 +195,49 @@ export const FALLBACK_COURSE_MODULES: CourseModule[] = [
         type: 'true-false'
       }
     ]
+  },
+
+  // 8. Software Tool Library - Adobe Acrobat
+  {
+    id: 'sw_acrobat_1',
+    title: 'Adobe Acrobat Pro Preflight & Output Preview Masterclass',
+    description: 'Learn preflight checks, spot color remapping, object inspection, ink coverage analysis, and PDF/X verification using Adobe Acrobat Pro DC for commercial printing.',
+    videoUrl: 'https://www.youtube.com/embed/acrobat_preflight_demo',
+    duration: '35 mins',
+    category: 'software-tool-library-acrobat',
+    order: 1
+  },
+
+  // 9. Software Tool Library - Adobe Illustrator
+  {
+    id: 'sw_illustrator_1',
+    title: 'Adobe Illustrator Packaging Delineation, Layers & Trapping',
+    description: 'Master structural CAD die-line layer isolation, spot ink swatches, vector path simplification, barcode creation, and automatic trapping setting in Adobe Illustrator.',
+    videoUrl: 'https://www.youtube.com/embed/illustrator_packaging_demo',
+    duration: '45 mins',
+    category: 'software-tool-library-illustrator',
+    order: 1
+  },
+
+  // 10. Software Tool Library - Adobe Photoshop
+  {
+    id: 'sw_photoshop_1',
+    title: 'Adobe Photoshop CMYK Separation, Retouching & TAC Limits',
+    description: 'Advanced Photoshop retouching techniques for packaging graphics, CMYK channel separation, 300% Total Area Coverage (TAC) ink reduction curves, and spot varnish masks.',
+    videoUrl: 'https://www.youtube.com/embed/photoshop_retouching_demo',
+    duration: '40 mins',
+    category: 'software-tool-library-photoshop',
+    order: 1
+  },
+
+  // 11. Quality Check Process
+  {
+    id: 'qc_proc_1',
+    title: 'Standard Quality Check Process for Print & Packaging Artwork',
+    description: 'Step-by-step Quality Control SOP for proof reading, barcode verification, deltaE spectrophotometer calibration, die-line alignment audit, and pre-press signoff checklists.',
+    videoUrl: 'https://www.youtube.com/embed/qc_process_sop_demo',
+    duration: '50 mins',
+    category: 'quality-check-process',
+    order: 1
   }
 ];

@@ -196,11 +196,11 @@ export default function SecureVideoPlayer({
 
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(autoPlay);
-  const [useIframeEmbed, setUseIframeEmbed] = useState<boolean>(false);
+  const [useIframeEmbed, setUseIframeEmbed] = useState<boolean>(true);
 
   useEffect(() => {
     setIsPlaying(autoPlay);
-    setUseIframeEmbed(false);
+    setUseIframeEmbed(true);
     
     if (defaultActiveIndex !== undefined && defaultActiveIndex >= 0 && defaultActiveIndex < playlistItems.length) {
       setActiveIndex(defaultActiveIndex);
@@ -250,7 +250,26 @@ export default function SecureVideoPlayer({
     directDriveViewUrl = currentUrl.replace('/preview', '/view');
   }
 
-  if (!isGoogleDrive) {
+  const getYoutubeId = (urlStr: string): string | null => {
+    if (!urlStr) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = urlStr.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  const youtubeId = getYoutubeId(rawUrl);
+  const loomMatch = rawUrl.match(/loom\.com\/(?:share|embed)\/([a-zA-Z0-9]+)/);
+  const loomId = loomMatch ? loomMatch[1] : null;
+  const vimeoMatch = rawUrl.match(/vimeo\.com\/(?:video\/)?([0-9]+)/);
+  const vimeoId = vimeoMatch ? vimeoMatch[1] : null;
+
+  if (youtubeId) {
+    currentUrl = `https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=${isPlaying ? 1 : 0}&rel=0`;
+  } else if (loomId) {
+    currentUrl = `https://www.loom.com/embed/${loomId}`;
+  } else if (vimeoId) {
+    currentUrl = `https://player.vimeo.com/video/${vimeoId}`;
+  } else if (!isGoogleDrive) {
     try {
       const hasProtocol = currentUrl.startsWith('http://') || currentUrl.startsWith('https://') || currentUrl.startsWith('//');
       const parseUrl = hasProtocol 
@@ -260,7 +279,7 @@ export default function SecureVideoPlayer({
       const urlObj = new URL(parseUrl);
       
       if (isPlaying) {
-        if (urlObj.hostname.includes('youtube.com') || urlObj.hostname.includes('youtu.be') || urlObj.hostname.includes('vimeo.com')) {
+        if (urlObj.hostname.includes('vimeo.com')) {
           urlObj.searchParams.set('autoplay', '1');
         } else {
           urlObj.searchParams.set('autoplay', 'true');
@@ -282,6 +301,9 @@ export default function SecureVideoPlayer({
 
   const isIframeSupported = 
     (!isGoogleDrive || useIframeEmbed) && (
+      !!youtubeId || 
+      !!loomId ||
+      !!vimeoId ||
       currentUrl.includes('youtube.com') || 
       currentUrl.includes('youtu.be') || 
       currentUrl.includes('player.vdocipher.com') || 
@@ -290,12 +312,6 @@ export default function SecureVideoPlayer({
       currentUrl.includes('player.vimeo.com') ||
       isGoogleDrive
     );
-
-  const getYoutubeId = (urlStr: string): string | null => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = urlStr?.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
 
   if (!isPlaying) {
     let displayThumbnailUrl = thumbnailUrl || null;

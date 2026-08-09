@@ -1552,39 +1552,7 @@ Thank you for watching my presentation video!`;
               </button>
             </div>
 
-            {currentScore.onlineTestAssigned && (
-              <div className="p-6 bg-orange-500 rounded-2xl text-white shadow-lg shadow-orange-500/20">
-                <h4 className="font-bold mb-2">Final Online Test</h4>
-                <p className="text-sm text-orange-100 mb-4">
-                  {currentScore.onlineTestAttempted 
-                    ? `Test completed. Your score: ${currentScore.onlineTest}/20` 
-                    : `Complete the ${activeModule.onlineTestQuestions?.length || 0}-question final test for this module.`}
-                </p>
-                <button 
-                  onClick={() => {
-                    if (activeModule.onlineTestQuestions && activeModule.onlineTestQuestions.length > 0) {
-                      setQuizType('onlineTest');
-                      setShowQuiz(true);
-                      setCurrentQuizStep(0);
-                      setSelectedAnswers({});
-                      setQuizResults(null);
-                      setShowAnswers(false);
-                    } else {
-                      alert('Final test questions not available for this module yet.');
-                    }
-                  }}
-                  disabled={currentScore.onlineTestAttempted}
-                  className={cn(
-                    "w-full py-2 rounded-lg text-sm font-bold transition-all active:scale-95",
-                    currentScore.onlineTestAttempted
-                      ? "bg-orange-400 text-orange-100 cursor-not-allowed"
-                      : "bg-white text-orange-600 hover:bg-orange-50"
-                  )}
-                >
-                  {currentScore.onlineTestAttempted ? 'Test Completed' : 'Start Final Test'}
-                </button>
-              </div>
-            )}
+
           </div>
         </div>
       </div>

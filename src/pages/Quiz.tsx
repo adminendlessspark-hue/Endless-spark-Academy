@@ -82,8 +82,12 @@ export default function Quiz() {
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
           const moduleData = snapshot.docs[0].data() as CourseModule;
-          if (moduleData.quizQuestions && moduleData.quizQuestions.length > 0) {
-            setQuestions(moduleData.quizQuestions);
+          const testQuestions = (moduleData.onlineTestQuestions && moduleData.onlineTestQuestions.length > 0)
+            ? moduleData.onlineTestQuestions
+            : moduleData.quizQuestions;
+
+          if (testQuestions && testQuestions.length > 0) {
+            setQuestions(testQuestions);
           } else {
             // Fallback questions if none are defined for the module
             setQuestions([

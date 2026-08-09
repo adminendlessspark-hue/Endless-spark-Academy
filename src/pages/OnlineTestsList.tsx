@@ -13,55 +13,69 @@ export default function OnlineTestsList() {
 
   useEffect(() => {
     const fetchTests = async () => {
-      if (user?.role === 'student' && user.assignedCourses) {
-        try {
-          const tests: any[] = [];
-          const scores = user.scores || {};
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const assignedCourses = user.assignedCourses || (user.assignedCourse ? [user.assignedCourse] : (user.requestedCourses || (user.requestedCourse ? [user.requestedCourse] : ['production-art-engineer'])));
+
+      try {
+        const tests: any[] = [];
+        const scores = user.scores || {};
+        
+        const scoreKeyMap: Record<string, string> = {
+          'production-art-engineer': 'productionArtEngineer',
+          'print-ready-engineer': 'printReadyEngineer',
+          'quality-control-engineer': 'qualityControlEngineer',
+          'packaging-engineer': 'packagingEngineer',
+          'plate-ready-engineer': 'plateReadyEngineer',
+          'colour-retouching-engineer': 'colourRetouchingEngineer',
+          'printing-and-packaging-cross-courses': 'printingAndPackagingCrossCourses',
+        };
+
+        const formatCourseName = (course: string) => {
+          return course.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        };
+
+        for (const courseId of assignedCourses) {
+          const scoreKey = scoreKeyMap[courseId] || courseId.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+          const courseScoreData = (scores as any)[scoreKey] || {};
           
-          const scoreKeyMap: Record<string, string> = {
-            'production-art-engineer': 'productionArtEngineer',
-            'print-ready-engineer': 'printReadyEngineer',
-            'quality-control-engineer': 'qualityControlEngineer',
-            'packaging-engineer': 'packagingEngineer',
-            'plate-ready-engineer': 'plateReadyEngineer',
-            'colour-retouching-engineer': 'colourRetouchingEngineer',
-            'printing-and-packaging-cross-courses': 'printingAndPackagingCrossCourses',
-          };
+          // Fetch course modules for this course
+          const q = query(collection(db, 'course_modules'), where('category', '==', courseId));
+          const snapshot = await getDocs(q);
+          const modules = snapshot.docs.map(doc => doc.data());
 
-          const formatCourseName = (course: string) => {
-            return course.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-          };
+          const topicNamesSet = new Set<string>();
+          modules.forEach(m => {
+            if (m.title) topicNamesSet.add(m.title);
+          });
+          Object.keys(courseScoreData).forEach(tName => topicNamesSet.add(tName));
 
-          for (const courseId of user.assignedCourses) {
-            const courseScoreData = (scores as any)[scoreKeyMap[courseId]] || {};
-            
-            // fetch topics for this course
-            const q = query(collection(db, 'course_modules'), where('category', '==', courseId));
-            const snapshot = await getDocs(q);
-            const topics = snapshot.docs.map(doc => doc.data().title);
+          topicNamesSet.forEach(topicName => {
+            const topicScore = courseScoreData[topicName] || {};
+            const mod = modules.find(m => m.title === topicName);
 
-            topics.forEach(topicName => {
-              const topicScore = courseScoreData[topicName];
-              
-              if (topicScore?.onlineTestAssigned || topicScore?.onlineTestAttempted) {
-                tests.push({
-                  courseId,
-                  courseName: formatCourseName(courseId),
-                  topic: topicName,
-                  completed: !!topicScore.onlineTestAttempted,
-                  score: topicScore.onlineTestAttempted ? (topicScore.onlineTest || 0) : 0,
-                });
-              }
-            });
-          }
-          
-          setAssignedTests(tests);
-        } catch (error) {
-          console.error("Error fetching available tests", error);
-        } finally {
-          setLoading(false);
+            // Show test if faculty assigned it, if student attempted it, or if module has online test assigned/questions
+            const isAssigned = topicScore.onlineTestAssigned || mod?.onlineTestAssigned || (mod?.onlineTestQuestions && mod.onlineTestQuestions.length > 0) || topicScore.onlineTestAttempted;
+
+            if (isAssigned) {
+              tests.push({
+                courseId,
+                courseName: formatCourseName(courseId),
+                topic: topicName,
+                completed: !!topicScore.onlineTestAttempted,
+                score: topicScore.onlineTestAttempted ? (topicScore.onlineTest || 0) : 0,
+              });
+            }
+          });
         }
-      } else {
+        
+        setAssignedTests(tests);
+      } catch (error) {
+        console.error("Error fetching available tests", error);
+      } finally {
         setLoading(false);
       }
     };

@@ -4,7 +4,7 @@ import {
   Maximize2, Minimize2, Languages, RefreshCw, Layout, Image, Video, Sparkles, 
   ChevronLeft, ChevronRight, Save, Copy, Check, Download, Share2, Layers, 
   Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw,
-  Grid, List, FileCheck, FolderArchive, ExternalLink, X, BookMarked, DownloadCloud, Upload, Film
+  Grid, List, FileCheck, FolderArchive, ExternalLink, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';

@@ -55,7 +55,7 @@ export default function OnlineTestsList() {
 
           topicNamesSet.forEach(topicName => {
             const topicScore = courseScoreData[topicName] || {};
-            const mod = modules.find(m => m.title === topicName);
+            const mod = (modules || []).find(m => m?.title === topicName);
 
             // Show test if faculty assigned it, if student attempted it, or if module has online test assigned/questions
             const isAssigned = topicScore.onlineTestAssigned || mod?.onlineTestAssigned || (mod?.onlineTestQuestions && mod.onlineTestQuestions.length > 0) || topicScore.onlineTestAttempted;

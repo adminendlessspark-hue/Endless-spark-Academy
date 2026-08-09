@@ -98,7 +98,7 @@ const REFERENCE_VIDEO_SCRIPTS: ReferenceScript[] = [
 ];
 
 export default function CommunicationAgent() {
-  const { user } = useAuth();
+  const { user, isAdmin, isQC, isElevated } = useAuth();
   const { financialSettings } = useSettings();
   const [isActive, setIsActive] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
@@ -220,13 +220,31 @@ export default function CommunicationAgent() {
   }, [customScripts, dbModules, configuredCourses]);
 
   // Student assigned course titles derived from user profile
+  const isStudent = user?.role === 'student' || (!isAdmin && !isQC && !isElevated && user?.role !== 'faculty' && user?.role !== 'admin');
+
   const studentAssignedCourses = React.useMemo(() => {
     if (!user) return [];
     const assigned = user.assignedCourses || (user.assignedCourse ? [user.assignedCourse] : (user.requestedCourses || (user.requestedCourse ? [user.requestedCourse] : [])));
     return assigned || [];
   }, [user]);
 
+  const studentAssignedCourseTitles = React.useMemo(() => {
+    if (!studentAssignedCourses || studentAssignedCourses.length === 0) return [];
+    return studentAssignedCourses.map(cId => {
+      const matchedConfig = configuredCourses.find(c => c.courseId === cId);
+      if (matchedConfig) return matchedConfig.title;
+      return formatCourseName(cId);
+    });
+  }, [studentAssignedCourses, configuredCourses]);
+
   const allCourseTitles = React.useMemo(() => {
+    if (isStudent && studentAssignedCourseTitles.length > 0) {
+      if (studentAssignedCourseTitles.length > 1) {
+        return ['All Assigned Courses', ...studentAssignedCourseTitles];
+      }
+      return studentAssignedCourseTitles;
+    }
+
     const set = new Set<string>();
     set.add('All Course Titles');
     configuredCourses.forEach(c => set.add(c.title));
@@ -234,53 +252,69 @@ export default function CommunicationAgent() {
       if (s.category) set.add(s.category);
     });
     return Array.from(set);
-  }, [configuredCourses, allCourseModuleScripts]);
+  }, [isStudent, studentAssignedCourseTitles, configuredCourses, allCourseModuleScripts]);
 
   const studentAssignedTitle = React.useMemo(() => {
-    if (studentAssignedCourses.length === 0) return null;
-    const primaryId = studentAssignedCourses[0];
-    const matchedConfig = configuredCourses.find(c => c.courseId === primaryId);
-    if (matchedConfig) return matchedConfig.title;
-
-    const found = allCourseTitles.find(t =>
-      t !== 'All Course Titles' && (
-        t.toLowerCase().includes(primaryId.toLowerCase().replace(/-/g, ' ')) ||
-        primaryId.toLowerCase().replace(/-/g, ' ').includes(t.toLowerCase())
-      )
-    );
-    return found || formatCourseName(primaryId);
-  }, [studentAssignedCourses, configuredCourses, allCourseTitles]);
+    if (studentAssignedCourseTitles.length === 0) return null;
+    return studentAssignedCourseTitles[0];
+  }, [studentAssignedCourseTitles]);
 
   // Auto-set selectedCourseFilter to student assigned course on load
   useEffect(() => {
-    if (user && studentAssignedTitle && selectedCourseFilter === 'All Course Titles') {
+    if (isStudent && studentAssignedCourseTitles.length > 0) {
+      if (!studentAssignedCourseTitles.includes(selectedCourseFilter) && selectedCourseFilter !== 'All Assigned Courses') {
+        setSelectedCourseFilter(studentAssignedCourseTitles[0]);
+      }
+    } else if (user && studentAssignedTitle && selectedCourseFilter === 'All Course Titles') {
       setSelectedCourseFilter(studentAssignedTitle);
     }
-  }, [user, studentAssignedTitle]);
+  }, [isStudent, studentAssignedCourseTitles, user, studentAssignedTitle, selectedCourseFilter]);
 
   const availableModuleOptions = React.useMemo(() => {
     const set = new Set<string>();
     set.add('All Modules');
 
-    const filteredByCourse = selectedCourseFilter === 'All Course Titles'
-      ? allCourseModuleScripts
-      : allCourseModuleScripts.filter(s =>
-          s.category === selectedCourseFilter ||
-          s.category.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
-          selectedCourseFilter.toLowerCase().includes(s.category.toLowerCase())
-        );
+    let filteredByCourse = allCourseModuleScripts;
+
+    if (isStudent && studentAssignedCourseTitles.length > 0) {
+      filteredByCourse = filteredByCourse.filter(s =>
+        studentAssignedCourseTitles.some(title =>
+          s.category === title ||
+          s.category.toLowerCase().includes(title.toLowerCase()) ||
+          title.toLowerCase().includes(s.category.toLowerCase())
+        )
+      );
+    }
+
+    if (selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses') {
+      filteredByCourse = filteredByCourse.filter(s =>
+        s.category === selectedCourseFilter ||
+        s.category.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
+        selectedCourseFilter.toLowerCase().includes(s.category.toLowerCase())
+      );
+    }
 
     filteredByCourse.forEach(s => {
       if (s.module) set.add(s.module);
     });
 
     return Array.from(set);
-  }, [selectedCourseFilter, allCourseModuleScripts]);
+  }, [isStudent, studentAssignedCourseTitles, selectedCourseFilter, allCourseModuleScripts]);
 
   const availableQuickScripts = React.useMemo(() => {
     return allCourseModuleScripts.filter(s => {
+      if (isStudent && studentAssignedCourseTitles.length > 0) {
+        const matchesAssigned = studentAssignedCourseTitles.some(title =>
+          s.category === title ||
+          s.category.toLowerCase().includes(title.toLowerCase()) ||
+          title.toLowerCase().includes(s.category.toLowerCase())
+        );
+        if (!matchesAssigned) return false;
+      }
+
       // Course filter
       const matchesCourse = selectedCourseFilter === 'All Course Titles' ||
+        selectedCourseFilter === 'All Assigned Courses' ||
         s.category === selectedCourseFilter ||
         s.category.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
         selectedCourseFilter.toLowerCase().includes(s.category.toLowerCase());
@@ -295,7 +329,7 @@ export default function CommunicationAgent() {
 
       return matchesModule;
     });
-  }, [selectedCourseFilter, selectedModuleFilter, allCourseModuleScripts]);
+  }, [isStudent, studentAssignedCourseTitles, selectedCourseFilter, selectedModuleFilter, allCourseModuleScripts]);
 
   useEffect(() => {
     try {

@@ -4,7 +4,7 @@ import RecordingLinkModal from '../components/RecordingLinkModal';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Users, BookOpen, GraduationCap, CheckCircle, XCircle, Upload, Plus, Trash2, Video, Clock, ShieldCheck, Calendar, UserCheck, X, Download, FileText, Map, FileSpreadsheet, HelpCircle, Eye, Check, ExternalLink, User as UserIcon, PhoneCall, MapPin, Edit2, Edit, IndianRupee, Image, MoreVertical, Key, Ban, RefreshCw, Briefcase, Calculator, Bot, Loader2, FolderKanban, Copy, UserPlus, AlertCircle, FileCheck, ChevronDown, ChevronUp, Sparkles, Printer, Wind, Cloud, Layers, Wallet, CheckSquare, Globe, MessageCircle, Info, ChevronLeft, ChevronRight, Award, Search, Instagram, Facebook, Youtube, Linkedin } from 'lucide-react';
+import { Users, BookOpen, GraduationCap, CheckCircle, XCircle, Upload, Plus, Trash2, Video, Clock, ShieldCheck, Calendar, UserCheck, X, Download, FileText, Map as MapIcon, FileSpreadsheet, HelpCircle, Eye, Check, ExternalLink, User as UserIcon, PhoneCall, MapPin, Edit2, Edit, IndianRupee, Image, MoreVertical, Key, Ban, RefreshCw, Briefcase, Calculator, Bot, Loader2, FolderKanban, Copy, UserPlus, AlertCircle, FileCheck, ChevronDown, ChevronUp, Sparkles, Printer, Wind, Cloud, Layers, Wallet, CheckSquare, Globe, MessageCircle, Info, ChevronLeft, ChevronRight, Award, Search, Instagram, Facebook, Youtube, Linkedin, RotateCcw } from 'lucide-react';
 import { User, CourseModule, QuizQuestion, CourseType, TopicScore, Holiday, ApplicationData, TeamMember, TrainingPlanRow } from '../types';
 import { DEFAULT_TRAINING_PLANS } from '../defaultTrainingPlans';
 import { cn, compressImage, calculateSLADate, formatCourseName, getScoreKey, getCourseFromScoreKey, getStudentCourseScores, getOrdinalSuffix } from '../utils';
@@ -273,6 +273,7 @@ export default function AdminPanel() {
 
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   const [viewingQuizDetails, setViewingQuizDetails] = useState<{ studentName: string, topic: string, details: any[] } | null>(null);
+  const [managingTestsStudent, setManagingTestsStudent] = useState<User | null>(null);
   const [submissionFilter, setSubmissionFilter] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [facultyFilter, setFacultyFilter] = useState<string>('all');
   const [students, setStudents] = useState<User[]>([]);
@@ -1949,7 +1950,7 @@ export default function AdminPanel() {
   };
 
   const getAllSubmissions = () => {
-    const submissions: any[] = [];
+    const submissionsMap = new Map<string, any>();
     const allCourseTopicsMap: Record<string, string[]> = {
       'production-art-engineer': productionArtEngineerTopics,
       'print-ready-engineer': printReadyEngineerTopics,
@@ -1973,7 +1974,6 @@ export default function AdminPanel() {
 
           let course = getCourseFromScoreKey(categoryKey);
 
-          // If course is fallback or not in student's assigned courses, match topic against student's assigned courses or global topics
           if (!studentAssignedCourses.includes(course)) {
             let matched = false;
             for (const cId of studentAssignedCourses) {
@@ -1998,21 +1998,42 @@ export default function AdminPanel() {
             const statusKey = `${type}Status` as keyof TopicScore;
             const fileKey = type === 'video' ? 'videoData' : `${type}File` as keyof TopicScore;
             
-            if (score[statusKey]) {
-              submissions.push({
+            const status = score[statusKey];
+            const fileData = score[fileKey];
+
+            // Only include if status exists AND fileData is a valid non-empty string
+            if (status && fileData && typeof fileData === 'string' && fileData.trim() !== '') {
+              const uniqueKey = `${student.id}_${topic}_${type}`;
+              
+              const subObj = {
                 studentId: student.id,
                 studentName: student.name,
                 course,
                 topic,
                 type,
-                status: score[statusKey],
-                fileData: score[fileKey]
-              });
+                status,
+                fileData: fileData.trim(),
+                updatedAt: (score as any).updatedAt || (score as any)[`${type}SubmittedAt`] || ''
+              };
+
+              const existing = submissionsMap.get(uniqueKey);
+              if (!existing) {
+                submissionsMap.set(uniqueKey, subObj);
+              } else {
+                // If duplicate record exists across legacy keys in scores, keep the one matching student's assigned course or newer timestamp
+                if (studentAssignedCourses.includes(course) && !studentAssignedCourses.includes(existing.course)) {
+                  submissionsMap.set(uniqueKey, subObj);
+                } else if (subObj.updatedAt && (!existing.updatedAt || subObj.updatedAt > existing.updatedAt)) {
+                  submissionsMap.set(uniqueKey, subObj);
+                }
+              }
             }
           });
         });
       });
     });
+
+    const submissions = Array.from(submissionsMap.values());
     return submissions.filter(sub => sub.status === submissionFilter);
   };
 
@@ -2601,6 +2622,41 @@ export default function AdminPanel() {
       scores[categoryKey] = courseScores;
       
       await updateDoc(doc(db, 'users', studentId), { scores });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${studentId}`);
+    }
+  };
+
+  const handleResetQuizOrTest = async (studentId: string, course: CourseType, topic: string, type: 'quiz' | 'onlineTest') => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    if (!confirm(`Are you sure you want to reassign/reset the ${type === 'onlineTest' ? 'Online Test' : 'Module Quiz'} for "${topic}"? This will allow the student to retake it.`)) {
+      return;
+    }
+
+    try {
+      const scores = { ...student.scores };
+      const categoryKey = getScoreKey(course);
+      const courseScores = { ...(scores[categoryKey] || {}) };
+      const topicScore = { ...(courseScores[topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 }) } as any;
+
+      if (type === 'onlineTest') {
+        topicScore.onlineTest = 0;
+        topicScore.onlineTestAttempted = false;
+        topicScore.onlineTestAssigned = true;
+        delete topicScore.onlineTestDetails;
+      } else {
+        topicScore.quiz = 0;
+        topicScore.quizAttempted = false;
+        delete topicScore.quizDetails;
+      }
+
+      courseScores[topic] = topicScore;
+      scores[categoryKey] = courseScores;
+
+      await updateDoc(doc(db, 'users', studentId), { scores });
+      alert(`Successfully reassigned ${type === 'onlineTest' ? 'Online Test' : 'Module Quiz'} for ${topic}. The student can now take it again.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${studentId}`);
     }
@@ -4851,6 +4907,15 @@ export default function AdminPanel() {
                               {student.isApproved && (
                                 <>
                                   <button 
+                                    onClick={() => { 
+                                      setManagingTestsStudent(student); 
+                                      setActiveDropdownId(null); 
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-sm text-pink-600 hover:bg-pink-50 flex items-center gap-2 font-medium"
+                                  >
+                                    <RotateCcw className="w-4 h-4 text-pink-500" /> Reassign / Manage Tests
+                                  </button>
+                                  <button 
                                     onClick={() => { handleAssignEntranceTest(student.id); setActiveDropdownId(null); }}
                                     className="w-full text-left px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 flex items-center gap-2"
                                   >
@@ -5586,7 +5651,6 @@ export default function AdminPanel() {
                       sub.fileData.includes('.webm') || 
                       sub.fileData.includes('.mp4') || 
                       sub.fileData.startsWith('data:video') ||
-                      sub.fileData.includes('drive.google.com') ||
                       sub.fileData.includes('youtube.com') ||
                       sub.fileData.includes('youtu.be') ||
                       sub.fileData.includes('vimeo.com') ||
@@ -5608,6 +5672,25 @@ export default function AdminPanel() {
                             Open Submission Video Link
                           </a>
                         </div>
+                      ) : (sub.fileData.startsWith('data:image') || sub.fileData.includes('firebasestorage') || sub.fileData.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i)) ? (
+                        <div className="space-y-2">
+                          <div className="rounded-xl overflow-hidden bg-gray-100 max-h-48 flex items-center justify-center border border-gray-200 shadow-sm">
+                            <img 
+                              src={sub.fileData} 
+                              alt={`${sub.studentName} - ${sub.topic}`}
+                              className="max-h-48 w-auto object-contain"
+                            />
+                          </div>
+                          <a 
+                            href={sub.fileData} 
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-1.5 w-full py-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg text-xs font-semibold text-orange-700 transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Open Submission Image Link
+                          </a>
+                        </div>
                       ) : (
                         <a 
                           href={sub.fileData} 
@@ -5616,7 +5699,7 @@ export default function AdminPanel() {
                           className="flex items-center justify-center gap-2 w-full py-3 bg-pink-50 hover:bg-pink-100 border border-pink-200 rounded-lg text-sm font-medium text-pink-700 transition-colors"
                         >
                           <ExternalLink className="w-4 h-4" />
-                          View {sub.type} Link
+                          View {sub.type.charAt(0).toUpperCase() + sub.type.slice(1)} Link
                         </a>
                       )
                     ) : (
@@ -5744,7 +5827,7 @@ export default function AdminPanel() {
                                     className="p-2 bg-white text-pink-600 rounded-lg hover:bg-pink-50 transition-colors"
                                     title="Set Mind Map URL"
                                   >
-                                    <Map className="w-4 h-4" />
+                                    <MapIcon className="w-4 h-4" />
                                   </button>
                                   <button 
                                     onClick={() => handleModuleFileUpload(module.id, 'worksheetUrl')}
@@ -7550,34 +7633,52 @@ export default function AdminPanel() {
                             />
                           </td>
                           <td className="px-4 py-3">
-                            <input 
-                              type="number" 
-                              max={10}
-                              className="w-[80px] p-2 text-center bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-pink-500 focus:bg-white outline-none transition-all mx-auto block no-spinners"
-                              value={scores.quiz || 0}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'quiz', parseInt(e.target.value) || 0)}
-                            />
+                            <div className="flex items-center justify-center gap-1.5 w-max mx-auto">
+                              <input 
+                                type="number" 
+                                max={10}
+                                className="w-[70px] p-2 text-center bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-pink-500 focus:bg-white outline-none transition-all no-spinners"
+                                value={scores.quiz || 0}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'quiz', parseInt(e.target.value) || 0)}
+                              />
+                              {scores.quizAttempted && (
+                                <button
+                                  onClick={() => handleResetQuizOrTest(selectedStudentForMarks, selectedCourseForMarks, topic, 'quiz')}
+                                  className="px-2 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 border border-amber-200/60"
+                                  title="Re-assign / Reset Quiz so student can retake"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" /> Reassign
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center justify-center gap-2 w-max mx-auto">
+                            <div className="flex items-center justify-center gap-1.5 w-max mx-auto">
                               <input 
                                 type="number" 
                                 max={20}
-                                className="w-[80px] p-2 text-center bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-pink-500 focus:bg-white outline-none transition-all no-spinners"
+                                className="w-[75px] p-2 text-center bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-pink-500 focus:bg-white outline-none transition-all no-spinners"
                                 value={scores.onlineTest || 0}
                                 onFocus={(e) => e.target.select()}
                                 onChange={(e) => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'onlineTest', parseInt(e.target.value) || 0)}
                               />
-                              {!scores.onlineTestAttempted && (
+                              <button
+                                onClick={() => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'onlineTestAssigned', !scores.onlineTestAssigned)}
+                                className={`p-2 rounded-lg transition-colors ${scores.onlineTestAssigned ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                                title={scores.onlineTestAssigned ? "Test Enabled" : "Enable Test for Student"}
+                              >
+                                <ShieldCheck className="w-4 h-4" />
+                              </button>
+                              {scores.onlineTestAttempted ? (
                                 <button
-                                  onClick={() => handleUpdateScore(selectedStudentForMarks, selectedCourseForMarks, topic, 'onlineTestAssigned', !scores.onlineTestAssigned)}
-                                  className={`p-2 rounded-lg transition-colors ${scores.onlineTestAssigned ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
-                                  title={scores.onlineTestAssigned ? "Test Enabled" : "Enable Test for Student"}
+                                  onClick={() => handleResetQuizOrTest(selectedStudentForMarks, selectedCourseForMarks, topic, 'onlineTest')}
+                                  className="px-2 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 border border-amber-200/60"
+                                  title="Re-assign / Reset Online Test so student can retake"
                                 >
-                                  <ShieldCheck className="w-4 h-4" />
+                                  <RotateCcw className="w-3.5 h-3.5" /> Reassign
                                 </button>
-                              )}
+                              ) : null}
                               {scores.onlineTestDetails ? (
                                 <button 
                                   onClick={() => student && setViewingQuizDetails({ studentName: student.name, topic, details: scores.onlineTestDetails! })}
@@ -13093,6 +13194,214 @@ export default function AdminPanel() {
                 setEditingTrainingRecord(null);
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {managingTestsStudent && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gradient-to-r from-pink-50/50 to-white">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <RotateCcw className="w-6 h-6 text-pink-600" />
+                  Reassign & Manage Tests / Quizzes
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Student: <span className="font-bold text-gray-900">{managingTestsStudent.name}</span> ({managingTestsStudent.studentId || managingTestsStudent.username || managingTestsStudent.email})
+                </p>
+              </div>
+              <button 
+                onClick={() => setManagingTestsStudent(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+              {(() => {
+                const student = managingTestsStudent;
+                const assignedCourses: CourseType[] = student.assignedCourses?.length 
+                  ? student.assignedCourses 
+                  : (student.assignedCourse ? [student.assignedCourse] : ['production-art-engineer']);
+
+                return assignedCourses.map(course => {
+                  const categoryKey = getScoreKey(course);
+                  const scoresObj = student.scores?.[categoryKey as keyof typeof student.scores] || {};
+
+                  let topicsList: string[] = [];
+                  if (course === 'production-art-engineer') topicsList = productionArtEngineerTopics;
+                  else if (course === 'print-ready-engineer') topicsList = printReadyEngineerTopics;
+                  else if (course === 'quality-control-engineer') topicsList = qualityControlEngineerTopics;
+                  else if (course === 'packaging-engineer') topicsList = packagingEngineerTopics;
+                  else if (course === 'plate-ready-engineer') topicsList = plateReadyEngineerTopics;
+                  else if (course === 'colour-retouching-engineer') topicsList = colourRetouchingEngineerTopics;
+                  else if (course === 'printing-and-packaging-cross-courses') topicsList = printingAndPackagingTopics;
+                  else topicsList = productionArtEngineerTopics;
+
+                  return (
+                    <div key={course} className="bg-gray-50/50 border border-gray-200/80 rounded-2xl p-5 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-200/60">
+                        <div>
+                          <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                            <BookOpen className="w-5 h-5 text-pink-500" />
+                            {formatCourseName(course)}
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            Enable/disable tests or click Reassign to give fresh test attempts to this student
+                          </p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Reassign ALL Online Tests & Quizzes for course "${formatCourseName(course)}"?`)) return;
+                            try {
+                              const scores = JSON.parse(JSON.stringify(student.scores || {}));
+                              if (!scores[categoryKey]) scores[categoryKey] = {};
+                              topicsList.forEach(t => {
+                                const topicScore = { ...(scores[categoryKey][t] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 }) };
+                                topicScore.onlineTest = 0;
+                                topicScore.onlineTestAttempted = false;
+                                topicScore.onlineTestAssigned = true;
+                                delete topicScore.onlineTestDetails;
+                                topicScore.quiz = 0;
+                                topicScore.quizAttempted = false;
+                                delete topicScore.quizDetails;
+                                scores[categoryKey][t] = topicScore;
+                              });
+                              await updateDoc(doc(db, 'users', student.id), { scores });
+                              setManagingTestsStudent({ ...student, scores });
+                              alert(`All tests & quizzes for ${formatCourseName(course)} reassigned successfully!`);
+                            } catch (err) {
+                              handleFirestoreError(err, OperationType.UPDATE, `users/${student.id}`);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-pink-50 text-pink-600 hover:bg-pink-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-pink-200/60 self-start sm:self-auto cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" /> Reassign All Course Tests
+                        </button>
+                      </div>
+
+                      <div className="divide-y divide-gray-100 bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+                        {topicsList.map(topic => {
+                          const topicScore: any = scoresObj[topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 };
+                          
+                          return (
+                            <div key={topic} className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+                              <div className="space-y-1 max-w-md">
+                                <h4 className="text-sm font-bold text-gray-900">{topic}</h4>
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                  {/* Quiz Status */}
+                                  <span className={`px-2 py-0.5 rounded-full font-semibold ${topicScore.quizAttempted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                    Quiz: {topicScore.quizAttempted ? `Completed (${topicScore.quiz || 0}/10)` : 'Not Attempted'}
+                                  </span>
+                                  {/* Online Test Status */}
+                                  <span className={`px-2 py-0.5 rounded-full font-semibold ${
+                                    topicScore.onlineTestAttempted 
+                                      ? 'bg-purple-100 text-purple-700' 
+                                      : topicScore.onlineTestAssigned 
+                                      ? 'bg-amber-100 text-amber-700' 
+                                      : 'bg-gray-100 text-gray-500'
+                                  }`}>
+                                    Test: {topicScore.onlineTestAttempted 
+                                      ? `Completed (${topicScore.onlineTest || 0}/20)` 
+                                      : topicScore.onlineTestAssigned 
+                                      ? 'Assigned / Pending' 
+                                      : 'Not Enabled'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* Module Quiz Reassign */}
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const scores = JSON.parse(JSON.stringify(student.scores || {}));
+                                      if (!scores[categoryKey]) scores[categoryKey] = {};
+                                      const ts = { ...(scores[categoryKey][topic] || {}) };
+                                      ts.quiz = 0;
+                                      ts.quizAttempted = false;
+                                      delete ts.quizDetails;
+                                      scores[categoryKey][topic] = ts;
+
+                                      await updateDoc(doc(db, 'users', student.id), { scores });
+                                      setManagingTestsStudent({ ...student, scores });
+                                      alert(`Quiz for "${topic}" reassigned! Student can retake it now.`);
+                                    } catch (err) {
+                                      handleFirestoreError(err, OperationType.UPDATE, `users/${student.id}`);
+                                    }
+                                  }}
+                                  className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                                  title="Reset Quiz so student can retake"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 text-pink-500" />
+                                  {topicScore.quizAttempted ? 'Reassign Quiz' : 'Reset Quiz'}
+                                </button>
+
+                                {/* Online Test Assign / Enable Toggle */}
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const scores = JSON.parse(JSON.stringify(student.scores || {}));
+                                      if (!scores[categoryKey]) scores[categoryKey] = {};
+                                      const ts = { ...(scores[categoryKey][topic] || {}) };
+                                      ts.onlineTestAssigned = !ts.onlineTestAssigned;
+                                      scores[categoryKey][topic] = ts;
+
+                                      await updateDoc(doc(db, 'users', student.id), { scores });
+                                      setManagingTestsStudent({ ...student, scores });
+                                    } catch (err) {
+                                      handleFirestoreError(err, OperationType.UPDATE, `users/${student.id}`);
+                                    }
+                                  }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer ${
+                                    topicScore.onlineTestAssigned 
+                                      ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                                      : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                                  }`}
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5" />
+                                  {topicScore.onlineTestAssigned ? 'Test Enabled' : 'Enable Test'}
+                                </button>
+
+                                {/* Online Test Reassign */}
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const scores = JSON.parse(JSON.stringify(student.scores || {}));
+                                      if (!scores[categoryKey]) scores[categoryKey] = {};
+                                      const ts = { ...(scores[categoryKey][topic] || {}) };
+                                      ts.onlineTest = 0;
+                                      ts.onlineTestAttempted = false;
+                                      ts.onlineTestAssigned = true;
+                                      delete ts.onlineTestDetails;
+                                      scores[categoryKey][topic] = ts;
+
+                                      await updateDoc(doc(db, 'users', student.id), { scores });
+                                      setManagingTestsStudent({ ...student, scores });
+                                      alert(`Online Test for "${topic}" reassigned! Student can retake it now.`);
+                                    } catch (err) {
+                                      handleFirestoreError(err, OperationType.UPDATE, `users/${student.id}`);
+                                    }
+                                  }}
+                                  className="px-2.5 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 border border-pink-200/60 cursor-pointer"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 text-pink-600" />
+                                  {topicScore.onlineTestAttempted ? 'Reassign Test' : 'Give Test Access'}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>
       )}

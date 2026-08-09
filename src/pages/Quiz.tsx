@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CourseModule, QuizQuestion, TopicScore } from '../types';
-import { CircleCheck, XCircle, ArrowRight, Trophy, RefreshCcw, Camera, ShieldAlert, AlertTriangle } from 'lucide-react';
+import { CircleCheck, XCircle, ArrowRight, Trophy, RefreshCcw, Camera, ShieldAlert, AlertTriangle, HelpCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../AuthContext';
@@ -89,67 +89,14 @@ export default function Quiz() {
           if (testQuestions && testQuestions.length > 0) {
             setQuestions(testQuestions);
           } else {
-            // If no test questions are configured for this module, directly give congratulations
             setQuestions([]);
-            setScore(20);
-            setShowResults(true);
-            setIsTestStarted(true);
-
-            confetti({
-              particleCount: 150,
-              spread: 70,
-              origin: { y: 0.6 }
-            });
-
-            if (user) {
-              const categoryKey = getScoreKey(category);
-              const scores = user.scores || { productionArtEngineer: {}, printReadyEngineer: {}, qualityControlEngineer: {} };
-              const currentScores = (scores as any)[categoryKey] || {};
-              const topicScores = currentScores[topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
-
-              const newScores = {
-                ...scores,
-                [categoryKey]: {
-                  ...currentScores,
-                  [topic]: { ...topicScores, onlineTest: 20, onlineTestAttempted: true, onlineTestDetails: [] }
-                }
-              };
-
-              updateUser({ quizCompleted: true, scores: newScores });
-            }
           }
         } else {
-          // If module not found or empty, directly show congratulation completion
           setQuestions([]);
-          setScore(20);
-          setShowResults(true);
-          setIsTestStarted(true);
-
-          confetti({
-            particleCount: 150,
-            spread: 70,
-            origin: { y: 0.6 }
-          });
-
-          if (user) {
-            const categoryKey = getScoreKey(category);
-            const scores = user.scores || { productionArtEngineer: {}, printReadyEngineer: {}, qualityControlEngineer: {} };
-            const currentScores = (scores as any)[categoryKey] || {};
-            const topicScores = currentScores[topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
-
-            const newScores = {
-              ...scores,
-              [categoryKey]: {
-                ...currentScores,
-                [topic]: { ...topicScores, onlineTest: 20, onlineTestAttempted: true, onlineTestDetails: [] }
-              }
-            };
-
-            updateUser({ quizCompleted: true, scores: newScores });
-          }
         }
       } catch (err) {
         console.error('Error fetching quiz questions:', err);
+        setQuestions([]);
       } finally {
         setLoading(false);
       }
@@ -410,6 +357,28 @@ Respond with a JSON object in exactly this format without markdown tags:
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600"></div>
+      </div>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <div className="max-w-2xl mx-auto text-center py-12 px-4">
+        <div className="bg-white p-8 sm:p-12 rounded-3xl shadow-sm border border-gray-100">
+          <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <HelpCircle className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">No Test Questions Configured</h2>
+          <p className="text-gray-500 mb-6">
+            Questions for <span className="font-semibold text-gray-800">"{topic}"</span> have not been added yet by your instructor.
+          </p>
+          <button
+            onClick={() => navigate('/online-tests')}
+            className="px-6 py-2.5 bg-pink-500 text-white rounded-xl font-bold hover:bg-pink-600 transition-colors shadow-md shadow-pink-500/20 cursor-pointer"
+          >
+            Back to Online Tests
+          </button>
+        </div>
       </div>
     );
   }

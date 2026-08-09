@@ -89,99 +89,64 @@ export default function Quiz() {
           if (testQuestions && testQuestions.length > 0) {
             setQuestions(testQuestions);
           } else {
-            // Fallback questions if none are defined for the module
-            setQuestions([
-              {
-                id: '1',
-                question: 'Define colour gamut.',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: 'A color gamut is the entire range of colors available on a particular device such as a monitor or printer. A good definition mentions the full range or absolute extent of colors that can be reproduced.'
-              },
-              {
-                id: '2',
-                question: 'Differentiate between additive colour and subtractive colour.',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: 'Additive colors (RGB) are created by adding light, starting from black. Used for screens. Subtractive colors (CMYK) are created by subtracting light, starting from white paper. Used for printing.'
-              },
-              {
-                id: '3',
-                question: 'What is a Pantone (PMS) colour?',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: 'The Pantone Matching System (PMS) is a standardized color reproduction system. It uses specific spot colors, pre-mixed inks, to ensure color consistency across different printers and materials.'
-              },
-              {
-                id: '4',
-                question: 'Write any three benefits of using Pantone colours in packaging.',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: '1. Brand consistency / Color accuracy. 2. Reproduce colors that CMYK cannot accurately recreate (like metallics, neons, or very vibrant colors). 3. Saves money/time on press if using fewer than 4 process colors (e.g., a 2-color job).'
-              },
-              {
-                id: '5',
-                question: 'What is a non-Pantone (process) colour?',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: 'A process color is created by blending the four standard process inks: Cyan, Magenta, Yellow, and Black (CMYK). They are mixed on the press as tiny dots of ink.'
-              },
-              {
-                id: '6',
-                question: 'What is the maximum number of colours typically used in CMYK printing?',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: '4 colors (Cyan, Magenta, Yellow, Black).'
-              },
-              {
-                id: '7',
-                question: 'Explain the terms coated ink and uncoated ink in printing.',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: 'Normally, "coated" and "uncoated" refer to the paper, which affects how ink appears. Pantone formulas come in Coated (C) and Uncoated (U) to simulate how the ink will look on glossy/coated vs matte/uncoated paper stock.'
-              },
-              {
-                id: '8',
-                question: 'Define opaque ink and transparent ink with one example each.',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: 'Opaque ink completely covers the substrate or underlying colors (e.g., Titanium White, metallic inks). Transparent ink allows light to pass through, blending with the substrate or colors underneath (e.g., standard CMYK process inks).'
-              },
-              {
-                id: '9',
-                question: 'Name any three source files or references used for colour matching in packaging.',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: '1. Physical Pantone book/swatches. 2. Approved target proof / hard copy proof. 3. Physical sample of a previous run. (also acceptable: digital color profiles, drawdowns).'
-              },
-              {
-                id: '10',
-                question: 'Briefly explain how to increase and how to reduce the number of colours in a packaging design.',
-                options: [],
-                correctAnswer: 0,
-                type: 'descriptive',
-                answerKey: 'To reduce: Convert spot colors to CMYK where acceptable, or use tints of a spot color instead of introducing a new one. To increase: Add spot colors (Pantones) to single out critical brand elements, add varnishes or metallic inks.'
-              }
-            ]);
+            // If no test questions are configured for this module, directly give congratulations
+            setQuestions([]);
+            setScore(20);
+            setShowResults(true);
+            setIsTestStarted(true);
+
+            confetti({
+              particleCount: 150,
+              spread: 70,
+              origin: { y: 0.6 }
+            });
+
+            if (user) {
+              const categoryKey = getScoreKey(category);
+              const scores = user.scores || { productionArtEngineer: {}, printReadyEngineer: {}, qualityControlEngineer: {} };
+              const currentScores = (scores as any)[categoryKey] || {};
+              const topicScores = currentScores[topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
+
+              const newScores = {
+                ...scores,
+                [categoryKey]: {
+                  ...currentScores,
+                  [topic]: { ...topicScores, onlineTest: 20, onlineTestAttempted: true, onlineTestDetails: [] }
+                }
+              };
+
+              updateUser({ quizCompleted: true, scores: newScores });
+            }
           }
         } else {
-          setQuestions([
-            {
-              id: '1',
-              question: 'No quiz questions found for this module.',
-              options: ['Ok', 'Ok', 'Ok', 'Ok'],
-              correctAnswer: 0
-            }
-          ]);
+          // If module not found or empty, directly show congratulation completion
+          setQuestions([]);
+          setScore(20);
+          setShowResults(true);
+          setIsTestStarted(true);
+
+          confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+
+          if (user) {
+            const categoryKey = getScoreKey(category);
+            const scores = user.scores || { productionArtEngineer: {}, printReadyEngineer: {}, qualityControlEngineer: {} };
+            const currentScores = (scores as any)[categoryKey] || {};
+            const topicScores = currentScores[topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
+
+            const newScores = {
+              ...scores,
+              [categoryKey]: {
+                ...currentScores,
+                [topic]: { ...topicScores, onlineTest: 20, onlineTestAttempted: true, onlineTestDetails: [] }
+              }
+            };
+
+            updateUser({ quizCompleted: true, scores: newScores });
+          }
         }
       } catch (err) {
         console.error('Error fetching quiz questions:', err);
@@ -450,7 +415,7 @@ Respond with a JSON object in exactly this format without markdown tags:
   }
 
   if (showResults) {
-    const passed = score >= questions.length / 2;
+    const passed = questions.length === 0 ? true : (score >= questions.length / 2);
     
     if (showAnswers) {
       return (
@@ -559,24 +524,29 @@ Respond with a JSON object in exactly this format without markdown tags:
             {passed ? <Trophy className="w-12 h-12 text-orange-600" /> : <RefreshCcw className="w-12 h-12 text-red-600" />}
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            {passed ? 'Congratulations!' : 'Keep Practicing!'}
+            {passed ? '🎉 Congratulations!' : 'Keep Practicing!'}
           </h2>
-          <p className="text-gray-500 mb-8">
-            You scored <span className="font-bold text-pink-600">{score}</span> out of <span className="font-bold">{questions.length}</span>
+          <p className="text-gray-600 mb-8 font-medium">
+            {questions.length === 0 
+              ? `Congratulations! Online test for "${topic}" is completed.`
+              : <>You scored <span className="font-bold text-pink-600">{score}</span> out of <span className="font-bold">{questions.length}</span></>
+            }
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            {questions.length > 0 && (
+              <button
+                onClick={() => setShowAnswers(true)}
+                className="px-8 py-3 bg-white text-pink-500 border-2 border-pink-500 rounded-xl font-bold hover:bg-pink-50 transition-colors w-full sm:w-auto cursor-pointer"
+              >
+                Show Answers
+              </button>
+            )}
             <button
-              onClick={() => setShowAnswers(true)}
-              className="px-8 py-3 bg-white text-pink-500 border-2 border-pink-500 rounded-xl font-bold hover:bg-pink-50 transition-colors w-full sm:w-auto"
+              onClick={() => navigate('/online-tests')}
+              className="px-8 py-3 bg-pink-500 text-white rounded-xl font-bold hover:bg-pink-600 transition-colors w-full sm:w-auto shadow-lg shadow-pink-500/20 cursor-pointer"
             >
-              Show Answers
-            </button>
-            <button
-              onClick={() => navigate('/')}
-              className="px-8 py-3 bg-pink-500 text-white rounded-xl font-bold hover:bg-pink-600 transition-colors w-full sm:w-auto shadow-lg shadow-pink-500/20"
-            >
-              Back to Dashboard
+              Back to Online Tests
             </button>
           </div>
         </div>

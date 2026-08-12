@@ -526,7 +526,7 @@ Provide:
 
       const response = await generateGeminiContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        systemInstruction: 'You are an encouraging speech coach and script writer for non-native English students.'
+        config: { systemInstruction: 'You are an encouraging speech coach and script writer for non-native English students.' }
       });
 
       if (response && response.text) {
@@ -572,7 +572,7 @@ Please give:
 
       const response = await generateGeminiContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        systemInstruction: 'You are a warm, supportive video recording coach for Indian college students.'
+        config: { systemInstruction: 'You are a warm, supportive video recording coach for Indian college students.' }
       });
 
       if (response && response.text) {

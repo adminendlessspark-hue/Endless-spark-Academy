@@ -965,8 +965,10 @@ export default function LoomCourseStudio({
         muted
         playsInline
         className="absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none z-0"
-        onEnterPictureInPicture={() => setIsPiPActive(true)}
-        onLeavePictureInPicture={() => setIsPiPActive(false)}
+        {...({
+          onEnterPictureInPicture: () => setIsPiPActive(true),
+          onLeavePictureInPicture: () => setIsPiPActive(false),
+        } as any)}
       />
 
       {/* Header Bar */}

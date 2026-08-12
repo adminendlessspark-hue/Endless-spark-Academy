@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, Save, Copy, Check, Download, Share2, Layers, 
   Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
   Bold, Italic, Underline, Highlighter, Eraser, Wand2, GripVertical, Move,
-  Grid, List, FileCheck, FolderArchive, ExternalLink, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap,
+  Grid, List, FileCheck, FolderArchive, ExternalLink, Link, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap,
   MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -34,10 +34,12 @@ export interface FlipbookPage {
   mediaType?: 'none' | 'image' | 'video' | 'both';
   imageUrl?: string;
   imageCaption?: string;
+  secondaryImageUrl?: string;
+  secondaryImageCaption?: string;
   videoUrl?: string;
   videoCaption?: string;
   videoTranscription?: string;
-  layoutStyle?: 'split-left' | 'split-right' | 'media-top' | 'media-bottom' | 'text-only' | 'media-hero' | 'grid-2x2' | 'grid-bento';
+  layoutStyle?: 'split-left' | 'split-right' | 'media-top' | 'media-bottom' | 'text-only' | 'media-hero' | 'grid-2x2' | 'grid-bento' | 'grid-right-2-images' | 'grid-2-images';
   calloutText?: string;
   bgTheme?: 'classic-paper' | 'dark-studio' | 'clean-white' | 'blueprint' | 'golden-aged';
   courseName?: string;
@@ -75,11 +77,48 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'ja', name: 'Japanese (日本語)', flag: '🇯🇵' },
 ];
 
-// Safe Image component with fallback and external link option
+// Safe Image component with fallback, IndexedDB resolution, and external link option
 export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string; className?: string }) => {
   const [hasError, setHasError] = useState(false);
-  
+  const [resolvedSrc, setResolvedSrc] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    setHasError(false);
+    if (!src) {
+      setResolvedSrc('');
+      setIsLoading(false);
+      return;
+    }
+
+    if (src.startsWith('idb:')) {
+      const key = src.replace('idb:', '');
+      setIsLoading(true);
+      getMediaFromIDB(key)
+        .then(resolved => {
+          if (resolved) {
+            setResolvedSrc(resolved);
+          } else {
+            setHasError(true);
+          }
+        })
+        .catch(() => setHasError(true))
+        .finally(() => setIsLoading(false));
+    } else {
+      setResolvedSrc(src);
+      setIsLoading(false);
+    }
+  }, [src]);
+
   if (!src) return null;
+
+  if (isLoading) {
+    return (
+      <div className={`flex items-center justify-center p-3 bg-slate-900/60 rounded-xl border border-amber-500/20 ${className || ''}`}>
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
+      </div>
+    );
+  }
 
   if (hasError) {
     return (
@@ -87,25 +126,42 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
         <Image className="w-8 h-8 text-amber-400 opacity-80" />
         <p className="text-xs font-bold text-slate-300">Attached Image Asset</p>
         <p className="text-[10px] text-slate-400">Preview blocked by external host or CORS policy.</p>
-        <a
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[11px] text-amber-400 hover:underline flex items-center gap-1 bg-slate-950 px-2.5 py-1 rounded-lg border border-amber-500/30 font-bold"
-        >
-          <ExternalLink className="w-3 h-3" /> Click Here to Open / View Image File
-        </a>
+        {resolvedSrc && !resolvedSrc.startsWith('idb:') && (
+          <a
+            href={resolvedSrc}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-amber-400 hover:underline flex items-center gap-1 bg-slate-950 px-2.5 py-1 rounded-lg border border-amber-500/30 font-bold"
+          >
+            <ExternalLink className="w-3 h-3" /> Click Here to Open / View Image File
+          </a>
+        )}
       </div>
     );
   }
 
   return (
     <img
-      src={src}
+      src={resolvedSrc || src}
       alt={alt || 'Page Attachment'}
       className={className}
       onError={() => setHasError(true)}
     />
+  );
+};
+
+// Helper to detect default placeholder callout notes that should be off by default
+export const isDefaultCalloutText = (text?: string): boolean => {
+  if (!text || !text.trim()) return true;
+  const str = text.trim().toLowerCase();
+  return (
+    str === 'faculty key takeaway' ||
+    str === 'faculty tip or student key takeaway note' ||
+    str === 'faculty tip or student key takeaway' ||
+    str.includes('faculty tip') ||
+    str.includes('key takeaway') ||
+    str.includes('மாணவர் குறிப்பு') ||
+    str.includes('ஆசிரியர் குறிப்பு')
   );
 };
 
@@ -510,7 +566,7 @@ const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
         id: 'p1',
         pageNumber: 1,
         title: 'Introduction to Structural Packaging Design',
-        subtitle: 'Chapter 1: Understanding Substrates, Grain Direction & Flute Profiles',
+        subtitle: '',
         content: `Structural packaging engineering is the backbone of retail presentation and physical product protection. Engineers must carefully balance strength-to-weight ratios, folding tolerances, and printing precision.
 
 Key structural considerations include:
@@ -520,24 +576,24 @@ Key structural considerations include:
         translations: {
           ms: {
             title: 'Pengenalan kepada Reka Bentuk Pembungkusan Struktur',
-            subtitle: 'Bab 1: Memahami Substrat, Arah Urat Kertas & Profil Seruling Corrugated',
+            subtitle: '',
             content: `Kejuruteraan pembungkusan struktur adalah teras persembahan runcit dan perlindungan fizikal produk. Jurutera mesti mengimbangi nisbah kekuatan, toleransi lipatan, dan ketepatan cetakan.
 
 Pertimbangan struktur utama meliputi:
 1. Substrat: Papan bertutup SBS, FBB, dan profil seruling B/C/E/F corrugated.
 2. Arah Urat Mesin (Grain Direction): Selari dengan lipatan utama untuk mengelakkan kertas retak semasa penggaman berkelajuan tinggi.
 3. Toleransi Alur & Ketebalan Papan: Pelarasan lebar garisan acuan berdasarkan ketebalan papan (pt/mm).`,
-            calloutText: 'Petua Pengajar: Sentiasa pastikan arah urat kertas selari dengan lipatan utama!'
+            calloutText: ''
           },
           ta: {
             title: 'கட்டமைப்பு பேக்கேஜிங் வடிவமைப்பு அறிமுகம்',
-            subtitle: 'அத்தியாயம் 1: அடி மூலக்கூறுகள் மற்றும் மடிப்பு கோடுகளைப் புரிந்துகொள்ளுதல்',
+            subtitle: '',
             content: `கட்டமைப்பு பேக்கேஜிங் பொறியியல் என்பது சில்லறை விற்பனை விளக்கக்காட்சி மற்றும் தயாரிப்பு பாதுகாப்பின் முக்கிய அம்சமாகும். பொறியாளர்கள் வலிமை, மடிப்பு சகிப்புத்தன்மை மற்றும் அச்சிடும் துல்லியத்தை சமநிலைப்படுத்த வேண்டும்.
 
 முக்கிய பரிசீலனைகள்:
 1. அடி மூலக்கூறுகள்: SBS, FBB, மற்றும் நெளி பலகை B/C/E/F புல்லாங்குழல்.
 2. இயந்திர தானிய திசை: அதிவேக ஒட்டுதலின் போது உடைப்பைத் தவிர்க்க முதன்மை மடிப்புகளுக்கு இணையாக.`,
-            calloutText: 'ஆசிரியர் குறிப்பு: தானிய திசையை எப்போதும் சரிபார்க்கவும்!'
+            calloutText: ''
           }
         },
         mediaType: 'both',
@@ -546,17 +602,17 @@ Pertimbangan struktur utama meliputi:
         videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
         videoCaption: 'Video Tutorial: Folding Carton Creasing & Die-cutting Demonstration',
         layoutStyle: 'grid-2x2',
-        calloutText: 'Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!',
+        calloutText: '',
         bgTheme: 'classic-paper',
         courseModuleId: 'mod-1',
-        exerciseFilePath: '/exercise_files/mod1_dieline_artioscad.dxf',
-        exerciseTitle: 'Exercise 1: ArtiosCAD Packaging Die-Line DXF Template'
+        exerciseFilePath: '',
+        exerciseTitle: ''
       },
       {
         id: 'p2',
         pageNumber: 2,
         title: 'Preflight & Color Management Workflow',
-        subtitle: 'Chapter 2: CMYK vs Pantone, Ink Trapping & Spectrophotometry',
+        subtitle: '',
         content: `Preflighting guarantees error-free plate output by validating color separation, font outlines, minimum line weights, and resolution settings before RIP processing.
 
 Core Rules for Flexographic & Offset Prepress:
@@ -566,31 +622,31 @@ Core Rules for Flexographic & Offset Prepress:
         translations: {
           ms: {
             title: 'Aliran Kerja Prasemak & Pengurusan Warna',
-            subtitle: 'Bab 2: CMYK lwn Pantone, Trapping Dakwat & Spektrofotometri',
+            subtitle: '',
             content: `Prasemak (Preflight) menjamin output plat tanpa ralat dengan mengesahkan pemisahan warna, garis luar fon, dan ketetapan resolusi sebelum pemprosesan RIP.
 
 Peraturan Asas Prasemak:
 • Lebar Garis Minimum: 0.25 pt untuk warna tunggal, 0.5 pt untuk teks knockout terbalik.
 • Resolusi Imej: Tepat 300 DPI pada skala 100%.
 • Jarak Trapping: 0.15 mm - 0.3 mm untuk mesin cetak fleksografi bagi mengelakkan ruang putih.`,
-            calloutText: 'Daftar warna melebihi 280% TAC mesti dikurangkan menggunakan UCR/GCR.'
+            calloutText: ''
           }
         },
         mediaType: 'image',
         imageUrl: 'https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?auto=format&fit=crop&w=1000&q=80',
         imageCaption: 'Fig 2.1: Preflight Diagnostic Panel in Adobe Acrobat Pro DC',
         layoutStyle: 'grid-bento',
-        calloutText: 'Crucial: Total Ink Coverage (TAC) should never exceed 280% for high-speed flexo presses!',
+        calloutText: '',
         bgTheme: 'clean-white',
         courseModuleId: 'mod-2',
-        exerciseFilePath: '/exercise_files/mod2_preflight_droplet.kfp',
-        exerciseTitle: 'Exercise 2: Adobe Acrobat Preflight Inspection Profile (.KFP)'
+        exerciseFilePath: '',
+        exerciseTitle: ''
       },
       {
         id: 'p3',
         pageNumber: 3,
         title: 'Interactive Case Study: Acrobat Preflight Auto-Fix',
-        subtitle: 'Chapter 3: Hands-on Video Guided Inspection',
+        subtitle: '',
         content: `Watch the video lecture below to observe how automated Acrobat Preflight profiles systematically identify missing Bleeds (3mm), RGB color spaces, corrupt fonts, and low-resolution raster objects.
 
 Follow along with the step-by-step checklist:
@@ -601,7 +657,7 @@ Follow along with the step-by-step checklist:
         translations: {
           ms: {
             title: 'Kajian Kes Interaktif: Pembaikan Automatik Acrobat Preflight',
-            subtitle: 'Bab 3: Pemeriksaan Terpandu Video Langkah demi Langkah',
+            subtitle: '',
             content: `Tonton kuliah video di bawah untuk melihat bagaimana profil Acrobat Preflight mengesan limpahan warna (Bleed 3mm), ruang warna RGB, dan objek resolusi rendah.
 
 Langkah Semakan:
@@ -609,18 +665,18 @@ Langkah Semakan:
 2. Pilih "Tukar Semua RGB ke CMYK (GRACoL / FOGRA39)".
 3. Jalankan skrip "Tambah Limpahan Bleed 3mm".
 4. Eksport PDF/X-4 Resolusi Tinggi untuk pembentukan plat.`,
-            calloutText: 'Pengajar: Pelajar boleh memainkan video terus di dalam e-buku ini!'
+            calloutText: ''
           }
         },
         mediaType: 'video',
         videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
         videoCaption: 'Video Lecture: Preflighting Masterclass with Faculty Voiceover',
         layoutStyle: 'media-top',
-        calloutText: 'Interactive Feature: Click play above to watch the step-by-step video embedded directly inside this flipbook page!',
+        calloutText: '',
         bgTheme: 'dark-studio',
         courseModuleId: 'mod-3',
-        exerciseFilePath: '/exercise_files/mod3_spectrophotometer_deltaE.xlsx',
-        exerciseTitle: 'Exercise 3: Spectrophotometer Delta-E & Ink Viscosity Worksheet'
+        exerciseFilePath: '',
+        exerciseTitle: ''
       }
     ]
   }
@@ -938,25 +994,29 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
     const isDefaultTemplateTitle = defaultTemplateTitles.includes(page.title);
 
+    const rawCallout = page.calloutText && !isDefaultCalloutText(page.calloutText) ? page.calloutText : '';
+
     // If custom edited and a specific translation for langCode was saved during edit, use it
     if (existingTrans && page.isCustomEdited) {
+      const transCallout = existingTrans.calloutText && !isDefaultCalloutText(existingTrans.calloutText) ? existingTrans.calloutText : '';
       return {
         ...page,
         title: existingTrans.title || autoTranslateText(page.title, langCode),
         subtitle: existingTrans.subtitle !== undefined ? existingTrans.subtitle : (page.subtitle ? autoTranslateText(page.subtitle, langCode) : ''),
         content: existingTrans.content || autoTranslateText(page.content, langCode),
-        calloutText: existingTrans.calloutText !== undefined ? existingTrans.calloutText : (page.calloutText ? autoTranslateText(page.calloutText, langCode) : ''),
+        calloutText: transCallout || (rawCallout ? autoTranslateText(rawCallout, langCode) : ''),
       };
     }
 
     // If unedited initial default template page, use static translation
     if (existingTrans && !page.isCustomEdited && isDefaultTemplateTitle) {
+      const transCallout = existingTrans.calloutText && !isDefaultCalloutText(existingTrans.calloutText) ? existingTrans.calloutText : '';
       return {
         ...page,
         title: existingTrans.title || page.title,
         subtitle: existingTrans.subtitle || page.subtitle,
         content: existingTrans.content || page.content,
-        calloutText: existingTrans.calloutText || page.calloutText,
+        calloutText: transCallout || rawCallout,
       };
     }
 
@@ -966,7 +1026,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       title: autoTranslateText(page.title, langCode),
       subtitle: page.subtitle ? autoTranslateText(page.subtitle, langCode) : '',
       content: autoTranslateText(page.content, langCode),
-      calloutText: page.calloutText ? autoTranslateText(page.calloutText, langCode) : '',
+      calloutText: rawCallout ? autoTranslateText(rawCallout, langCode) : '',
     };
   };
 
@@ -1015,6 +1075,9 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       text = text.replace(/<mark[^>]*>\s*<mark[^>]*>([\s\S]*?)<\/mark>\s*<\/mark>/gi, (match, inner) => {
         return `<mark style="background-color: #fef08a; color: #1e293b; padding: 1px 4px; border-radius: 4px;">${inner}</mark>`;
       });
+
+      // Strip unwanted dark grey inline background colors from spans/divs that cover text
+      text = text.replace(/background-color:\s*(rgb\(100,\s*116,\s*139\)|#64748b|#475569|#334155);?/gi, '');
 
       // Remove empty tags
       text = text.replace(/<(b|i|u|mark|span)[^>]*>\s*<\/\1>/gi, '');
@@ -1748,6 +1811,25 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
     }
   };
 
+  // Secondary Image File Upload Handler with IndexedDB Persistent Storage
+  const handleSecondaryImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && editingPage) {
+      const idbKey = `sec_image_idb_${editingPage.id}`;
+      await saveMediaToIDB(idbKey, file);
+      const objectUrl = URL.createObjectURL(file);
+      setMediaCache(prev => ({ ...prev, [idbKey]: objectUrl }));
+
+      const updated: FlipbookPage = {
+        ...editingPage,
+        secondaryImageUrl: `idb:${idbKey}`,
+        secondaryImageCaption: editingPage.secondaryImageCaption || file.name.replace(/\.[^/.]+$/, ""),
+      };
+      setEditingPage(updated);
+      handleUpdatePage(updated);
+    }
+  };
+
   // Video File Upload Handler with IndexedDB Persistent Storage
   const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2126,16 +2208,18 @@ Example:
           id: `p_${Date.now()}_1`,
           pageNumber: 1,
           title: 'Page 1: Lesson Topic Header',
-          subtitle: 'Section 1: Overview & Objectives',
+          subtitle: '',
           content: 'Enter main topic description, lecture notes, or key course summary here...',
           layoutStyle: 'grid-2x2',
           mediaType: 'image',
           imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
           imageCaption: 'Topic Illustration',
-          calloutText: 'Faculty Key Takeaway',
+          calloutText: '',
           bgTheme: 'classic-paper',
           courseName: defaultCourse,
-          courseModuleName: defaultMod
+          courseModuleName: defaultMod,
+          exerciseFilePath: '',
+          exerciseTitle: ''
         }
       ]
     };
@@ -2153,19 +2237,19 @@ Example:
       id: `p_${Date.now()}`,
       pageNumber: newPageNum,
       title: `Page ${newPageNum}: New Topic Header`,
-      subtitle: `Section ${newPageNum}: Key Concepts & Media`,
+      subtitle: '',
       content: 'Paste your course material text, lecture notes, or key summaries here...',
       layoutStyle: 'grid-2x2',
       mediaType: 'image',
       imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
       imageCaption: 'Illustration Caption',
-      calloutText: 'Faculty Tip or Student Key Takeaway Note',
+      calloutText: '',
       bgTheme: 'classic-paper',
       courseName: editingPage.courseName || activeMaterial.courseName || '',
       courseModuleName: editingPage.courseModuleName || '',
       courseModuleId: '',
-      exerciseFilePath: `/exercise_files/module_${newPageNum}_exercise.zip`,
-      exerciseTitle: `Exercise ${newPageNum}: Course Practice Files`
+      exerciseFilePath: '',
+      exerciseTitle: ''
     };
 
     const updatedPages = [...activeMaterial.pages, newPage];
@@ -2601,23 +2685,16 @@ Example:
                   
                   {/* Left Side: Text & Content Area */}
                   <div 
-                    className="p-6 md:p-8 flex flex-col justify-between border-b md:border-b-0 md:border-r border-amber-900/10 dark:border-slate-800 bg-[#fdfbf7] dark:bg-slate-900 text-slate-900 dark:text-slate-100 relative min-h-[440px]"
-                    style={displayPage.pageBackgroundColor ? { backgroundColor: displayPage.pageBackgroundColor } : undefined}
+                    className="p-6 md:p-8 flex flex-col justify-between border-b md:border-b-0 md:border-r border-amber-900/10 dark:border-slate-800 relative min-h-[440px]"
+                    style={{ backgroundColor: displayPage.pageBackgroundColor || undefined }}
                   >
                     
-                    {/* Header Badge & Page Number */}
+                    {/* Clean Top Header & Page Counter */}
                     <div>
-                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[10px] uppercase font-black tracking-wider text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 px-2.5 py-1 rounded-md border border-amber-300 dark:border-amber-800/60 flex items-center gap-1">
-                            <BookOpen className="w-3 h-3 text-amber-500 shrink-0" />
-                            <span>Course: {currentCourseName}</span>
-                          </span>
-                          <span className="text-[10px] uppercase font-black tracking-wider text-blue-800 dark:text-blue-300 bg-blue-100 dark:bg-blue-950/80 px-2.5 py-1 rounded-md border border-blue-300 dark:border-blue-800/60 flex items-center gap-1">
-                            <BookMarked className="w-3 h-3 text-blue-500 shrink-0" />
-                            <span>Module: {currentModuleName}</span>
-                          </span>
-                        </div>
+                      <div className="flex items-center justify-between gap-2 mb-3 pb-1 border-b border-amber-900/10 dark:border-slate-800/60 text-slate-400">
+                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 tracking-wide uppercase">
+                          📖 Lecture Material
+                        </span>
                         <span className="text-xs font-mono font-bold text-slate-400 shrink-0">
                           Page {displayPage.pageNumber} of {activeMaterial.pages.length}
                         </span>
@@ -2627,23 +2704,18 @@ Example:
                         {displayPage.title}
                       </h2>
 
-                      {displayPage.subtitle && (
+                      {displayPage.subtitle && 
+                       displayPage.subtitle.trim() !== '' && 
+                       !displayPage.subtitle.includes('Key Concepts & Media') && 
+                       !displayPage.subtitle.includes('Overview & Objectives') && (
                         <h3 className="text-xs md:text-sm font-bold text-amber-800 dark:text-amber-400 mb-4">
                           {displayPage.subtitle}
                         </h3>
                       )}
 
-                      {/* Course & Module Link Info */}
-                      {displayPage.courseModuleName && (
-                        <div className="mb-4 inline-flex items-center gap-2 bg-blue-950/40 border border-blue-500/30 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-300">
-                          <BookMarked className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                          <span>{displayPage.courseModuleName}</span>
-                        </div>
-                      )}
-
-                      {/* Main Paragraph Body (Adapted for font size, family, color, and weight settings) */}
+                      {/* Main Paragraph Body */}
                       <div 
-                        className={`whitespace-pre-line space-y-3 ${displayPage.contentFontSize || fontSizeClass} ${displayPage.contentFontStyle || 'font-normal'} ${!displayPage.contentTextColor ? 'text-slate-700 dark:text-slate-300' : ''}`}
+                        className={`whitespace-pre-line space-y-3 ${displayPage.contentFontSize || fontSizeClass} ${displayPage.contentFontStyle || 'font-normal'} ${!displayPage.contentTextColor ? 'text-slate-800 dark:text-slate-200' : ''}`}
                         style={{
                           fontFamily: displayPage.contentFontFamily || undefined,
                           color: displayPage.contentTextColor || undefined,
@@ -2653,8 +2725,8 @@ Example:
                         {renderFormattedHtml(displayPage.content)}
                       </div>
 
-                      {/* Downloadable Exercise File Path Card */}
-                      {displayPage.exerciseFilePath && (
+                      {/* Downloadable Exercise File Path Card (Shown only if added by admin) */}
+                      {Boolean(displayPage.exerciseFilePath && displayPage.exerciseFilePath.trim() !== '' && !displayPage.exerciseFilePath.includes('/exercise_files/module_')) && (
                         <div className="mt-4 p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/80 to-slate-900 border border-emerald-500/50 shadow-md text-xs text-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                           <div className="flex items-start gap-2">
                             <FolderArchive className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
@@ -2671,7 +2743,6 @@ Example:
                             href={displayPage.exerciseFilePath}
                             download
                             onClick={(e) => {
-                              // Prevent broken navigation if mockup path
                               if (!displayPage.exerciseFilePath?.startsWith('http')) {
                                 e.preventDefault();
                                 alert(`Downloading exercise file from path: ${displayPage.exerciseFilePath}`);
@@ -2685,13 +2756,18 @@ Example:
                         </div>
                       )}
 
-                      {/* Callout Box */}
-                      {displayPage.calloutText && (
+                      {/* Callout Box (Shown only if added by admin) */}
+                      {Boolean(
+                        displayPage.calloutText && 
+                        displayPage.calloutText.trim() !== '' && 
+                        !isDefaultCalloutText(displayPage.calloutText) &&
+                        !isDefaultCalloutText(currentPage.calloutText)
+                      ) && (
                         <div className="mt-4 p-3.5 rounded-xl bg-amber-100/80 dark:bg-amber-950/50 border-l-4 border-amber-500 text-xs text-amber-950 dark:text-amber-200 font-medium shadow-sm flex items-start gap-2">
                           <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                           <div>
                             <span className="font-extrabold block text-[11px] uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                              Faculty Takeaway Note
+                              {autoTranslateText('FACULTY TAKEAWAY NOTE', selectedLanguage)}
                             </span>
                             {displayPage.calloutText}
                           </div>
@@ -2699,15 +2775,25 @@ Example:
                       )}
                     </div>
 
-                    {/* Left Footer Page Marker */}
-                    <div className="pt-4 mt-6 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                      <span>📖 {activeMaterial.title}</span>
-                      <span className="font-mono">{displayPage.pageNumber}</span>
+                    {/* Left Footer Page Marker: Course & Module at bottom of book */}
+                    <div className="pt-4 mt-6 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      <div className="flex items-center gap-2 truncate max-w-[80%]" title={`${currentCourseName} - ${currentModuleName}`}>
+                        <span className="font-bold text-slate-700 dark:text-slate-300 truncate">📖 {currentCourseName || activeMaterial.title}</span>
+                        {currentModuleName && (
+                          <span className="text-amber-700 dark:text-amber-400 font-bold truncate">
+                            • Module: {currentModuleName}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono font-bold shrink-0">{displayPage.pageNumber}</span>
                     </div>
                   </div>
 
                   {/* Right Side: Interactive Media & Embedded Video/Image or Grid Layout */}
-                  <div className="p-6 md:p-8 flex flex-col justify-between bg-[#f8f5ee] dark:bg-slate-950 text-slate-900 dark:text-slate-100 relative min-h-[440px]">
+                  <div 
+                    className="p-6 md:p-8 flex flex-col justify-between relative min-h-[440px]"
+                    style={{ backgroundColor: displayPage.pageBackgroundColor || undefined }}
+                  >
                     
                     <div className="space-y-4">
                       
@@ -2719,8 +2805,46 @@ Example:
                         <span>Layout: {displayPage.layoutStyle || 'split-left'}</span>
                       </div>
 
-                      {/* IF LAYOUT IS GRID (2x2 Grid or Bento Grid) */}
-                      {(displayPage.layoutStyle === 'grid-2x2' || displayPage.layoutStyle === 'grid-bento') ? (
+                      {/* IF LAYOUT IS 2-IMAGES GRID (Stacked Top & Bottom) */}
+                      {(displayPage.layoutStyle === 'grid-right-2-images' || displayPage.layoutStyle === 'grid-2-images') ? (
+                        <div className="space-y-4">
+                          <div className="flex flex-col gap-3.5">
+                            {/* Image #1 (Top) */}
+                            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-amber-500/40 shadow-md flex flex-col justify-between">
+                              <span className="text-[10px] font-extrabold uppercase text-amber-300 mb-1 flex items-center gap-1">
+                                <Image className="w-3 h-3 text-amber-400" /> Image 1 (Top): {displayPage.imageCaption || 'Primary Diagram'}
+                              </span>
+                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center">
+                                <SafeImage src={displayPage.imageUrl || 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80'} alt="Image 1" className="max-h-40 object-contain" />
+                              </div>
+                              {displayPage.imageCaption && (
+                                <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-amber-200 dark:text-amber-300 pt-1">
+                                  <Link className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                  <ExternalLink className="w-3 h-3 text-amber-400/80 shrink-0" />
+                                  <span>{displayPage.imageCaption}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Image #2 (Bottom) */}
+                            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-blue-500/40 shadow-md flex flex-col justify-between">
+                              <span className="text-[10px] font-extrabold uppercase text-blue-300 mb-1 flex items-center gap-1">
+                                <Image className="w-3 h-3 text-blue-400" /> Image 2 (Bottom): {displayPage.secondaryImageCaption || 'Secondary Diagram'}
+                              </span>
+                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center">
+                                <SafeImage src={displayPage.secondaryImageUrl || displayPage.imageUrl || 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&w=800&q=80'} alt="Image 2" className="max-h-40 object-contain" />
+                              </div>
+                              {displayPage.secondaryImageCaption && (
+                                <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-blue-200 dark:text-blue-300 pt-1">
+                                  <Link className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                  <ExternalLink className="w-3 h-3 text-blue-400/80 shrink-0" />
+                                  <span>{displayPage.secondaryImageCaption}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (displayPage.layoutStyle === 'grid-2x2' || displayPage.layoutStyle === 'grid-bento') ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           
                           {/* Grid Tile 1: Video */}
@@ -2739,7 +2863,7 @@ Example:
                           {displayPage.imageUrl && (
                             <div className="p-2 rounded-xl bg-slate-900 border border-slate-800 shadow-sm flex flex-col justify-between">
                               <span className="text-[10px] font-bold uppercase text-amber-300 mb-1 flex items-center gap-1">
-                                <Image className="w-3 h-3 text-amber-400" /> CAD Technical Diagram
+                                <Image className="w-3 h-3 text-amber-400" /> Diagram
                               </span>
                               <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center">
                                 <SafeImage src={displayPage.imageUrl} alt="Diagram" className="max-h-32 object-contain" />
@@ -2747,8 +2871,8 @@ Example:
                             </div>
                           )}
 
-                          {/* Grid Tile 3: Exercise File Download */}
-                          {displayPage.exerciseFilePath && (
+                          {/* Grid Tile 3: Exercise File Download (Shown only if added by admin) */}
+                          {Boolean(displayPage.exerciseFilePath && displayPage.exerciseFilePath.trim() !== '' && !displayPage.exerciseFilePath.includes('/exercise_files/module_')) && (
                             <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/50 shadow-sm sm:col-span-2 flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <FolderArchive className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -2779,7 +2903,7 @@ Example:
                                 {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                               </div>
 
-                              {/* Native Subtitles & Caption Control Box */}
+                              {/* Native Subtitles & Caption Control Bar */}
                               <div className="p-3 bg-slate-900/90 dark:bg-slate-900 border border-slate-800 rounded-xl space-y-2 shadow-sm text-white">
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
                                   <div className="flex items-center gap-2">
@@ -2787,11 +2911,6 @@ Example:
                                       <Captions className="w-3 h-3 text-amber-400" />
                                       <span>Native Subtitles ({selectedLanguage.toUpperCase()})</span>
                                     </span>
-                                    {displayPage.videoCaption && (
-                                      <p className="text-xs font-semibold text-slate-200 line-clamp-1">
-                                        🎬 {stripHtml(displayPage.videoCaption)}
-                                      </p>
-                                    )}
                                   </div>
 
                                   <div className="flex items-center gap-1.5">
@@ -2815,15 +2934,6 @@ Example:
                                   </div>
                                 </div>
 
-                                {/* Live CC Subtitles Banner */}
-                                {showCcSubtitles && (displayPage.videoCaption || displayPage.videoTranscription) && (
-                                  <div className="px-3 py-1.5 bg-black/80 border border-amber-500/30 rounded-lg text-center">
-                                    <p className="text-xs font-bold text-amber-300 italic tracking-wide">
-                                      💬 "{autoTranslateText(stripHtml(displayPage.videoCaption || 'Native Subtitle Lesson Video'), selectedLanguage)}"
-                                    </p>
-                                  </div>
-                                )}
-
                                 {/* Expandable Native Language Video Transcript Drawer */}
                                 {showTranscriptionDrawer && (
                                   <div className="mt-2 p-3 bg-slate-950 rounded-lg border border-indigo-500/40 space-y-2 text-xs font-mono text-slate-300 max-h-48 overflow-y-auto">
@@ -2846,6 +2956,13 @@ Example:
                                   </div>
                                 )}
                               </div>
+                              {displayPage.videoCaption && (
+                                <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-slate-700 dark:text-slate-300 pt-1">
+                                  <Link className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+                                  <ExternalLink className="w-3 h-3 text-pink-400 shrink-0" />
+                                  <span>{displayPage.videoCaption}</span>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -2860,9 +2977,11 @@ Example:
                                 />
                               </div>
                               {displayPage.imageCaption && (
-                                <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 text-center">
-                                  🖼️ {displayPage.imageCaption}
-                                </p>
+                                <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-slate-700 dark:text-slate-300 pt-0.5">
+                                  <Link className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                  <ExternalLink className="w-3 h-3 text-amber-400 shrink-0" />
+                                  <span>{displayPage.imageCaption}</span>
+                                </div>
                               )}
                             </div>
                           )}
@@ -2880,10 +2999,17 @@ Example:
 
                     </div>
 
-                    {/* Right Footer Page Marker */}
-                    <div className="pt-4 mt-6 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                      <span className="font-mono">Page {displayPage.pageNumber}</span>
-                      <span>Faculty Academy Publishing</span>
+                    {/* Right Footer Page Marker: Page Number, Module & Publisher at bottom */}
+                    <div className="pt-4 mt-6 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      <span className="font-mono font-bold">Page {displayPage.pageNumber}</span>
+                      <div className="flex items-center gap-2 truncate text-right">
+                        {currentModuleName && (
+                          <span className="font-bold text-blue-700 dark:text-blue-400 truncate hidden sm:inline">
+                            Module: {currentModuleName} •
+                          </span>
+                        )}
+                        <span className="font-semibold text-slate-600 dark:text-slate-400 shrink-0">Faculty Academy Publishing</span>
+                      </div>
                     </div>
                   </div>
 
@@ -4389,12 +4515,12 @@ Example:
                   )}
                 </div>
 
-                {/* IMAGE UPLOAD & EMBED SECTION */}
+                {/* PRIMARY IMAGE UPLOAD & EMBED SECTION */}
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-2.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                       <Image className="w-4 h-4 text-amber-400" />
-                      <span>Image / Diagram (Upload File or Enter URL)</span>
+                      <span>Primary Image / Diagram 1 (Upload File or URL)</span>
                     </label>
                     {editingPage.imageUrl && (
                       <button
@@ -4405,15 +4531,15 @@ Example:
                         }}
                         className="text-[11px] text-red-400 hover:underline flex items-center gap-1 cursor-pointer"
                       >
-                        <X className="w-3 h-3" /> Remove Image
+                        <X className="w-3 h-3" /> Remove Image 1
                       </button>
                     )}
                   </div>
 
-                  {/* Image Upload File Button */}
+                  {/* Primary Image Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-950/60 hover:bg-amber-900/80 border border-amber-700/60 rounded-xl text-xs font-extrabold text-amber-200 transition cursor-pointer shadow-sm">
                     <Upload className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Upload Local Image File (PNG / JPG / SVG)</span>
+                    <span>Upload Image 1 File (PNG / JPG / SVG)</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -4422,7 +4548,7 @@ Example:
                     />
                   </label>
 
-                  {/* Image URL Text Input */}
+                  {/* Primary Image URL Text Input */}
                   <input
                     type="text"
                     value={editingPage.imageUrl || ''}
@@ -4432,13 +4558,93 @@ Example:
                       handleUpdatePage(updated);
                     }}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                    placeholder="Or paste image web URL..."
+                    placeholder="Or paste primary image web URL..."
                   />
 
-                  {/* Image Preview */}
+                  {/* Primary Image Caption Input */}
+                  <input
+                    type="text"
+                    value={editingPage.imageCaption || ''}
+                    onChange={(e) => {
+                      const updated = { ...editingPage, imageCaption: e.target.value };
+                      setEditingPage(updated);
+                      handleUpdatePage(updated);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-amber-200 focus:outline-none focus:border-amber-500"
+                    placeholder="Image 1 Caption (e.g. Primary CAD Technical Diagram)"
+                  />
+
+                  {/* Primary Image Preview */}
                   {editingPage.imageUrl && (
                     <div className="rounded-xl overflow-hidden border border-amber-500/40 bg-slate-900 p-2 max-h-36 flex items-center justify-center">
                       <SafeImage src={editingPage.imageUrl} alt="Diagram Preview" className="max-h-32 object-contain rounded-lg" />
+                    </div>
+                  )}
+                </div>
+
+                {/* SECONDARY IMAGE (IMAGE #2) SECTION FOR 2-IMAGES GRID */}
+                <div className="p-3 bg-slate-950 border border-blue-900/60 rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                      <Image className="w-4 h-4 text-blue-400" />
+                      <span>Secondary Image / Diagram 2 (For 2-Images Grid)</span>
+                    </label>
+                    {editingPage.secondaryImageUrl && (
+                      <button
+                        onClick={() => {
+                          const updated = { ...editingPage, secondaryImageUrl: '' };
+                          setEditingPage(updated);
+                          handleUpdatePage(updated);
+                        }}
+                        className="text-[11px] text-red-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" /> Remove Image 2
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Secondary Image Upload File Button */}
+                  <label className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-950/60 hover:bg-blue-900/80 border border-blue-700/60 rounded-xl text-xs font-extrabold text-blue-200 transition cursor-pointer shadow-sm">
+                    <Upload className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span>Upload Image 2 File (PNG / JPG / SVG)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSecondaryImageFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* Secondary Image URL Text Input */}
+                  <input
+                    type="text"
+                    value={editingPage.secondaryImageUrl || ''}
+                    onChange={(e) => {
+                      const updated = { ...editingPage, secondaryImageUrl: e.target.value };
+                      setEditingPage(updated);
+                      handleUpdatePage(updated);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                    placeholder="Or paste secondary image web URL..."
+                  />
+
+                  {/* Secondary Image Caption Input */}
+                  <input
+                    type="text"
+                    value={editingPage.secondaryImageCaption || ''}
+                    onChange={(e) => {
+                      const updated = { ...editingPage, secondaryImageCaption: e.target.value };
+                      setEditingPage(updated);
+                      handleUpdatePage(updated);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-blue-200 focus:outline-none focus:border-blue-500"
+                    placeholder="Image 2 Caption (e.g. Cross-section / Secondary Diagram)"
+                  />
+
+                  {/* Secondary Image Preview */}
+                  {editingPage.secondaryImageUrl && (
+                    <div className="rounded-xl overflow-hidden border border-blue-500/40 bg-slate-900 p-2 max-h-36 flex items-center justify-center">
+                      <SafeImage src={editingPage.secondaryImageUrl} alt="Secondary Diagram Preview" className="max-h-32 object-contain rounded-lg" />
                     </div>
                   )}
                 </div>
@@ -4470,6 +4676,7 @@ Example:
                     }}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none"
                   >
+                    <option value="grid-right-2-images">🖼️ Right Side Grid (2 Images Stacked Top & Bottom)</option>
                     <option value="grid-2x2">2x2 Multi-Card Grid Layout (Text + Video + Image + File)</option>
                     <option value="grid-bento">Bento Box Grid Layout (Feature Tiles)</option>
                     <option value="split-left">Text Left, Media Right (Split 50/50)</option>

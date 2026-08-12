@@ -180,7 +180,7 @@ ${text}`;
 
       const res = await generateGeminiContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        systemInstruction: 'You are an expert bilingual speech and translation coach helping students learn english video scripts.'
+        config: { systemInstruction: 'You are an expert bilingual speech and translation coach helping students learn english video scripts.' }
       });
 
       setModuleScriptTranslation(res.text || 'Translation completed.');

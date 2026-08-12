@@ -43,7 +43,12 @@ export type CourseType =
   | 'plate-ready-engineer' 
   | 'colour-retouching-engineer' 
   | 'quality-control-engineer' 
-  | 'printing-and-packaging-cross-courses';
+  | 'printing-and-packaging-cross-courses'
+  | 'software-tool-library-acrobat'
+  | 'software-tool-library-illustrator'
+  | 'software-tool-library-photoshop'
+  | 'quality-check-process'
+  | (string & {});
 
 export interface LeaveRequest {
   id: string;

@@ -245,7 +245,7 @@ ${scriptText}`;
 
       const res = await generateGeminiContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        systemInstruction: 'You are an expert bilingual speech and translation coach.'
+        config: { systemInstruction: 'You are an expert bilingual speech and translation coach.' }
       });
 
       if (res && res.text) {

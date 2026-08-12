@@ -199,9 +199,10 @@ export default function CommunicationAgent() {
     sortedDbModules.forEach((mod) => {
       const matchedConfig = configuredCourses.find(c => c.courseId === mod.category);
       const courseTitle = matchedConfig ? matchedConfig.title : formatCourseName(mod.category);
-      const scriptContent = mod.scriptText || mod.videoScript || mod.overview || `Module script for ${mod.title}`;
+      const m = mod as any;
+      const scriptContent = m.scriptText || m.videoScript || m.overview || `Module script for ${mod.title}`;
 
-      const moduleLabel = mod.order !== undefined && mod.order !== null ? `Module ${mod.order}` : (mod.moduleNumber || 'Module');
+      const moduleLabel = mod.order !== undefined && mod.order !== null ? `Module ${mod.order}` : (m.moduleNumber || 'Module');
       const fullModuleTitle = `${moduleLabel}: ${mod.title}`;
 
       list.push({

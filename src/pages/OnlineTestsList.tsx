@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { FileQuestion, ShieldAlert, CheckCircle } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import { areTopicsMatching, formatCourseName } from '../utils';
 
 export default function OnlineTestsList() {
   const { user } = useAuth();
@@ -21,7 +22,7 @@ export default function OnlineTestsList() {
       const assignedCourses = user.assignedCourses || (user.assignedCourse ? [user.assignedCourse] : (user.requestedCourses || (user.requestedCourse ? [user.requestedCourse] : ['production-art-engineer'])));
 
       try {
-        const tests: any[] = [];
+        const tests: {courseId: string, courseName: string, topic: string, completed: boolean, score: number}[] = [];
         const scores = user.scores || {};
         
         const scoreKeyMap: Record<string, string> = {
@@ -34,10 +35,6 @@ export default function OnlineTestsList() {
           'printing-and-packaging-cross-courses': 'printingAndPackagingCrossCourses',
         };
 
-        const formatCourseName = (course: string) => {
-          return course.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-        };
-
         for (const courseId of assignedCourses) {
           const scoreKey = scoreKeyMap[courseId] || courseId.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
           const courseScoreData = (scores as any)[scoreKey] || {};
@@ -47,32 +44,85 @@ export default function OnlineTestsList() {
           const snapshot = await getDocs(q);
           const modules = snapshot.docs.map(doc => doc.data());
 
-          const topicNamesSet = new Set<string>();
+          const candidates: { topic: string; completed: boolean; score: number; assigned: boolean }[] = [];
+
+          // 1. Process modules
           modules.forEach(m => {
-            if (m.title) topicNamesSet.add(m.title);
-          });
-          Object.keys(courseScoreData).forEach(tName => topicNamesSet.add(tName));
+            if (!m.title) return;
+            const scoreMatchKey = Object.keys(courseScoreData).find(k => areTopicsMatching(k, m.title));
+            const topicScore = scoreMatchKey ? courseScoreData[scoreMatchKey] : (courseScoreData[m.title] || {});
 
-          topicNamesSet.forEach(topicName => {
-            const topicScore = courseScoreData[topicName] || {};
-            const mod = (modules || []).find(m => m?.title === topicName);
-
-            // Show test if faculty assigned it, if student attempted it, or if module has online test assigned/questions
-            const isAssigned = topicScore.onlineTestAssigned || mod?.onlineTestAssigned || (mod?.onlineTestQuestions && mod.onlineTestQuestions.length > 0) || topicScore.onlineTestAttempted;
+            const isAssigned = !!(topicScore.onlineTestAssigned || m.onlineTestAssigned || (m.onlineTestQuestions && m.onlineTestQuestions.length > 0) || topicScore.onlineTestAttempted);
 
             if (isAssigned) {
-              tests.push({
-                courseId,
-                courseName: formatCourseName(courseId),
-                topic: topicName,
+              candidates.push({
+                topic: m.title,
                 completed: !!topicScore.onlineTestAttempted,
                 score: topicScore.onlineTestAttempted ? (topicScore.onlineTest || 0) : 0,
+                assigned: true,
               });
             }
           });
+
+          // 2. Process user score data keys
+          Object.keys(courseScoreData).forEach(tName => {
+            const topicScore = courseScoreData[tName] || {};
+            const isAssigned = !!(topicScore.onlineTestAssigned || topicScore.onlineTestAttempted);
+
+            if (isAssigned) {
+              candidates.push({
+                topic: tName,
+                completed: !!topicScore.onlineTestAttempted,
+                score: topicScore.onlineTestAttempted ? (topicScore.onlineTest || 0) : 0,
+                assigned: true,
+              });
+            }
+          });
+
+          // 3. Deduplicate candidates for this course: if completed exists, keep ONLY completed item
+          const courseMerged: { courseId: string; courseName: string; topic: string; completed: boolean; score: number }[] = [];
+
+          candidates.forEach(cand => {
+            const matchIdx = courseMerged.findIndex(t => areTopicsMatching(t.topic, cand.topic));
+            if (matchIdx >= 0) {
+              const existing = courseMerged[matchIdx];
+              // If candidate is completed, upgrade existing item to completed
+              if (cand.completed) {
+                courseMerged[matchIdx] = {
+                  ...existing,
+                  topic: cand.topic, // prefer completed topic title
+                  completed: true,
+                  score: Math.max(existing.score, cand.score),
+                };
+              }
+            } else {
+              courseMerged.push({
+                courseId,
+                courseName: formatCourseName(courseId),
+                topic: cand.topic,
+                completed: cand.completed,
+                score: cand.score,
+              });
+            }
+          });
+
+          tests.push(...courseMerged);
         }
+
+        // Final cross-deduplication check to ensure no duplicate cards remain
+        const finalDeduplicatedTests: typeof tests = [];
+        tests.forEach(test => {
+          const matchIdx = finalDeduplicatedTests.findIndex(t => t.courseId === test.courseId && areTopicsMatching(t.topic, test.topic));
+          if (matchIdx >= 0) {
+            if (test.completed) {
+              finalDeduplicatedTests[matchIdx] = test;
+            }
+          } else {
+            finalDeduplicatedTests.push(test);
+          }
+        });
         
-        setAssignedTests(tests);
+        setAssignedTests(finalDeduplicatedTests);
       } catch (error) {
         console.error("Error fetching available tests", error);
       } finally {

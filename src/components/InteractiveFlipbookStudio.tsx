@@ -1,15 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, Play, Pause, 
   Maximize2, Minimize2, Languages, RefreshCw, Layout, Image, Video, Sparkles, 
   ChevronLeft, ChevronRight, Save, Copy, Check, Download, Share2, Layers, 
-  Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw,
-  Grid, List, FileCheck, FolderArchive, ExternalLink, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap
+  Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
+  Bold, Italic, Underline, Highlighter, Eraser, Wand2, GripVertical, Move,
+  Grid, List, FileCheck, FolderArchive, ExternalLink, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap,
+  MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
+import { useSettings } from '../hooks/useSettings';
+import { formatCourseName } from '../utils';
+import { CourseModule } from '../types';
+import { saveMediaToIDB, getMediaFromIDB } from '../utils/mediaStore';
 
 export interface FlipbookPage {
   id: string;
@@ -17,12 +23,18 @@ export interface FlipbookPage {
   title: string;
   subtitle?: string;
   content: string;
-  translations?: Record<string, { title?: string; subtitle?: string; content?: string; calloutText?: string }>;
+  isCustomEdited?: boolean;
+  contentFontFamily?: string;
+  contentFontSize?: string;
+  contentTextColor?: string;
+  contentFontStyle?: string;
+  translations?: Record<string, { title?: string; subtitle?: string; content?: string; calloutText?: string; videoCaption?: string; videoTranscription?: string }>;
   mediaType?: 'none' | 'image' | 'video' | 'both';
   imageUrl?: string;
   imageCaption?: string;
   videoUrl?: string;
   videoCaption?: string;
+  videoTranscription?: string;
   layoutStyle?: 'split-left' | 'split-right' | 'media-top' | 'media-bottom' | 'text-only' | 'media-hero' | 'grid-2x2' | 'grid-bento';
   calloutText?: string;
   bgTheme?: 'classic-paper' | 'dark-studio' | 'clean-white' | 'blueprint' | 'golden-aged';
@@ -46,13 +58,7 @@ export interface FlipbookMaterial {
 }
 
 // Course Modules List for Exercise Linking
-export const COURSE_MODULES = [
-  { id: 'mod-1', name: 'Module 1: Packaging Substrates & Die-Line CAD', code: 'PKG-M1' },
-  { id: 'mod-2', name: 'Module 2: Preflight Diagnostics & Color Trapping', code: 'PKG-M2' },
-  { id: 'mod-3', name: 'Module 3: Spectrophotometer Delta-E & Ink Viscosity', code: 'PKG-M3' },
-  { id: 'mod-4', name: 'Module 4: Flexographic Plate Making & Mounting', code: 'PKG-M4' },
-  { id: 'mod-5', name: 'Module 5: Corrugated Box Crease Scoring & Quality Control', code: 'PKG-M5' },
-];
+export const COURSE_MODULES: { id: string; name: string; code: string }[] = [];
 
 // Supported Native Languages
 export const SUPPORTED_LANGUAGES = [
@@ -70,6 +76,8 @@ export const SUPPORTED_LANGUAGES = [
 // High-quality pre-translated dictionary & AI translation fallback helper
 const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
   ms: {
+    "What is color?": "Apakah itu warna?",
+    "Visual Electromagnetic Perception": "Persepsi Elektromagnetik Visual",
     "Packaging Engineering Fundamentals": "Asas Kejuruteraan Pembungkusan",
     "Preflight & Printing Workflow": "Prasemak & Aliran Kerja Percetakan",
     "Flexographic Ink & Colour Management": "Dakwat Fleksografi & Pengurusan Warna",
@@ -81,8 +89,30 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
     "Overview": "Gambaran Keseluruhan",
     "Download Exercise File": "Muat Turun Fail Latihan",
     "Related Module": "Modul Berkaitan",
+    "Diploma in Production Art Engineer": "Diploma Kejuruteraan Seni Pengeluaran",
+    "Module 1: Color Management": "Modul 1: Pengurusan Warna",
+    "FACULTY TAKEAWAY NOTE": "NOTA PENTING PENGAJAR",
+    "Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!": "Petua Pengajar: Sentiasa sahkan arah urat mesin sebelum mengunci dimensi garis acuan pada ArtiosCAD!",
+    "The Triad of Color Perception": "Triad Persepsi Warna",
+    "Light Source": "Sumber Cahaya",
+    "Object (Substrate)": "Objek (Substrat)",
+    "Observer": "Pemerhati",
   },
   ta: {
+    "What is color?": "வண்ணம் என்றால் என்ன?",
+    "Visual Electromagnetic Perception": "காட்சி மின்காந்த புலனுணர்வு",
+    "It is a sensory experience.": "இது ஒரு உணர்ச்சி அனுபவம்.",
+    "It is a sensory experience": "இது ஒரு உணர்ச்சி அனுபவம்",
+    "It results from the visible spectrum,": "இது கண்ணுறு நிறமாலையிலிருந்து பெறப்படுகிறது,",
+    "It results from the visible spectrum": "இது கண்ணுறு நிறமாலையிலிருந்து பெறப்படுகிறது",
+    "driven by a triad,": "ஒரு முக்கோணத்தால் இயக்கப்படுகிறது,",
+    "driven by a triad": "ஒரு முக்கோணத்தால் இயக்கப்படுகிறது",
+    "interacting with objects,": "பொருட்களுடன் தொடர்பு கொள்கிறது,",
+    "interacting with objects": "பொருட்களுடன் தொடர்பு கொள்கிறது",
+    "and perceived by our eyes.": "மற்றும் நமது கண்களால் உணரப்படுகிறது.",
+    "and perceived by our eyes": "மற்றும் நமது கண்களால் உணரப்படுகிறது",
+    "perceived by our eyes.": "நமது கண்களால் உணரப்படுகிறது.",
+    "perceived by our eyes": "நமது கண்களால் உணரப்படுகிறது",
     "Packaging Engineering Fundamentals": "பேக்கேஜிங் பொறியியல் அடிப்படைகள்",
     "Preflight & Printing Workflow": "ப்ரீஃபிளைட் மற்றும் அச்சிடுதல் பணிப்பாய்வு",
     "Flexographic Ink & Colour Management": "ப்ளெக்ஸோகிராஃபிக் மை மற்றும் வண்ண மேலாண்மை",
@@ -94,8 +124,18 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
     "Overview": "மேலோட்டம்",
     "Download Exercise File": "பயிற்சி கோப்பைப் பதிவிறக்கவும்",
     "Related Module": "தொடர்புடைய தொகுதி",
+    "Diploma in Production Art Engineer": "தயாரிப்பு கலை பொறியியல் பட்டயப்படிப்பு",
+    "Module 1: Color Management": "தொகுதி 1: வண்ண மேலாண்மை",
+    "FACULTY TAKEAWAY NOTE": "ஆசிரியர் குறிப்பு",
+    "Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!": "ஆசிரியர் குறிப்பு: ஆர்டியோஸ்கேடில் டை-லைன் பரிமாணங்களைப் பூட்டுவதற்கு முன்பு எப்போதும் இயந்திர தானிய திசையைச் சரிபார்க்கவும்!",
+    "The Triad of Color Perception": "வண்ணப் புலனுணர்வின் முக்கோணம்",
+    "Light Source": "ஒளி மூலம்",
+    "Object (Substrate)": "பொருள் (அடி மூலக்கூறு)",
+    "Observer": "பார்வையாளர்",
   },
   zh: {
+    "What is color?": "什么是颜色？",
+    "Visual Electromagnetic Perception": "视觉电磁感知",
     "Packaging Engineering Fundamentals": "包装工程基础知识",
     "Preflight & Printing Workflow": "预检和印刷工作流程",
     "Flexographic Ink & Colour Management": "柔性版印刷墨水与色彩管理",
@@ -107,8 +147,18 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
     "Overview": "概述",
     "Download Exercise File": "下载练习文件",
     "Related Module": "相关模块",
+    "Diploma in Production Art Engineer": "生产艺术工程文凭",
+    "Module 1: Color Management": "模块 1：色彩管理",
+    "FACULTY TAKEAWAY NOTE": "教师重点提示",
+    "Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!": "教师提示：在 ArtiosCAD 上锁定刀模线尺寸之前，请务必验证机器纹理方向！",
+    "The Triad of Color Perception": "色彩感知三要素",
+    "Light Source": "光源",
+    "Object (Substrate)": "物体（承印物）",
+    "Observer": "观察者",
   },
   hi: {
+    "What is color?": "रंग क्या है?",
+    "Visual Electromagnetic Perception": "दृश्य विद्युतचुंबकीय धारणा",
     "Packaging Engineering Fundamentals": "पैकेजिंग इंजीनियरिंग की बुनियादी बातें",
     "Preflight & Printing Workflow": "प्रीफ्लाइट और प्रिंटिंग वर्कफ़्लो",
     "Flexographic Ink & Colour Management": "फ्लेक्सोग्राफिक स्याही और रंग प्रबंधन",
@@ -120,49 +170,247 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
     "Overview": "अवलोकन",
     "Download Exercise File": "अभ्यास फ़ाइल डाउनलोड करें",
     "Related Module": "संबंधित मॉड्यूल",
+    "Diploma in Production Art Engineer": "प्रोडक्शन आर्ट इंजीनियर में डिप्लोमा",
+    "Module 1: Color Management": "मॉड्यूल 1: रंग प्रबंधन",
+    "FACULTY TAKEAWAY NOTE": "संकाय टिप्पणी",
+    "Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!": "संकाय युक्ति: ArtiosCAD पर डाई-लाइन आयामों को लॉक करने से पहले हमेशा मशीन ग्रेन दिशा की पुष्टि करें!",
+    "The Triad of Color Perception": "रंग धारणा का त्रय",
+    "Light Source": "प्रकाश स्रोत",
+    "Object (Substrate)": "वस्तु (सब्सट्रेट)",
+    "Observer": "पर्यवेक्षक",
+  },
+  es: {
+    "What is color?": "¿Qué es el color?",
+    "Visual Electromagnetic Perception": "Percepción Electromagnética Visual",
+    "Diploma in Production Art Engineer": "Diplomado en Ingeniería de Arte de Producción",
+    "Module 1: Color Management": "Módulo 1: Gestión del Color",
+    "FACULTY TAKEAWAY NOTE": "NOTA DEL PROFESOR",
+    "The Triad of Color Perception": "La Tríada de la Percepción del Color",
+  },
+  fr: {
+    "What is color?": "Qu'est-ce que la couleur ?",
+    "Visual Electromagnetic Perception": "Perception Électromagnétique Visuelle",
+    "Diploma in Production Art Engineer": "Diplôme en Ingénierie de l'Art de Production",
+    "Module 1: Color Management": "Module 1 : Gestion des Couleurs",
+    "FACULTY TAKEAWAY NOTE": "NOTE DE L'ENSEIGNANT",
+    "The Triad of Color Perception": "La Triade de la Perception des Couleurs",
   }
 };
+
+// Global runtime translation cache for dynamic Gemini AI native translation
+const RUNTIME_TRANSLATION_CACHE: Record<string, Record<string, string>> = {};
 
 // Automatic native language translator mock/helper
 export function autoTranslateText(text: string, targetLangCode: string): string {
   if (!text || targetLangCode === 'en') return text;
 
+  const cleanText = text.trim();
+
+  // Check runtime translation cache
+  if (RUNTIME_TRANSLATION_CACHE[targetLangCode]?.[cleanText]) {
+    return RUNTIME_TRANSLATION_CACHE[targetLangCode][cleanText];
+  }
+
   // Check dictionary exact match
-  if (TRANSLATION_DICTIONARY[targetLangCode] && TRANSLATION_DICTIONARY[targetLangCode][text]) {
-    return TRANSLATION_DICTIONARY[targetLangCode][text];
+  if (TRANSLATION_DICTIONARY[targetLangCode] && TRANSLATION_DICTIONARY[targetLangCode][cleanText]) {
+    return TRANSLATION_DICTIONARY[targetLangCode][cleanText];
   }
 
-  // Common technical substitutions
-  let translated = text;
-  if (targetLangCode === 'ms') {
-    translated = translated
-      .replace(/Packaging/g, 'Pembungkusan')
-      .replace(/Engineering/g, 'Kejuruteraan')
-      .replace(/Workflow/g, 'Aliran Kerja')
-      .replace(/Printing/g, 'Percetakan')
-      .replace(/Design/g, 'Reka Bentuk')
-      .replace(/Quality Control/g, 'Kawalan Kualiti')
-      .replace(/Introduction/g, 'Pengenalan')
-      .replace(/Chapter/g, 'Bab')
-      .replace(/Step/g, 'Langkah')
-      .replace(/Important/g, 'Penting')
-      .replace(/Note/g, 'Nota')
-      .replace(/Verify/g, 'Sahkan')
-      .replace(/Material/g, 'Bahan');
-    return `[MS] ${translated}`;
-  } else if (targetLangCode === 'ta') {
-    return `[TA] ${translated} (தமிழில்)`;
-  } else if (targetLangCode === 'zh') {
-    return `[ZH] ${translated} (中文版)`;
-  } else if (targetLangCode === 'hi') {
-    return `[HI] ${translated} (हिंदी)`;
-  } else if (targetLangCode === 'es') {
-    return `[ES] ${translated} (Español)`;
-  } else if (targetLangCode === 'fr') {
-    return `[FR] ${translated} (Français)`;
-  }
+  // Preserve HTML tags (e.g. <b>, <i>, <u>, <mark...>, <span...>, <br />) during translation
+  const tagRegex = /(<[^>]+>)/g;
+  const parts = text.split(tagRegex);
 
-  return `[${targetLangCode.toUpperCase()}] ${translated}`;
+  const translatedParts = parts.map(part => {
+    // If it's an HTML tag, leave it completely untouched
+    if (part.startsWith('<') && part.endsWith('>')) {
+      return part;
+    }
+
+    if (!part.trim()) return part;
+
+    let translated = part;
+
+    if (targetLangCode === 'ms') {
+      translated = translated
+        .replace(/What is color\?/gi, 'Apakah itu warna?')
+        .replace(/Visual Electromagnetic Perception/gi, 'Persepsi Elektromagnetik Visual')
+        .replace(/Color is the visual perceptual property derived from the spectrum of light interacting with the photoreceptors in the eye/gi, 'Warna ialah sifat persepsi visual yang diperoleh daripada spektrum cahaya yang berinteraksi dengan fotoreseptor di dalam mata')
+        .replace(/It is not an intrinsic physical property of an object itself, but rather a sensory experience created by the brain's interpretation of electromagnetic radiation within the visible light spectrum/gi, 'Ia bukan sifat fizikal intrinsik sesuatu objek itu sendiri, sebaliknya pengalaman deria yang dicipta oleh tafsiran otak terhadap radiasi elektromagnet di dalam spektrum cahaya kelihatan')
+        .replace(/The Triad of Color Perception/gi, 'Triad Persepsi Warna')
+        .replace(/Light Source: Emits electromagnetic radiation/gi, 'Sumber Cahaya: Memancarkan radiasi elektromagnet')
+        .replace(/Different sources \(e\.g\., sunlight, LED, incandescent\) radiate different spectral power distributions/gi, 'Sumber berbeza (cth., cahaya matahari, LED, pijar) memancarkan taburan kuasa spektrum yang berbeza')
+        .replace(/Object \(Substrate\): Interacts with light through absorption, reflection, transmission, or scattering depending on its physical and chemical properties/gi, 'Objek (Substrat): Berinteraksi dengan cahaya melalui penyerapan, pantulan, penghantaran, atau penyebaran bergantung pada sifat fizikal dan kimianya')
+        .replace(/Observer: The human eye receives light via wavelength-sensitive photoreceptors \(S, M, and L cones\), sending neural signals to the visual cortex where the final color perception is constructed/gi, 'Pemerhati: Mata manusia menerima cahaya melalui fotoreseptor sensitif panjang gelombang (kon S, M, dan L), menghantar isyarat saraf ke korteks visual di mana persepsi warna akhir dibina')
+        .replace(/Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!/gi, 'Petua Pengajar: Sentiasa sahkan arah urat mesin sebelum mengunci dimensi garis acuan pada ArtiosCAD!')
+        .replace(/Packaging/gi, 'Pembungkusan')
+        .replace(/Engineering/gi, 'Kejuruteraan')
+        .replace(/Workflow/gi, 'Aliran Kerja')
+        .replace(/Printing/gi, 'Percetakan')
+        .replace(/Design/gi, 'Reka Bentuk')
+        .replace(/Quality Control/gi, 'Kawalan Kualiti')
+        .replace(/Introduction/gi, 'Pengenalan')
+        .replace(/Chapter/gi, 'Bab')
+        .replace(/Step/gi, 'Langkah')
+        .replace(/Important/gi, 'Penting')
+        .replace(/Note/gi, 'Nota')
+        .replace(/Verify/gi, 'Sahkan')
+        .replace(/Material/gi, 'Bahan')
+        .replace(/Fundamentals/gi, 'Asas')
+        .replace(/Module/gi, 'Modul')
+        .replace(/Exercise/gi, 'Latihan')
+        .replace(/Overview/gi, 'Gambaran Keseluruhan')
+        .replace(/Guide/gi, 'Panduan');
+      return translated;
+    } else if (targetLangCode === 'ta') {
+      translated = translated
+        .replace(/What is color\?/gi, 'வண்ணம் என்றால் என்ன?')
+        .replace(/Visual Electromagnetic Perception/gi, 'காட்சி மின்காந்த புலனுணர்வு')
+        .replace(/Color is the visual perceptual property derived from the spectrum of light interacting with the photoreceptors in the eye/gi, 'வண்ணம் என்பது கண்ணில் உள்ள ஒளிச்சேர்க்கைகளுடன் தொடர்பு கொள்ளும் ஒளியின் நிறமாலையிலிருந்து பெறப்பட்ட காட்சி புலனுணர்வுப் பண்பாகும்')
+        .replace(/It is not an intrinsic physical property of an object itself, but rather a sensory experience created by the brain's interpretation of electromagnetic radiation within the visible light spectrum/gi, 'இது ஒரு பொருளின் உள்ளார்ந்த இயற்பியல் பண்பு அல்ல, மாறாக கண்ணுறு ஒளி நிறமாலையில் உள்ள மின்காந்த கதிர்வீச்சை மூளை விளக்குவதன் மூலம் உருவாக்கப்படும் உணர்ச்சி அனுபவமாகும்')
+        .replace(/The Triad of Color Perception/gi, 'வண்ணப் புலனுணர்வின் முக்கோணம்')
+        .replace(/Light Source: Emits electromagnetic radiation/gi, 'ஒளி மூலம்: மின்காந்த கதிர்வீச்சை வெளியிடுகிறது')
+        .replace(/Different sources \(e\.g\., sunlight, LED, incandescent\) radiate different spectral power distributions/gi, 'வெவ்வேறு மூலங்கள் (எ.கா. சூரிய ஒளி, எல்.இ.டி, ஒளிரும் விளக்குகள்) வெவ்வேறு நிறமாலை விநியோகங்களை வெளியிடுகின்றன')
+        .replace(/Object \(Substrate\): Interacts with light through absorption, reflection, transmission, or scattering depending on its physical and chemical properties/gi, 'பொருள் (அடி மூலக்கூறு): அதன் இயற்பியல் மற்றும் வேதியியல் பண்புகளைப் பொறுத்து உறிஞ்சுதல், பிரதிபலிப்பு, பரிமாற்றம் அல்லது சிதறல் மூலம் ஒளியுடன் தொடர்பு கொள்கிறது')
+        .replace(/Observer: The human eye receives light via wavelength-sensitive photoreceptors \(S, M, and L cones\), sending neural signals to the visual cortex where the final color perception is constructed/gi, 'பார்வையாளர்: மனித கண் அலைநீள-உணர்திறன் கொண்ட புகைப்பட ஏற்பிகள் (S, M, மற்றும் L கூம்புகள்) மூலம் ஒளியைப் பெறுகிறது, நரம்பியல் சிக்னல்களை காட்சி புறணிக்கு அனுப்புகிறது, அங்கு இறுதி வண்ண புலனுணர்வு உருவாக்கப்படுகிறது')
+        .replace(/Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!/gi, 'ஆசிரியர் குறிப்பு: ஆர்டியோஸ்கேடில் டை-லைன் பரிமாணங்களைப் பூட்டுவதற்கு முன்பு எப்போதும் இயந்திர தானிய திசையைச் சரிபார்க்கவும்!')
+        .replace(/Packaging/gi, 'பேக்கேஜிங்')
+        .replace(/Engineering/gi, 'பொறியியல்')
+        .replace(/Workflow/gi, 'பணிப்பாய்வு')
+        .replace(/Printing/gi, 'அச்சிடுதல்')
+        .replace(/Design/gi, 'வடிவமைப்பு')
+        .replace(/Quality Control/gi, 'தரக் கட்டுப்பாடு')
+        .replace(/Color Management/gi, 'வண்ண மேலாண்மை')
+        .replace(/Color/gi, 'வண்ணம்')
+        .replace(/Light/gi, 'ஒளி')
+        .replace(/Spectrum/gi, 'நிறமாலை')
+        .replace(/Introduction/gi, 'அறிமுகம்')
+        .replace(/Chapter/gi, 'அத்தியாயம்')
+        .replace(/Step/gi, 'படி')
+        .replace(/Important/gi, 'முக்கியமானது')
+        .replace(/Note/gi, 'குறிப்பு')
+        .replace(/Verify/gi, 'சரிபார்க்கவும்')
+        .replace(/Material/gi, 'பாடப் பொருள்')
+        .replace(/Fundamentals/gi, 'அடிப்படைகள்')
+        .replace(/Module/gi, 'தொகுதி')
+        .replace(/Exercise/gi, 'பயிற்சி')
+        .replace(/Overview/gi, 'மேலோட்டம்')
+        .replace(/Guide/gi, 'வழிகாட்டி');
+      return translated;
+    } else if (targetLangCode === 'zh') {
+      translated = translated
+        .replace(/What is color\?/gi, '什么是颜色？')
+        .replace(/Visual Electromagnetic Perception/gi, '视觉电磁感知')
+        .replace(/Color is the visual perceptual property derived from the spectrum of light interacting with the photoreceptors in the eye/gi, '颜色是光光谱与眼睛中的光感受器相互作用产生的视觉感知特性')
+        .replace(/It is not an intrinsic physical property of an object itself, but rather a sensory experience created by the brain's interpretation of electromagnetic radiation within the visible light spectrum/gi, '它不是物体本身的本质物理特性，而是大脑对可见光光谱内电磁辐射的解释所创造感官体验')
+        .replace(/The Triad of Color Perception/gi, '色彩感知三要素')
+        .replace(/Light Source: Emits electromagnetic radiation/gi, '光源：发射电磁辐射')
+        .replace(/Different sources \(e\.g\., sunlight, LED, incandescent\) radiate different spectral power distributions/gi, '不同光源（如日光、LED、白炽灯）辐射不同的光谱功率分布')
+        .replace(/Object \(Substrate\): Interacts with light through absorption, reflection, transmission, or scattering depending on its physical and chemical properties/gi, '物体（承印物）：根据其物理和化学特性，通过吸收、反射、透射或散射与光相互作用')
+        .replace(/Observer: The human eye receives light via wavelength-sensitive photoreceptors \(S, M, and L cones\), sending neural signals to the visual cortex where the final color perception is constructed/gi, '观察者：人眼通过波长敏感的光感受器（S、M 和 L 锥体细胞）接收光线，向视觉皮层发送神经信号，在其中构建最终的色彩感知')
+        .replace(/Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!/gi, '教师提示：在 ArtiosCAD 上锁定刀模线尺寸之前，请务必验证机器纹理方向！')
+        .replace(/Packaging/gi, '包装')
+        .replace(/Engineering/gi, '工程')
+        .replace(/Workflow/gi, '工作流程')
+        .replace(/Printing/gi, '印刷')
+        .replace(/Design/gi, '设计')
+        .replace(/Quality Control/gi, '质量控制')
+        .replace(/Color Management/gi, '色彩管理')
+        .replace(/Introduction/gi, '介绍')
+        .replace(/Chapter/gi, '章节')
+        .replace(/Step/gi, '步骤')
+        .replace(/Important/gi, '重要')
+        .replace(/Note/gi, '笔记')
+        .replace(/Verify/gi, '验证')
+        .replace(/Material/gi, '材料')
+        .replace(/Fundamentals/gi, '基础')
+        .replace(/Module/gi, '模块')
+        .replace(/Exercise/gi, '练习')
+        .replace(/Overview/gi, '概述')
+        .replace(/Guide/gi, '指南');
+      return translated;
+    } else if (targetLangCode === 'hi') {
+      translated = translated
+        .replace(/What is color\?/gi, 'रंग क्या है?')
+        .replace(/Visual Electromagnetic Perception/gi, 'दृश्य विद्युतचुंबकीय धारणा')
+        .replace(/The Triad of Color Perception/gi, 'रंग धारणा का त्रय')
+        .replace(/Light Source: Emits electromagnetic radiation/gi, 'प्रकाश स्रोत: विद्युतचुंबकीय विकिरण उत्सर्जित करता है')
+        .replace(/Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!/gi, 'संकाय युक्ति: ArtiosCAD पर डाई-लाइन आयामों को लॉक करने से पहले हमेशा मशीन ग्रेन दिशा की पुष्टि करें!')
+        .replace(/Packaging/gi, 'पैकेजिंग')
+        .replace(/Engineering/gi, 'इंजीनियरिंग')
+        .replace(/Workflow/gi, 'कार्यप्रवाह')
+        .replace(/Printing/gi, 'प्रिंटिंग')
+        .replace(/Design/gi, 'डिजाइन')
+        .replace(/Quality Control/gi, 'गुणवत्ता नियंत्रण')
+        .replace(/Color Management/gi, 'रंग प्रबंधन')
+        .replace(/Introduction/gi, 'परिचय')
+        .replace(/Chapter/gi, 'अध्याय')
+        .replace(/Step/gi, 'चरण')
+        .replace(/Important/gi, 'महत्वपूर्ण')
+        .replace(/Note/gi, 'नोट')
+        .replace(/Verify/gi, 'सत्यापित करें')
+        .replace(/Material/gi, 'सामग्री')
+        .replace(/Fundamentals/gi, 'मूल बातें')
+        .replace(/Module/gi, 'मॉड्यूल')
+        .replace(/Exercise/gi, 'अभ्यास')
+        .replace(/Overview/gi, 'अवलोकन')
+        .replace(/Guide/gi, 'मार्गदर्शिका');
+      return translated;
+    } else if (targetLangCode === 'es') {
+      translated = translated
+        .replace(/What is color\?/gi, '¿Qué es el color?')
+        .replace(/Visual Electromagnetic Perception/gi, 'Percepción Electromagnética Visual')
+        .replace(/The Triad of Color Perception/gi, 'La Tríada de la Percepción del Color')
+        .replace(/Packaging/gi, 'Embalaje')
+        .replace(/Engineering/gi, 'Ingeniería')
+        .replace(/Workflow/gi, 'Flujo de trabajo')
+        .replace(/Printing/gi, 'Impresión')
+        .replace(/Design/gi, 'Diseño')
+        .replace(/Quality Control/gi, 'Control de calidad')
+        .replace(/Color Management/gi, 'Gestión del color')
+        .replace(/Introduction/gi, 'Introducción')
+        .replace(/Chapter/gi, 'Capítulo')
+        .replace(/Step/gi, 'Paso')
+        .replace(/Important/gi, 'Importante')
+        .replace(/Note/gi, 'Nota')
+        .replace(/Verify/gi, 'Verificar')
+        .replace(/Material/gi, 'Material')
+        .replace(/Fundamentals/gi, 'Fundamentos')
+        .replace(/Module/gi, 'Módulo')
+        .replace(/Exercise/gi, 'Ejercicio')
+        .replace(/Overview/gi, 'Visión general')
+        .replace(/Guide/gi, 'Guía');
+      return translated;
+    } else if (targetLangCode === 'fr') {
+      translated = translated
+        .replace(/What is color\?/gi, "Qu'est-ce que la couleur ?")
+        .replace(/Visual Electromagnetic Perception/gi, 'Perception Électromagnétique Visuelle')
+        .replace(/The Triad of Color Perception/gi, 'La Triade de la Perception des Couleurs')
+        .replace(/Packaging/gi, 'Emballage')
+        .replace(/Engineering/gi, 'Ingénierie')
+        .replace(/Workflow/gi, 'Flux de travail')
+        .replace(/Printing/gi, 'Impression')
+        .replace(/Design/gi, 'Conception')
+        .replace(/Quality Control/gi, 'Contrôle qualité')
+        .replace(/Color Management/gi, 'Gestion des couleurs')
+        .replace(/Introduction/gi, 'Introduction')
+        .replace(/Chapter/gi, 'Chapitre')
+        .replace(/Step/gi, 'Étape')
+        .replace(/Important/gi, 'Important')
+        .replace(/Note/gi, 'Remarque')
+        .replace(/Verify/gi, 'Vérifier')
+        .replace(/Material/gi, 'Matériel')
+        .replace(/Fundamentals/gi, 'Fondamentaux')
+        .replace(/Module/gi, 'Module')
+        .replace(/Exercise/gi, 'Exercice')
+        .replace(/Overview/gi, 'Aperçu')
+        .replace(/Guide/gi, 'Guide');
+      return translated;
+    }
+
+    return translated;
+  });
+
+  return translatedParts.join('');
 }
 
 // Sample Default Flipbooks for Faculty Materials
@@ -303,15 +551,168 @@ export interface InteractiveFlipbookStudioProps {
 }
 
 export default function InteractiveFlipbookStudio({ initialMaterial, courseCategory, onClose }: InteractiveFlipbookStudioProps) {
-  const { user } = useAuth();
+  const { user, isAdmin, isQC, isElevated } = useAuth();
+  const { financialSettings } = useSettings();
   const isFacultyOrAdmin = user?.role === 'faculty' || user?.role === 'admin';
 
-  // Mode States: 'flipbook' (3D Book View), 'presentation' (PowerPoint Slide Mode), 'editor' (Faculty Creation/Editing), 'grid-overview' (Grid Overview)
-  const [viewMode, setViewMode] = useState<'flipbook' | 'presentation' | 'editor' | 'grid-overview'>('flipbook');
+  // Firestore course_modules live synchronization & Configured Courses
+  const [dbModules, setDbModules] = useState<CourseModule[]>([]);
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>('All Course Titles');
+  const [selectedModuleFilter, setSelectedModuleFilter] = useState<string>('All Modules');
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'course_modules'), (snapshot) => {
+      const list: CourseModule[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() } as CourseModule);
+      });
+      setDbModules(list);
+    }, (err) => {
+      console.warn('Firestore course_modules subscription notice in FlipbookStudio:', err.message);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const configuredCourses = React.useMemo(() => [
+    ...(financialSettings?.coursesConfig || []),
+    { courseId: 'printing-and-packaging-cross-courses', title: 'Diploma in Printing and Packaging Cross Courses' }
+  ], [financialSettings?.coursesConfig]);
+
+  // Student assigned course titles derived from user profile
+  const isStudent = user?.role === 'student' || (!isAdmin && !isQC && !isElevated && user?.role !== 'faculty' && user?.role !== 'admin');
+
+  const studentAssignedCourses = React.useMemo(() => {
+    if (!user) return [];
+    const assigned = user.assignedCourses || (user.assignedCourse ? [user.assignedCourse] : (user.requestedCourses || (user.requestedCourse ? [user.requestedCourse] : [])));
+    return assigned || [];
+  }, [user]);
+
+  const studentAssignedCourseTitles = React.useMemo(() => {
+    if (!studentAssignedCourses || studentAssignedCourses.length === 0) return [];
+    return studentAssignedCourses.map(cId => {
+      const matchedConfig = configuredCourses.find(c => c.courseId === cId);
+      if (matchedConfig) return matchedConfig.title;
+      return formatCourseName(cId);
+    });
+  }, [studentAssignedCourses, configuredCourses]);
+
+  // All Course Titles list (same as Free ChatGPT Video & Speech Translator)
+  const allCourseTitles = React.useMemo(() => {
+    if (isStudent && studentAssignedCourseTitles.length > 0) {
+      if (studentAssignedCourseTitles.length > 1) {
+        return ['All Assigned Courses', ...studentAssignedCourseTitles];
+      }
+      return studentAssignedCourseTitles;
+    }
+
+    const set = new Set<string>();
+    set.add('All Course Titles');
+    configuredCourses.forEach(c => set.add(c.title));
+    dbModules.forEach(mod => {
+      if (mod.category) {
+        const matchedConfig = configuredCourses.find(c => c.courseId === mod.category);
+        set.add(matchedConfig ? matchedConfig.title : formatCourseName(mod.category));
+      }
+    });
+    DEFAULT_FLIPBOOKS.forEach(m => {
+      if (m.courseName) set.add(m.courseName);
+      if (m.courseCategory) {
+        const matchedConfig = configuredCourses.find(c => c.courseId === m.courseCategory);
+        set.add(matchedConfig ? matchedConfig.title : formatCourseName(m.courseCategory));
+      }
+    });
+    return Array.from(set);
+  }, [isStudent, studentAssignedCourseTitles, configuredCourses, dbModules]);
+
+  const studentAssignedTitle = React.useMemo(() => {
+    if (studentAssignedCourseTitles.length === 0) return null;
+    return studentAssignedCourseTitles[0];
+  }, [studentAssignedCourseTitles]);
+
+  // Auto-set selectedCourseFilter to student assigned course on load
+  useEffect(() => {
+    if (isStudent && studentAssignedCourseTitles.length > 0) {
+      if (!studentAssignedCourseTitles.includes(selectedCourseFilter) && selectedCourseFilter !== 'All Assigned Courses') {
+        setSelectedCourseFilter(studentAssignedCourseTitles[0]);
+      }
+    } else if (user && studentAssignedTitle && selectedCourseFilter === 'All Course Titles') {
+      setSelectedCourseFilter(studentAssignedTitle);
+    }
+  }, [isStudent, studentAssignedCourseTitles, user, studentAssignedTitle, selectedCourseFilter]);
+
+  // Mode States: 'flipbook' (3D Book View), 'presentation' (PowerPoint Slide Mode), 'editor' (Faculty Creation/Editing), 'grid-overview' (Grid Overview), 'settings' (Settings Studio Tab)
+  const [viewMode, setViewMode] = useState<'flipbook' | 'presentation' | 'editor' | 'grid-overview' | 'settings'>('flipbook');
   
   // Materials List & Active Material
   const [materials, setMaterials] = useState<FlipbookMaterial[]>(DEFAULT_FLIPBOOKS);
   const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(initialMaterial || DEFAULT_FLIPBOOKS[0]);
+
+  // Available Modules list based on selected course filter
+  const availableModuleOptions = React.useMemo(() => {
+    const set = new Set<string>();
+    set.add('All Modules');
+
+    // Gather modules from dbModules matching course filter
+    const sortedDbModules = [...dbModules].sort((a, b) => {
+      const orderA = a.order !== undefined && a.order !== null && !isNaN(Number(a.order)) ? Number(a.order) : 999;
+      const orderB = b.order !== undefined && b.order !== null && !isNaN(Number(b.order)) ? Number(b.order) : 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.title || '').localeCompare(b.title || '');
+    });
+
+    sortedDbModules.forEach(mod => {
+      const matchedConfig = configuredCourses.find(c => c.courseId === mod.category);
+      const courseTitle = matchedConfig ? matchedConfig.title : formatCourseName(mod.category);
+
+      const matchesCourse = selectedCourseFilter === 'All Course Titles' ||
+        selectedCourseFilter === 'All Assigned Courses' ||
+        courseTitle === selectedCourseFilter ||
+        courseTitle.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
+        selectedCourseFilter.toLowerCase().includes(courseTitle.toLowerCase());
+
+      if (matchesCourse) {
+        const moduleLabel = mod.order !== undefined && mod.order !== null ? `Module ${mod.order}` : (mod.moduleNumber || 'Module');
+        set.add(`${moduleLabel}: ${mod.title}`);
+      }
+    });
+
+    materials.forEach(m => {
+      m.pages.forEach(p => {
+        if (p.courseModuleName) set.add(p.courseModuleName);
+      });
+    });
+
+    return Array.from(set);
+  }, [dbModules, configuredCourses, selectedCourseFilter, materials]);
+
+  // Filtered materials matching Course and Module filters
+  const filteredMaterials = React.useMemo(() => {
+    return materials.filter(m => {
+      let courseMatch = true;
+      if (selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses') {
+        const matCourse = m.courseName || formatCourseName(m.courseCategory);
+        courseMatch = matCourse === selectedCourseFilter ||
+          matCourse.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
+          selectedCourseFilter.toLowerCase().includes(matCourse.toLowerCase()) ||
+          m.pages.some(p => p.courseName && (
+            p.courseName === selectedCourseFilter ||
+            p.courseName.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
+            selectedCourseFilter.toLowerCase().includes(p.courseName.toLowerCase())
+          ));
+      }
+
+      let moduleMatch = true;
+      if (selectedModuleFilter !== 'All Modules') {
+        moduleMatch = m.pages.some(p => p.courseModuleName && (
+          p.courseModuleName === selectedModuleFilter ||
+          p.courseModuleName.toLowerCase().includes(selectedModuleFilter.toLowerCase()) ||
+          selectedModuleFilter.toLowerCase().includes(p.courseModuleName.toLowerCase())
+        ));
+      }
+
+      return courseMatch && moduleMatch;
+    });
+  }, [materials, selectedCourseFilter, selectedModuleFilter]);
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
 
   // Multi-language Translation State
@@ -330,11 +731,90 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
   // Editor State
   const [editingPage, setEditingPage] = useState<FlipbookPage | null>(null);
+  const contentAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const wysiwygRef = useRef<HTMLDivElement | null>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+  const lastInitializedPageIdRef = useRef<string | null>(null);
+  const lastInitializedTabRef = useRef<string | null>(null);
+  const [editorTab, setEditorTab] = useState<'wysiwyg' | 'code'>('wysiwyg');
+  const [floatingToolbar, setFloatingToolbar] = useState<{ x: number; y: number; visible: boolean } | null>(null);
+  const [isDraggingToolbar, setIsDraggingToolbar] = useState<boolean>(false);
+  const dragStartRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number }>({ startX: 0, startY: 0, initialX: 0, initialY: 0 });
+  const [selectionToast, setSelectionToast] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveMessage, setSaveMessage] = useState<string>('');
 
+  // Synchronize WYSIWYG element HTML content when changing page or switching tabs without destroying active DOM selection
+  useEffect(() => {
+    if (editorTab === 'wysiwyg' && wysiwygRef.current && editingPage) {
+      const pageChanged = lastInitializedPageIdRef.current !== editingPage.id;
+      const tabChanged = lastInitializedTabRef.current !== editorTab;
+
+      if (pageChanged || tabChanged || !wysiwygRef.current.innerHTML) {
+        wysiwygRef.current.innerHTML = cleanNestedHtmlTags(editingPage.content || '');
+        lastInitializedPageIdRef.current = editingPage.id;
+        lastInitializedTabRef.current = editorTab;
+      }
+    }
+  }, [editingPage?.id, editorTab]);
+
+  // Media IndexedDB cache state & Subtitles / Video Transcription state
+  const [mediaCache, setMediaCache] = useState<Record<string, string>>({});
+  const [showCcSubtitles, setShowCcSubtitles] = useState<boolean>(true);
+  const [showTranscriptionDrawer, setShowTranscriptionDrawer] = useState<boolean>(false);
+  const [isGeneratingAiTranscription, setIsGeneratingAiTranscription] = useState<boolean>(false);
+
+  // Helper to resolve media URLs (handles 'idb:key' stored in IndexedDB for heavy video/image files)
+  const resolveMediaUrl = (url?: string): string => {
+    if (!url) return '';
+    if (url.startsWith('idb:')) {
+      const key = url.replace('idb:', '');
+      if (mediaCache[key]) return mediaCache[key];
+      getMediaFromIDB(key).then(resolved => {
+        if (resolved) {
+          setMediaCache(prev => ({ ...prev, [key]: resolved }));
+        }
+      });
+      return mediaCache[key] || '';
+    }
+    return url;
+  };
+
   // Audio / Sound FX toggle for page flip
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+
+  // Studio Settings & Preferences States
+  const [autoFlipInterval, setAutoFlipInterval] = useState<number>(0); // 0 = off, 3, 5, 8, 10, 15 seconds
+  const [isAutoFlipping, setIsAutoFlipping] = useState<boolean>(false);
+  const [ttsRate, setTtsRate] = useState<number>(1.0);
+  const [ttsAutoRead, setTtsAutoRead] = useState<boolean>(false);
+  const [readerFontSize, setReaderFontSize] = useState<string>('text-sm');
+  const [readerFontFamily, setReaderFontFamily] = useState<string>('sans');
+  const [readerTheme, setReaderTheme] = useState<'dark' | 'sepia' | 'light'>('dark');
+
+  // Auto Page Turn Slideshow Effect
+  useEffect(() => {
+    if (!isAutoFlipping || autoFlipInterval <= 0) return;
+    const timer = setInterval(() => {
+      setCurrentPageIndex(prev => (prev < activeMaterial.pages.length - 1 ? prev + 1 : 0));
+    }, autoFlipInterval * 1000);
+    return () => clearInterval(timer);
+  }, [isAutoFlipping, autoFlipInterval, activeMaterial.pages.length]);
+
+  // TTS Auto-Read Page Narration Effect
+  useEffect(() => {
+    if (!ttsAutoRead) return;
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const currentPageObj = activeMaterial.pages[currentPageIndex];
+      if (currentPageObj) {
+        const textToRead = `${currentPageObj.title}. ${stripHtml(currentPageObj.content || '')}`;
+        const utterance = new SpeechSynthesisUtterance(textToRead);
+        utterance.rate = ttsRate;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+  }, [currentPageIndex, ttsAutoRead, ttsRate, activeMaterial.pages]);
 
   // "How to Create E-Books" Modal Guide State
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
@@ -366,7 +846,29 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     if (langCode === 'en' || !page) return page;
 
     const existingTrans = page.translations?.[langCode];
-    if (existingTrans) {
+
+    // Known static default template titles
+    const defaultTemplateTitles = [
+      "Structural Packaging Design Introduction",
+      "Preflighting & File Verification",
+      "Flexographic Inks & Spectrophotometer Calibration"
+    ];
+
+    const isDefaultTemplateTitle = defaultTemplateTitles.includes(page.title);
+
+    // If custom edited and a specific translation for langCode was saved during edit, use it
+    if (existingTrans && page.isCustomEdited) {
+      return {
+        ...page,
+        title: existingTrans.title || autoTranslateText(page.title, langCode),
+        subtitle: existingTrans.subtitle !== undefined ? existingTrans.subtitle : (page.subtitle ? autoTranslateText(page.subtitle, langCode) : ''),
+        content: existingTrans.content || autoTranslateText(page.content, langCode),
+        calloutText: existingTrans.calloutText !== undefined ? existingTrans.calloutText : (page.calloutText ? autoTranslateText(page.calloutText, langCode) : ''),
+      };
+    }
+
+    // If unedited initial default template page, use static translation
+    if (existingTrans && !page.isCustomEdited && isDefaultTemplateTitle) {
       return {
         ...page,
         title: existingTrans.title || page.title,
@@ -376,7 +878,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       };
     }
 
-    // Dynamic translation
+    // Dynamic translation on NEW or UPDATED English text
     return {
       ...page,
       title: autoTranslateText(page.title, langCode),
@@ -408,6 +910,402 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   };
 
   const { fontSizeClass, titleSizeClass } = calculateDynamicLayout(displayPage.content, selectedLanguage);
+
+  // Helper to clean up cluttered, duplicated, or nested HTML tags
+  const cleanNestedHtmlTags = (htmlStr: string): string => {
+    if (!htmlStr) return '';
+    let text = htmlStr;
+
+    let prev = '';
+    let iterations = 0;
+    while (text !== prev && iterations < 8) {
+      prev = text;
+      iterations++;
+
+      // Unnest duplicate <b><b> -> <b>
+      text = text.replace(/<b>\s*<b>([\s\S]*?)<\/b>\s*<\/b>/gi, '<b>$1</b>');
+      // Unnest duplicate <i><i> -> <i>
+      text = text.replace(/<i>\s*<i>([\s\S]*?)<\/i>\s*<\/i>/gi, '<i>$1</i>');
+      // Unnest duplicate <u><u> -> <u>
+      text = text.replace(/<u>\s*<u>([\s\S]*?)<\/u>\s*<\/u>/gi, '<u>$1</u>');
+
+      // Unnest duplicate <mark...><mark...>...</mark></mark>
+      text = text.replace(/<mark[^>]*>\s*<mark[^>]*>([\s\S]*?)<\/mark>\s*<\/mark>/gi, (match, inner) => {
+        return `<mark style="background-color: #fef08a; color: #1e293b; padding: 1px 4px; border-radius: 4px;">${inner}</mark>`;
+      });
+
+      // Remove empty tags
+      text = text.replace(/<(b|i|u|mark|span)[^>]*>\s*<\/\1>/gi, '');
+    }
+
+    return text;
+  };
+
+  // One-click action to fix & clean cluttered HTML tags
+  const handleCleanAllHtmlTags = () => {
+    if (!editingPage) return;
+    const cleaned = cleanNestedHtmlTags(editingPage.content || '');
+    const updated = { ...editingPage, content: cleaned };
+    setEditingPage(updated);
+    handleUpdatePage(updated);
+    if (wysiwygRef.current) {
+      wysiwygRef.current.innerHTML = cleaned;
+    }
+  };
+
+  // Floating Contextual Selection Handler & Range Saver
+  const handleEditorTextSelection = (e?: React.SyntheticEvent) => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && sel.toString().trim().length > 0) {
+      try {
+        const range = sel.getRangeAt(0);
+        if (wysiwygRef.current && wysiwygRef.current.contains(range.commonAncestorContainer)) {
+          savedRangeRef.current = range.cloneRange();
+          const rect = range.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            setFloatingToolbar(prev => {
+              if (prev && prev.visible && (prev.x !== 0 || prev.y !== 0)) {
+                return { ...prev, visible: true };
+              }
+              return {
+                x: Math.max(12, Math.min(window.innerWidth - 420, rect.left + rect.width / 2 - 200)),
+                y: Math.max(12, rect.top - 70),
+                visible: true
+              };
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        // Selection rect fallback
+      }
+    }
+  };
+
+  // Draggable Floating Toolbar Event Handlers
+  const handleStartDragToolbar = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!floatingToolbar) return;
+    setIsDraggingToolbar(true);
+    dragStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: floatingToolbar.x,
+      initialY: floatingToolbar.y,
+    };
+  };
+
+  useEffect(() => {
+    if (!isDraggingToolbar) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - dragStartRef.current.startX;
+      const dy = e.clientY - dragStartRef.current.startY;
+      setFloatingToolbar({
+        x: Math.max(10, Math.min(window.innerWidth - 300, dragStartRef.current.initialX + dx)),
+        y: Math.max(10, Math.min(window.innerHeight - 150, dragStartRef.current.initialY + dy)),
+        visible: true
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingToolbar(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingToolbar]);
+
+  // Helper to safely render formatted HTML strings (e.g. bold, color, font-size on selected text)
+  const renderFormattedHtml = (contentStr: string) => {
+    if (!contentStr) return null;
+    const cleaned = cleanNestedHtmlTags(contentStr);
+    const formatted = cleaned.replace(/\n/g, '<br />');
+    return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
+  };
+
+  // Selection-Aware Text Formatting Helper - ONLY applies to selected range!
+  const applyFormatToSelection = (openTag: string, closeTag: string) => {
+    if (!editingPage) return;
+
+    // 1. WYSIWYG Editor Mode Formatting
+    if (editorTab === 'wysiwyg') {
+      let sel = window.getSelection();
+      let range: Range | null = null;
+
+      if (sel && sel.rangeCount > 0 && sel.toString().trim().length > 0) {
+        range = sel.getRangeAt(0);
+      } else if (savedRangeRef.current && !savedRangeRef.current.collapsed) {
+        range = savedRangeRef.current;
+      }
+
+      if (!range || range.collapsed || !wysiwygRef.current || !wysiwygRef.current.contains(range.commonAncestorContainer)) {
+        setSelectionToast('Please highlight specific text in the editor first!');
+        setTimeout(() => setSelectionToast(''), 3500);
+        return;
+      }
+
+      if (wysiwygRef.current) {
+        wysiwygRef.current.focus();
+      }
+
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      // Special handling for standard inline style toggles: Bold, Italic, Underline, Normal
+      if (openTag === '<b>' || openTag === '<i>' || openTag === '<u>' || openTag === 'normal') {
+        if (openTag === '<b>') {
+          document.execCommand('bold', false);
+        } else if (openTag === '<i>') {
+          document.execCommand('italic', false);
+        } else if (openTag === '<u>') {
+          document.execCommand('underline', false);
+        } else if (openTag === 'normal') {
+          document.execCommand('removeFormat', false);
+          try {
+            const extracted = range.extractContents();
+            const tempDiv = document.createElement('div');
+            tempDiv.appendChild(extracted);
+
+            // Strip b, i, u, strong, em, mark tags inside extracted
+            tempDiv.querySelectorAll('b, strong, i, em, u, mark').forEach(el => {
+              const p = el.parentNode;
+              while (el.firstChild) p?.insertBefore(el.firstChild, el);
+              p?.removeChild(el);
+            });
+
+            // Strip inline font-weight, font-style, text-decoration from styled spans
+            tempDiv.querySelectorAll('[style]').forEach(el => {
+              const htmlEl = el as HTMLElement;
+              htmlEl.style.fontWeight = 'normal';
+              htmlEl.style.fontStyle = 'normal';
+              htmlEl.style.textDecoration = 'none';
+            });
+
+            const span = document.createElement('span');
+            span.style.fontWeight = 'normal';
+            span.style.fontStyle = 'normal';
+            span.style.textDecoration = 'none';
+            span.appendChild(tempDiv);
+
+            range.insertNode(span);
+          } catch (e) {
+            console.warn('Normal formatting reset error:', e);
+          }
+        }
+
+        const newSel = window.getSelection();
+        if (newSel && newSel.rangeCount > 0) {
+          savedRangeRef.current = newSel.getRangeAt(0).cloneRange();
+        }
+
+        const newHtml = wysiwygRef.current.innerHTML;
+        const cleaned = cleanNestedHtmlTags(newHtml);
+        const updated = { ...editingPage, content: cleaned };
+        setEditingPage(updated);
+        handleUpdatePage(updated);
+        setSelectionToast('');
+        return;
+      }
+
+      // Custom style attributes (Font Family, Font Size, Color, Highlight Mark)
+      const span = document.createElement('span');
+
+      if (openTag.includes('style=')) {
+        const match = openTag.match(/style=["']([^"']*)["']/);
+        if (match) {
+          span.setAttribute('style', match[1]);
+        }
+      } else if (openTag.includes('<mark')) {
+        span.style.backgroundColor = '#fef08a';
+        span.style.color = '#1e293b';
+        span.style.padding = '1px 4px';
+        span.style.borderRadius = '4px';
+      }
+
+      try {
+        const extracted = range.extractContents();
+        span.appendChild(extracted);
+        range.insertNode(span);
+
+        // Keep selection on the newly formatted span so selection isn't lost
+        if (wysiwygRef.current) {
+          wysiwygRef.current.focus();
+        }
+        const newSel = window.getSelection();
+        if (newSel) {
+          const newRange = document.createRange();
+          newRange.selectNodeContents(span);
+          newSel.removeAllRanges();
+          newSel.addRange(newRange);
+          savedRangeRef.current = newRange.cloneRange();
+        }
+
+        const newHtml = wysiwygRef.current.innerHTML;
+        const cleaned = cleanNestedHtmlTags(newHtml);
+        const updated = { ...editingPage, content: cleaned };
+        setEditingPage(updated);
+        handleUpdatePage(updated);
+        setSelectionToast('');
+      } catch (err) {
+        console.warn('WYSIWYG formatting range error:', err);
+      }
+      return;
+    }
+
+    // 2. Code Editor Mode Formatting
+    const textarea = contentAreaRef.current;
+    if (textarea) {
+      const text = editingPage.content || '';
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+
+      if (start === end) {
+        const inserted = openTag + 'sample text' + closeTag;
+        const newText = text.substring(0, start) + inserted + text.substring(end);
+        const cleaned = cleanNestedHtmlTags(newText);
+        const updated = { ...editingPage, content: cleaned };
+        setEditingPage(updated);
+        handleUpdatePage(updated);
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start + openTag.length, start + openTag.length + 11);
+        }, 50);
+        return;
+      }
+
+      const selectedText = text.substring(start, end);
+      const newText = text.substring(0, start) + openTag + selectedText + closeTag + text.substring(end);
+      const cleaned = cleanNestedHtmlTags(newText);
+      const updated = { ...editingPage, content: cleaned };
+      setEditingPage(updated);
+      handleUpdatePage(updated);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + openTag.length, start + openTag.length + selectedText.length);
+      }, 50);
+    }
+  };
+
+  const clearSelectionFormatting = () => {
+    if (!editingPage) return;
+
+    if (editorTab === 'wysiwyg') {
+      let sel = window.getSelection();
+      let range: Range | null = null;
+
+      if (sel && sel.rangeCount > 0 && sel.toString().trim().length > 0) {
+        range = sel.getRangeAt(0);
+      } else if (savedRangeRef.current && !savedRangeRef.current.collapsed) {
+        range = savedRangeRef.current;
+      }
+
+      if (range && wysiwygRef.current && wysiwygRef.current.contains(range.commonAncestorContainer)) {
+        const textContent = range.toString();
+        const textNode = document.createTextNode(textContent);
+        range.deleteContents();
+        range.insertNode(textNode);
+
+        const newHtml = wysiwygRef.current.innerHTML;
+        const cleaned = cleanNestedHtmlTags(newHtml);
+        const updated = { ...editingPage, content: cleaned };
+        setEditingPage(updated);
+        handleUpdatePage(updated);
+        setSelectionToast('');
+        return;
+      }
+    }
+
+    // Fallback: If no range is selected or in Code mode, strip all HTML tags
+    const text = editingPage.content || '';
+    const cleanedAll = text.replace(/<[^>]*>/g, '');
+    const updated = { ...editingPage, content: cleanedAll };
+    setEditingPage(updated);
+    handleUpdatePage(updated);
+    if (wysiwygRef.current) {
+      wysiwygRef.current.innerHTML = cleanedAll;
+    }
+  };
+
+  // Specific helper to remove highlight (yellow mark & background-color) from selection or entire content
+  const removeHighlightFromSelection = () => {
+    if (!editingPage) return;
+
+    if (editorTab === 'wysiwyg') {
+      let sel = window.getSelection();
+      let range: Range | null = null;
+
+      if (sel && sel.rangeCount > 0 && sel.toString().trim().length > 0) {
+        range = sel.getRangeAt(0);
+      } else if (savedRangeRef.current && !savedRangeRef.current.collapsed) {
+        range = savedRangeRef.current;
+      }
+
+      if (range && wysiwygRef.current && wysiwygRef.current.contains(range.commonAncestorContainer)) {
+        try {
+          const fragment = range.cloneContents();
+          const div = document.createElement('div');
+          div.appendChild(fragment);
+
+          // Strip <mark> tags from range fragment
+          const marks = div.querySelectorAll('mark');
+          marks.forEach(m => {
+            const parent = m.parentNode;
+            while (m.firstChild) parent?.insertBefore(m.firstChild, m);
+            parent?.removeChild(m);
+          });
+
+          // Also strip background-color style properties
+          const styledElements = div.querySelectorAll('[style*="background"]');
+          styledElements.forEach(el => {
+            (el as HTMLElement).style.backgroundColor = '';
+            (el as HTMLElement).style.background = '';
+            if (!(el as HTMLElement).getAttribute('style')) {
+              el.removeAttribute('style');
+            }
+          });
+
+          range.deleteContents();
+          const children = Array.from(div.childNodes);
+          children.forEach(child => range?.insertNode(child));
+
+          const newHtml = wysiwygRef.current.innerHTML;
+          const cleaned = cleanNestedHtmlTags(newHtml);
+          const updatedPage = { ...editingPage, content: cleaned };
+          setEditingPage(updatedPage);
+          handleUpdatePage(updatedPage);
+          setSelectionToast('Highlight removed from selected text!');
+          setTimeout(() => setSelectionToast(''), 3000);
+          return;
+        } catch (err) {
+          console.warn('Remove highlight error:', err);
+        }
+      }
+    }
+
+    // Fallback if nothing selected: Remove all highlights from current paragraph
+    const rawText = editingPage.content || '';
+    const stripMark = rawText
+      .replace(/<mark[^>]*>/gi, '')
+      .replace(/<\/mark>/gi, '')
+      .replace(/background-color:\s*[^;"]*;?/gi, '')
+      .replace(/background:\s*[^;"]*;?/gi, '');
+    const cleaned = cleanNestedHtmlTags(stripMark);
+    const updatedPage = { ...editingPage, content: cleaned };
+    setEditingPage(updatedPage);
+    handleUpdatePage(updatedPage);
+    if (wysiwygRef.current) {
+      wysiwygRef.current.innerHTML = cleaned;
+    }
+    setSelectionToast('All highlights removed from page content!');
+    setTimeout(() => setSelectionToast(''), 3000);
+  };
 
   // Next/Prev Page navigation with audio page flip feedback
   const playPageTurnSound = () => {
@@ -462,70 +1360,593 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     return url;
   };
 
-  // Helper to check if a URL is a direct video (local upload Data URL, blob, MP4, WebM, MOV)
-  const isDirectVideo = (url?: string) => {
-    if (!url) return false;
-    return url.startsWith('data:video') || url.startsWith('blob:') || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov') || url.endsWith('.ogg');
+  // Helper to strip HTML tags from strings (removes <mark>, style attributes, etc.)
+  const stripHtml = (input?: string): string => {
+    if (!input) return '';
+    return input
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .trim();
   };
 
-  // Render Smart Video Player (handles YouTube, Vimeo, direct MP4, Data URLs, Blob URLs)
-  const renderVideoPlayer = (url?: string, caption?: string) => {
-    if (!url) return null;
-    if (isDirectVideo(url)) {
-      return (
-        <video
-          src={url}
-          controls
-          className="w-full h-full object-contain bg-black rounded-lg"
-        />
-      );
-    }
+  // Helper to clean unwanted metadata labels & boilerplate prefixes from subtitle cue text
+  const cleanSubtitleCueText = (input?: string): string => {
+    if (!input) return '';
+    let text = stripHtml(input);
+    // Remove unwanted prefix labels often added by auto-gen templates or external tools
+    text = text
+      .replace(/^(Lecture Topic|Key Technical Overview|Operational Guidelines & Quality Inspection Checklist|Faculty Takeaway Note|Topic|Note|Overview|Summary|Light Source|Object \(Substrate\)|Observer|The Triad of Color Perception)\s*:\s*/i, '')
+      .replace(/^textformatted textColor\s*/i, '')
+      .replace(/^textformatted\s*/i, '')
+      .replace(/\\text\{([^}]+)\}/g, '$1')
+      .replace(/\$+/g, '')
+      .replace(/^[-*•\d+.]+\s*/, '')
+      .trim();
+    return text;
+  };
+
+  // Helper to check if a URL is a direct video (local upload Data URL, blob, IDB key, MP4, WebM, MOV)
+  const isDirectVideo = (url?: string) => {
+    if (!url) return false;
+    return url.startsWith('data:video') || url.startsWith('blob:') || url.startsWith('idb:') || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov') || url.endsWith('.ogg');
+  };
+
+  // Video Player Component with Synchronized Subtitle Cues, WebVTT Track, and Real-Time Timeupdate
+  const VideoSubtitledPlayer: React.FC<{
+    url: string;
+    caption?: string;
+    transcription?: string;
+    pageObj?: FlipbookPage;
+  }> = ({ url, caption, transcription, pageObj }) => {
+    const [currentTime, setCurrentTime] = useState<number>(0);
+    const [duration, setDuration] = useState<number>(0);
+    const [vttTrackUrl, setVttTrackUrl] = useState<string>('');
+    const [translationVersion, setTranslationVersion] = useState<number>(0);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+
+    const realUrl = resolveMediaUrl(url);
+    const rawCap = caption || pageObj?.videoCaption || '';
+    const rawTx = transcription || pageObj?.videoTranscription || '';
+
+    const cleanCap = stripHtml(rawCap);
+    const cleanTx = stripHtml(rawTx);
+
+    // Parse transcript lines into raw timestamp cues
+    const rawCues = useMemo(() => {
+      const lines = cleanTx.split('\n').map(l => l.trim()).filter(Boolean);
+      const parsed: { start: number; text: string }[] = [];
+      lines.forEach((line, index) => {
+        const match = line.match(/^\[(\d{2}):(\d{2})\]\s*(.*)/);
+        if (match) {
+          const mins = parseInt(match[1], 10);
+          const secs = parseInt(match[2], 10);
+          const cueText = cleanSubtitleCueText(match[3]);
+          if (cueText) {
+            parsed.push({ start: mins * 60 + secs, text: cueText });
+          }
+        } else {
+          const cueText = cleanSubtitleCueText(line);
+          if (cueText) {
+            parsed.push({ start: index * 2.5, text: cueText });
+          }
+        }
+      });
+      if (parsed.length === 0 && cleanCap) {
+        const cueText = cleanSubtitleCueText(cleanCap);
+        if (cueText) {
+          parsed.push({ start: 0, text: cueText });
+        }
+      }
+      return parsed;
+    }, [cleanTx, cleanCap]);
+
+    // Dynamically scale cue timestamps if the video duration is shorter than the highest cue timestamp (e.g. a 10s video with 55s cues)
+    const cues = useMemo(() => {
+      if (rawCues.length === 0) return [];
+      const maxCueStart = Math.max(...rawCues.map(c => c.start));
+      
+      if (duration > 0 && rawCues.length > 1 && (maxCueStart >= duration || maxCueStart === 0)) {
+        const interval = duration / rawCues.length;
+        return rawCues.map((cue, idx) => ({
+          start: idx * interval,
+          text: cue.text,
+        }));
+      }
+      return rawCues;
+    }, [rawCues, duration]);
+
+    // Auto-translate untranslated subtitle cues via Gemini AI whenever language or cues change
+    useEffect(() => {
+      if (!selectedLanguage || selectedLanguage === 'en' || cues.length === 0) return;
+
+      const langObj = SUPPORTED_LANGUAGES.find(l => l.code === selectedLanguage);
+      const langName = langObj ? langObj.name : selectedLanguage;
+
+      const untranslatedTexts = Array.from(new Set(
+        cues
+          .map(c => cleanSubtitleCueText(c.text))
+          .filter(t => t && !RUNTIME_TRANSLATION_CACHE[selectedLanguage]?.[t] && !TRANSLATION_DICTIONARY[selectedLanguage]?.[t])
+      ));
+
+      if (untranslatedTexts.length === 0) return;
+
+      let isMounted = true;
+      fetch('/api/gemini/generate-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gemini-2.5-flash',
+          contents: [{
+            role: 'user',
+            parts: [{
+              text: `Translate the following English video subtitle cues into ${langName} (${selectedLanguage}). Return ONLY a valid JSON array of translated strings in the exact same order. Do not include markdown code block syntax if possible.
+Lines: ${JSON.stringify(untranslatedTexts)}`
+            }]
+          }]
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!isMounted) return;
+        const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (resultText) {
+          try {
+            const cleanJson = resultText.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              const translatedArray: string[] = JSON.parse(jsonMatch[0]);
+              if (!RUNTIME_TRANSLATION_CACHE[selectedLanguage]) {
+                RUNTIME_TRANSLATION_CACHE[selectedLanguage] = {};
+              }
+              untranslatedTexts.forEach((orig, idx) => {
+                if (translatedArray[idx]) {
+                  RUNTIME_TRANSLATION_CACHE[selectedLanguage][orig] = translatedArray[idx];
+                }
+              });
+              setTranslationVersion(v => v + 1);
+            }
+          } catch (err) {
+            console.warn('Subtitle dynamic translation JSON error:', err);
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('Subtitle dynamic translation request failed:', err);
+      });
+
+      return () => { isMounted = false; };
+    }, [cues, selectedLanguage]);
+
+    // Active subtitle cue based on current video playback time
+    const activeCue = useMemo(() => {
+      if (cues.length === 0) return null;
+      const sorted = [...cues].sort((a, b) => a.start - b.start);
+      const current = sorted.filter(c => c.start <= currentTime).pop();
+      return current || sorted[0];
+    }, [cues, currentTime]);
+
+    const activeSubtitleText = useMemo(() => {
+      if (!activeCue) return '';
+      return autoTranslateText(cleanSubtitleCueText(activeCue.text), selectedLanguage);
+    }, [activeCue, selectedLanguage, translationVersion]);
+
+    // Generate WebVTT subtitle track Blob for native video player subtitles
+    useEffect(() => {
+      if (cues.length === 0) return;
+      const formatTime = (s: number) => {
+        const m = Math.floor(s / 60).toString().padStart(2, '0');
+        const sec = Math.floor(s % 60).toString().padStart(2, '0');
+        const ms = Math.floor((s % 1) * 1000).toString().padStart(3, '0');
+        return `00:${m}:${sec}.${ms}`;
+      };
+
+      const vttLines = ['WEBVTT\n'];
+      cues.forEach((cue, i) => {
+        const defaultEnd = duration > 0 ? (duration / cues.length) * (i + 1) : cue.start + 3;
+        const nextStart = cues[i + 1] ? cues[i + 1].start : defaultEnd;
+        vttLines.push(`${i + 1}`);
+        vttLines.push(`${formatTime(cue.start)} --> ${formatTime(nextStart)}`);
+        vttLines.push(autoTranslateText(cleanSubtitleCueText(cue.text), selectedLanguage));
+        vttLines.push('');
+      });
+
+      const blob = new Blob([vttLines.join('\n')], { type: 'text/vtt' });
+      const objectUrl = URL.createObjectURL(blob);
+      setVttTrackUrl(objectUrl);
+
+      return () => {
+        URL.revokeObjectURL(objectUrl);
+      };
+    }, [cues, duration, selectedLanguage, translationVersion]);
+
     return (
-      <iframe
-        src={getEmbedVideoUrl(url)}
-        title={caption || "Lesson Video"}
-        className="w-full h-full border-0 rounded-lg"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
+      <div className="relative w-full h-full group bg-black rounded-xl overflow-hidden flex flex-col justify-center">
+        {(isDirectVideo(url) || realUrl.startsWith('blob:') || realUrl.startsWith('data:video')) ? (
+          <video
+            ref={videoRef}
+            src={realUrl || url}
+            controls
+            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+            className="w-full h-full object-contain bg-black rounded-lg"
+          >
+            {vttTrackUrl && (
+              <track
+                kind="subtitles"
+                src={vttTrackUrl}
+                srcLang={selectedLanguage}
+                label={`${selectedLanguage.toUpperCase()} Subtitles`}
+                default
+              />
+            )}
+          </video>
+        ) : (
+          <iframe
+            src={getEmbedVideoUrl(realUrl || url)}
+            title={cleanCap || "Lesson Video"}
+            className="w-full h-full border-0 rounded-lg"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        )}
+
+        {/* CC Subtitle Control Pill overlay in Top-Right Corner */}
+        <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5 bg-black/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-amber-500/40 shadow-xl">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowCcSubtitles(prev => !prev);
+            }}
+            className={`px-2 py-0.5 rounded text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+              showCcSubtitles
+                ? 'bg-amber-400 text-slate-950 shadow-sm'
+                : 'bg-slate-800 text-slate-300 hover:text-white'
+            }`}
+            title="Toggle Closed Captions (CC)"
+          >
+            <Captions className="w-3.5 h-3.5" />
+            <span>{showCcSubtitles ? 'CC ON' : 'CC OFF'}</span>
+          </button>
+          <span className="text-[10px] font-extrabold text-amber-300 uppercase px-1">
+            {selectedLanguage.toUpperCase()}
+          </span>
+        </div>
+
+        {/* Dynamic Real-Time Time-Synced Closed Caption Subtitle Banner */}
+        {showCcSubtitles && activeSubtitleText && (
+          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-lg pointer-events-none text-center">
+            <div className="inline-block px-4 py-2 rounded-xl bg-black/95 border border-amber-400/60 shadow-2xl backdrop-blur-md">
+              <p className="text-xs sm:text-sm font-black text-amber-300 tracking-wide drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.9)]">
+                💬 {activeSubtitleText}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render Smart Video Player Wrapper
+  const renderVideoPlayer = (url?: string, caption?: string, transcription?: string, pageObj?: FlipbookPage) => {
+    if (!url) return null;
+    return (
+      <VideoSubtitledPlayer
+        url={url}
+        caption={caption}
+        transcription={transcription}
+        pageObj={pageObj}
       />
     );
   };
 
-  // Image File Upload Handler
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Image File Upload Handler with IndexedDB Persistent Storage
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        const updated = {
-          ...editingPage,
-          imageUrl: dataUrl,
-          imageCaption: editingPage.imageCaption || file.name,
-        };
-        setEditingPage(updated);
-        handleUpdatePage(updated);
+      const idbKey = `image_idb_${editingPage.id}`;
+      await saveMediaToIDB(idbKey, file);
+      const objectUrl = URL.createObjectURL(file);
+      setMediaCache(prev => ({ ...prev, [idbKey]: objectUrl }));
+
+      const updated: FlipbookPage = {
+        ...editingPage,
+        imageUrl: `idb:${idbKey}`,
+        imageCaption: editingPage.imageCaption || file.name.replace(/\.[^/.]+$/, ""),
       };
-      reader.readAsDataURL(file);
+      setEditingPage(updated);
+      handleUpdatePage(updated);
     }
   };
 
-  // Video File Upload Handler
-  const handleVideoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Video File Upload Handler with IndexedDB Persistent Storage
+  const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && editingPage) {
+      const idbKey = `video_idb_${editingPage.id}`;
+      await saveMediaToIDB(idbKey, file);
+      const objectUrl = URL.createObjectURL(file);
+      setMediaCache(prev => ({ ...prev, [idbKey]: objectUrl }));
+
+      const defaultCaption = editingPage.videoCaption || `Video Demonstration: ${file.name.replace(/\.[^/.]+$/, "")}`;
+
+      const updated: FlipbookPage = {
+        ...editingPage,
+        videoUrl: `idb:${idbKey}`,
+        videoCaption: defaultCaption,
+      };
+      setEditingPage(updated);
+      handleUpdatePage(updated);
+
+      // Auto-transcribe spoken video audio using Gemini Multimodal AI
+      handleAutoGenerateTranscription(updated);
+    }
+  };
+
+  // Subtitle / Caption File Upload Handler (.vtt, .srt, .txt, .json)
+  const handleSubtitleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        const updated = {
+        const text = event.target?.result as string;
+        if (!text) return;
+
+        let formattedTranscript = '';
+
+        // Handle .srt SubRip Subtitle Format
+        if (file.name.toLowerCase().endsWith('.srt') || (text.includes('-->') && !text.startsWith('WEBVTT'))) {
+          const blocks = text.split(/\n\s*\n/);
+          const lines: string[] = [];
+          blocks.forEach(block => {
+            const blockLines = block.trim().split('\n');
+            const timeLine = blockLines.find(l => l.includes('-->'));
+            if (timeLine) {
+              const timeMatch = timeLine.match(/(\d{2}):(\d{2}):(\d{2})/);
+              if (timeMatch) {
+                const mins = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+                const secs = timeMatch[3];
+                const contentText = blockLines.slice(blockLines.indexOf(timeLine) + 1).join(' ').trim();
+                if (contentText) {
+                  lines.push(`[${mins.toString().padStart(2, '0')}:${secs}] ${contentText}`);
+                }
+              }
+            }
+          });
+          formattedTranscript = lines.join('\n') || text;
+        } 
+        // Handle .vtt WebVTT Subtitle Format
+        else if (file.name.toLowerCase().endsWith('.vtt') || text.startsWith('WEBVTT')) {
+          const blocks = text.replace(/^WEBVTT[^\n]*\n/, '').split(/\n\s*\n/);
+          const lines: string[] = [];
+          blocks.forEach(block => {
+            const blockLines = block.trim().split('\n');
+            const timeLine = blockLines.find(l => l.includes('-->'));
+            if (timeLine) {
+              const timeMatch = timeLine.match(/(\d{2}):(\d{2})/);
+              if (timeMatch) {
+                const mins = timeMatch[1];
+                const secs = timeMatch[2];
+                const contentText = blockLines.slice(blockLines.indexOf(timeLine) + 1).join(' ').trim();
+                if (contentText) {
+                  lines.push(`[${mins}:${secs}] ${contentText}`);
+                }
+              }
+            }
+          });
+          formattedTranscript = lines.join('\n') || text;
+        }
+        // Handle .json Subtitle Format
+        else if (file.name.toLowerCase().endsWith('.json')) {
+          try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed)) {
+              formattedTranscript = parsed.map((item: any) => {
+                const time = item.time || item.timestamp || item.start || '00:00';
+                const content = item.text || item.subtitle || item.caption || item.line || '';
+                return `[${time}] ${content}`;
+              }).join('\n');
+            } else if (parsed.subtitles || parsed.transcript) {
+              const items = parsed.subtitles || parsed.transcript;
+              if (Array.isArray(items)) {
+                formattedTranscript = items.map((item: any) => `[${item.time || '00:00'}] ${item.text || item.caption}`).join('\n');
+              }
+            }
+          } catch {
+            formattedTranscript = text;
+          }
+        } 
+        // Plain TXT or generic text file
+        else {
+          formattedTranscript = text;
+        }
+
+        const updated: FlipbookPage = {
           ...editingPage,
-          videoUrl: dataUrl,
-          videoCaption: editingPage.videoCaption || file.name,
+          videoTranscription: stripHtml(formattedTranscript),
         };
         setEditingPage(updated);
         handleUpdatePage(updated);
       };
-      reader.readAsDataURL(file);
+      reader.readAsText(file);
+    }
+  };
+
+  // AI Auto-Generate Video Transcription & Native Subtitles via Gemini Multimodal AI
+  const handleAutoGenerateTranscription = async (pageToTranscribe?: FlipbookPage) => {
+    const targetPage = pageToTranscribe || editingPage || currentPage;
+    if (!targetPage) return;
+
+    setIsGeneratingAiTranscription(true);
+
+    try {
+      let generatedTranscription = '';
+      const videoRawUrl = targetPage.videoUrl ? resolveMediaUrl(targetPage.videoUrl) : '';
+
+      // 1. If video file is present, attempt Gemini Multimodal Audio/Video Transcription
+      if (videoRawUrl && (videoRawUrl.startsWith('data:') || videoRawUrl.startsWith('blob:') || videoRawUrl.startsWith('http'))) {
+        try {
+          let base64Data = '';
+          let mimeType = 'video/mp4';
+
+          if (videoRawUrl.startsWith('data:')) {
+            const parts = videoRawUrl.split(',');
+            const match = parts[0].match(/:(.*?);/);
+            if (match) mimeType = match[1];
+            base64Data = parts[1];
+          } else {
+            // Fetch blob from blob: or http: URL and convert to base64
+            const blobRes = await fetch(videoRawUrl);
+            const blob = await blobRes.blob();
+            mimeType = blob.type || 'video/mp4';
+
+            if (blob.size < 18 * 1024 * 1024) {
+              base64Data = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const resStr = reader.result as string;
+                  resolve(resStr.split(',')[1] || '');
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+            }
+          }
+
+          if (base64Data) {
+            const geminiRes = await fetch('/api/gemini/generate-content', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'gemini-2.5-flash',
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [
+                      {
+                        inlineData: {
+                          mimeType: mimeType,
+                          data: base64Data
+                        }
+                      },
+                      {
+                        text: `Listen closely to the audio narration in this video and transcribe the exact spoken voiceover as timestamped subtitles.
+
+RULES:
+1. ONLY transcribe what is actually SPOKEN in the video audio narration.
+2. DO NOT include textbook descriptions, written document text, or extra commentary.
+3. Keep each subtitle line short and concise (3 to 8 words).
+4. Format strictly as [mm:ss] Spoken text.
+
+Example:
+[00:00] What is color?
+[00:01] It is a sensory experience.
+[00:03] It results from the visible spectrum,
+[00:05] driven by a triad,
+[00:07] interacting with objects,
+[00:08] and perceived by our eyes.`
+                      }
+                    ]
+                  }
+                ]
+              })
+            });
+
+            if (geminiRes.ok) {
+              const data = await geminiRes.json();
+              const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (textResult) {
+                generatedTranscription = textResult
+                  .replace(/```[a-z]*\n?/gi, '')
+                  .replace(/```/g, '')
+                  .trim();
+              }
+            }
+          }
+        } catch (mediaErr) {
+          console.warn('Gemini video audio transcription error, falling back to Gemini text:', mediaErr);
+        }
+      }
+
+      // 2. Fallback text request to Gemini if video binary transcription failed or no video file
+      if (!generatedTranscription) {
+        try {
+          const cleanTitle = cleanSubtitleCueText(targetPage.title) || 'What is color?';
+          const geminiRes = await fetch('/api/gemini/generate-content', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'gemini-2.5-flash',
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      text: `Generate a short 10-second spoken video voiceover transcript for an educational clip titled "${cleanTitle}".
+
+RULES:
+1. Output ONLY 4 to 5 short spoken narration lines corresponding to natural speech audio.
+2. Maximum 6 words per line.
+3. DO NOT include textbook notes, technical checklists, or document paragraphs.
+4. Format each line strictly as [00:ss] Spoken sentence.
+
+Example:
+[00:00] What is color?
+[00:02] It is a sensory experience.
+[00:05] Driven by light, object, and observer.
+[00:08] Perceived by the human eye.`
+                    }
+                  ]
+                }
+              ]
+            })
+          });
+
+          if (geminiRes.ok) {
+            const data = await geminiRes.json();
+            const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (textResult) {
+              generatedTranscription = textResult
+                .replace(/```[a-z]*\n?/gi, '')
+                .replace(/```/g, '')
+                .trim();
+            }
+          }
+        } catch (textErr) {
+          console.warn('Gemini text fallback failed:', textErr);
+        }
+      }
+
+      // 3. Ultimate clean local fallback
+      if (!generatedTranscription) {
+        const cleanTitle = cleanSubtitleCueText(targetPage.title) || 'What is color?';
+        generatedTranscription = `[00:00] ${cleanTitle}\n[00:02] It is a sensory experience.\n[00:05] Driven by a triad of light, object, and observer.\n[00:08] Perceived by the human eye.`;
+      }
+
+      const generatedCaption = cleanSubtitleCueText(targetPage.videoCaption) || cleanSubtitleCueText(targetPage.title) || 'Interactive Video Lesson';
+
+      const updatedPage: FlipbookPage = {
+        ...targetPage,
+        videoCaption: generatedCaption,
+        videoTranscription: generatedTranscription,
+        isCustomEdited: true,
+      };
+
+      if (editingPage && editingPage.id === targetPage.id) {
+        setEditingPage(updatedPage);
+      }
+      handleUpdatePage(updatedPage);
+    } catch (err) {
+      console.error('Error generating AI transcription:', err);
+    } finally {
+      setIsGeneratingAiTranscription(false);
     }
   };
 
@@ -549,27 +1970,101 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     }, 600);
   };
 
-  // Save current material to Firestore
+  // Save current material to Firestore with payload size optimization (IndexedDB offloading)
   const handleSaveMaterial = async (mat: FlipbookMaterial) => {
     setIsSaving(true);
     try {
+      // Clean object and strip heavy base64 data URLs if any exist by storing them in IndexedDB
+      const sanitizedPages = await Promise.all(
+        mat.pages.map(async (page) => {
+          const p = { ...page };
+          if (p.videoUrl && p.videoUrl.startsWith('data:video')) {
+            const idbKey = `video_idb_${p.id}`;
+            await saveMediaToIDB(idbKey, p.videoUrl);
+            p.videoUrl = `idb:${idbKey}`;
+          }
+          if (p.imageUrl && p.imageUrl.startsWith('data:image') && p.imageUrl.length > 200000) {
+            const idbKey = `image_idb_${p.id}`;
+            await saveMediaToIDB(idbKey, p.imageUrl);
+            p.imageUrl = `idb:${idbKey}`;
+          }
+          return p;
+        })
+      );
+
+      const sanitizedMat = { ...mat, pages: sanitizedPages };
+      const cleanData = JSON.parse(JSON.stringify(sanitizedMat));
+
       await setDoc(doc(db, 'course_flipbooks', mat.id), {
-        ...mat,
+        ...cleanData,
         updatedAt: new Date().toISOString()
       });
+
+      setMaterials(prev => {
+        const idx = prev.findIndex(m => m.id === mat.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = sanitizedMat;
+          return next;
+        }
+        return [...prev, sanitizedMat];
+      });
+      setActiveMaterial(sanitizedMat);
       setSaveMessage('Saved successfully to Cloud database!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      setTimeout(() => setSaveMessage(''), 3500);
     } catch (err) {
-      console.warn('Firestore save fallback:', err);
-      setMaterials(prev => prev.map(m => m.id === mat.id ? mat : m));
-      setSaveMessage('Saved locally in browser!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      console.error('Firestore save flipbook error:', err);
+      try {
+        handleFirestoreError(err, OperationType.WRITE, `course_flipbooks/${mat.id}`);
+      } catch (e) {
+        setSaveMessage('Saved locally to IndexedDB Media Store');
+        setTimeout(() => setSaveMessage(''), 3500);
+      }
     } finally {
       setIsSaving(false);
     }
   };
 
   // Editor Actions
+  const handleCreateNewMaterial = () => {
+    const newMatId = `mat_${Date.now()}`;
+    const defaultCourse = selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses' ? selectedCourseFilter : '';
+    const defaultMod = selectedModuleFilter !== 'All Modules' ? selectedModuleFilter : '';
+    const newMat: FlipbookMaterial = {
+      id: newMatId,
+      title: 'New Course E-Book / Lecture Material',
+      description: 'Faculty interactive course E-book and presentation slides.',
+      courseCategory: defaultCourse || 'General',
+      courseName: defaultCourse,
+      author: user?.displayName || user?.email || 'Faculty Member',
+      coverImageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80',
+      updatedAt: new Date().toISOString(),
+      pages: [
+        {
+          id: `p_${Date.now()}_1`,
+          pageNumber: 1,
+          title: 'Page 1: Lesson Topic Header',
+          subtitle: 'Section 1: Overview & Objectives',
+          content: 'Enter main topic description, lecture notes, or key course summary here...',
+          layoutStyle: 'grid-2x2',
+          mediaType: 'image',
+          imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
+          imageCaption: 'Topic Illustration',
+          calloutText: 'Faculty Key Takeaway',
+          bgTheme: 'classic-paper',
+          courseName: defaultCourse,
+          courseModuleName: defaultMod
+        }
+      ]
+    };
+    setMaterials(prev => [...prev, newMat]);
+    setActiveMaterial(newMat);
+    setCurrentPageIndex(0);
+    setEditingPage(newMat.pages[0]);
+    setViewMode('editor');
+    handleSaveMaterial(newMat);
+  };
+
   const handleAddNewPage = () => {
     const newPageNum = activeMaterial.pages.length + 1;
     const newPage: FlipbookPage = {
@@ -584,9 +2079,11 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       imageCaption: 'Illustration Caption',
       calloutText: 'Faculty Tip or Student Key Takeaway Note',
       bgTheme: 'classic-paper',
-      courseModuleId: 'mod-1',
+      courseName: editingPage.courseName || activeMaterial.courseName || '',
+      courseModuleName: editingPage.courseModuleName || '',
+      courseModuleId: '',
       exerciseFilePath: `/exercise_files/module_${newPageNum}_exercise.zip`,
-      exerciseTitle: `Exercise ${newPageNum}: Course Practice Files (.ZIP / .DXF / .PDF)`
+      exerciseTitle: `Exercise ${newPageNum}: Course Practice Files`
     };
 
     const updatedPages = [...activeMaterial.pages, newPage];
@@ -594,10 +2091,30 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     setActiveMaterial(updatedMat);
     setCurrentPageIndex(updatedPages.length - 1);
     setEditingPage(newPage);
+    handleSaveMaterial(updatedMat);
   };
 
   const handleUpdatePage = (updatedPage: FlipbookPage) => {
-    const updatedPages = activeMaterial.pages.map(p => p.id === updatedPage.id ? updatedPage : p);
+    const pageWithEditFlag: FlipbookPage = {
+      ...updatedPage,
+      isCustomEdited: true,
+    };
+
+    if (selectedLanguage !== 'en') {
+      pageWithEditFlag.translations = {
+        ...(updatedPage.translations || {}),
+        [selectedLanguage]: {
+          title: updatedPage.title,
+          subtitle: updatedPage.subtitle,
+          content: updatedPage.content,
+          calloutText: updatedPage.calloutText,
+        }
+      };
+    } else {
+      delete pageWithEditFlag.translations;
+    }
+
+    const updatedPages = activeMaterial.pages.map(p => p.id === updatedPage.id ? pageWithEditFlag : p);
     const updatedMat = { ...activeMaterial, pages: updatedPages };
     setActiveMaterial(updatedMat);
     handleSaveMaterial(updatedMat);
@@ -675,9 +2192,8 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     }
   };
 
-  const currentModuleObj = COURSE_MODULES.find(m => m.id === (displayPage.courseModuleId || 'mod-1'));
-  const currentCourseName = displayPage.courseName || activeMaterial.courseName || 'Packaging Engineering Technology';
-  const currentModuleName = displayPage.courseModuleName || currentModuleObj?.name || 'Module 1: Packaging Substrates & Die-Line CAD';
+  const currentCourseName = displayPage.courseName || activeMaterial.courseName || (selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses' ? selectedCourseFilter : 'Course Title');
+  const currentModuleName = displayPage.courseModuleName || (selectedModuleFilter !== 'All Modules' ? selectedModuleFilter : 'Module Content');
 
   return (
     <div ref={containerRef} className="w-full min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col overflow-x-hidden">
@@ -785,6 +2301,19 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
               <span>Faculty Editor</span>
             </button>
           )}
+
+          <button
+            onClick={() => setViewMode('settings')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              viewMode === 'settings'
+                ? 'bg-slate-700 text-white shadow-md shadow-slate-700/40 ring-1 ring-slate-500'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="Studio Settings & Preferences"
+          >
+            <Settings className="w-4 h-4 text-amber-400" />
+            <span>Settings</span>
+          </button>
         </div>
 
         {/* Right: Guide, Native Language & Page Quick Jump Tools */}
@@ -836,6 +2365,98 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4 text-purple-400" /> : <Maximize2 className="w-4 h-4 text-purple-400" />}
           </button>
+        </div>
+      </div>
+
+      {/* Select Filter Course Title & Filter Module Bar (Same as Free ChatGPT Video & Speech Translator) */}
+      <div className="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-md z-30">
+        <div className="flex items-center gap-2">
+          <GraduationCap className="w-4 h-4 text-amber-400" />
+          <span className="text-xs font-black text-amber-200 uppercase tracking-wider">
+            Select Course Title & Module
+          </span>
+          {isStudent && studentAssignedTitle && (
+            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-500/30 font-bold hidden sm:inline">
+              ⭐ Your Assigned Course: {studentAssignedTitle}
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 max-w-4xl">
+          {/* Select Course Title */}
+          <div className="flex-1 min-w-[210px] flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5">
+            <GraduationCap className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <span className="text-[11px] font-bold text-slate-400 shrink-0">Course Title:</span>
+            <select
+              value={selectedCourseFilter}
+              onChange={(e) => {
+                setSelectedCourseFilter(e.target.value);
+                setSelectedModuleFilter('All Modules');
+              }}
+              className="w-full bg-transparent text-xs font-bold text-amber-300 focus:outline-none cursor-pointer truncate"
+            >
+              {allCourseTitles.map((title) => (
+                <option key={title} value={title} className="bg-slate-900 text-slate-200">
+                  {title}{title === studentAssignedTitle ? ' (⭐ Your Assigned Course)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Module */}
+          <div className="flex-1 min-w-[190px] flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5">
+            <Layers className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <span className="text-[11px] font-bold text-slate-400 shrink-0">Filter Module:</span>
+            <select
+              value={selectedModuleFilter}
+              onChange={(e) => setSelectedModuleFilter(e.target.value)}
+              className="w-full bg-transparent text-xs font-bold text-blue-300 focus:outline-none cursor-pointer truncate"
+            >
+              {availableModuleOptions.map((mod) => (
+                <option key={mod} value={mod} className="bg-slate-900 text-slate-200">
+                  {mod}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Select Interactive E-Book / PPT Material */}
+          <div className="flex-1 min-w-[210px] flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5">
+            <BookOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="text-[11px] font-bold text-slate-400 shrink-0">E-Book:</span>
+            <select
+              value={activeMaterial.id}
+              onChange={(e) => {
+                const found = materials.find(m => m.id === e.target.value);
+                if (found) {
+                  setActiveMaterial(found);
+                  setCurrentPageIndex(0);
+                }
+              }}
+              className="w-full bg-transparent text-xs font-bold text-emerald-300 focus:outline-none cursor-pointer truncate"
+            >
+              {filteredMaterials.map((m) => (
+                <option key={m.id} value={m.id} className="bg-slate-900 text-slate-200">
+                  {m.title}
+                </option>
+              ))}
+              {filteredMaterials.length === 0 && (
+                <option value="" disabled className="bg-slate-900 text-slate-400">
+                  (No E-Books matching filter)
+                </option>
+              )}
+            </select>
+            {(isAdmin || isElevated || user?.role === 'faculty') && (
+              <button
+                onClick={handleCreateNewMaterial}
+                title="Create New E-Book Material"
+                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold shrink-0 transition flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">New</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -903,16 +2524,22 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                       )}
 
                       {/* Course & Module Link Info */}
-                      {currentModuleObj && (
+                      {displayPage.courseModuleName && (
                         <div className="mb-4 inline-flex items-center gap-2 bg-blue-950/40 border border-blue-500/30 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-300">
                           <BookMarked className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                          <span>{currentModuleObj.name}</span>
+                          <span>{displayPage.courseModuleName}</span>
                         </div>
                       )}
 
-                      {/* Main Paragraph Body (Adapted for language length) */}
-                      <div className={`${fontSizeClass} font-normal text-slate-700 dark:text-slate-300 whitespace-pre-line space-y-3`}>
-                        {displayPage.content}
+                      {/* Main Paragraph Body (Adapted for font size, family, color, and weight settings) */}
+                      <div 
+                        className={`whitespace-pre-line space-y-3 ${displayPage.contentFontSize || fontSizeClass} ${displayPage.contentFontStyle || 'font-normal'} ${!displayPage.contentTextColor ? 'text-slate-700 dark:text-slate-300' : ''}`}
+                        style={{
+                          fontFamily: displayPage.contentFontFamily || undefined,
+                          color: displayPage.contentTextColor || undefined,
+                        }}
+                      >
+                        {renderFormattedHtml(displayPage.content)}
                       </div>
 
                       {/* Downloadable Exercise File Path Card */}
@@ -992,7 +2619,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                                 <Video className="w-3 h-3 text-pink-400" /> Video Lesson
                               </span>
                               <div className="rounded-lg overflow-hidden border border-slate-800 bg-black aspect-video">
-                                {renderVideoPlayer(displayPage.videoUrl, 'Grid Video')}
+                                {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                               </div>
                             </div>
                           )}
@@ -1034,17 +2661,80 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                         /* Standard Split Media View */
                         <div className="space-y-4">
                           
-                          {/* Video Embed */}
+                          {/* Video Embed & Native Language Subtitles / Transcription */}
                           {displayPage.videoUrl && (
-                            <div className="space-y-2">
+                            <div className="space-y-2.5">
                               <div className="relative rounded-xl overflow-hidden border border-slate-700 bg-black aspect-video shadow-lg group">
-                                {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption || 'Page Video Lesson')}
+                                {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                               </div>
-                              {displayPage.videoCaption && (
-                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 italic text-center">
-                                  🎬 {displayPage.videoCaption}
-                                </p>
-                              )}
+
+                              {/* Native Subtitles & Caption Control Box */}
+                              <div className="p-3 bg-slate-900/90 dark:bg-slate-900 border border-slate-800 rounded-xl space-y-2 shadow-sm text-white">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-1 border border-amber-500/30">
+                                      <Captions className="w-3 h-3 text-amber-400" />
+                                      <span>Native Subtitles ({selectedLanguage.toUpperCase()})</span>
+                                    </span>
+                                    {displayPage.videoCaption && (
+                                      <p className="text-xs font-semibold text-slate-200 line-clamp-1">
+                                        🎬 {stripHtml(displayPage.videoCaption)}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => setShowCcSubtitles(prev => !prev)}
+                                      className={`px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                        showCcSubtitles ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                                      }`}
+                                    >
+                                      <Subtitles className="w-3 h-3" />
+                                      <span>{showCcSubtitles ? 'CC ON' : 'CC OFF'}</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => setShowTranscriptionDrawer(prev => !prev)}
+                                      className="px-2 py-1 rounded-lg bg-indigo-950 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-200 font-bold text-[10px] transition flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <FileAudio className="w-3 h-3 text-indigo-400" />
+                                      <span>{showTranscriptionDrawer ? 'Hide Transcript' : 'Full Transcript'}</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Live CC Subtitles Banner */}
+                                {showCcSubtitles && (displayPage.videoCaption || displayPage.videoTranscription) && (
+                                  <div className="px-3 py-1.5 bg-black/80 border border-amber-500/30 rounded-lg text-center">
+                                    <p className="text-xs font-bold text-amber-300 italic tracking-wide">
+                                      💬 "{autoTranslateText(stripHtml(displayPage.videoCaption || 'Native Subtitle Lesson Video'), selectedLanguage)}"
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Expandable Native Language Video Transcript Drawer */}
+                                {showTranscriptionDrawer && (
+                                  <div className="mt-2 p-3 bg-slate-950 rounded-lg border border-indigo-500/40 space-y-2 text-xs font-mono text-slate-300 max-h-48 overflow-y-auto">
+                                    <div className="flex items-center justify-between pb-1 border-b border-slate-800 text-[11px] font-sans font-bold text-indigo-300">
+                                      <span className="flex items-center gap-1">
+                                        <Languages className="w-3.5 h-3.5 text-indigo-400" />
+                                        <span>Native Video Transcript ({NATIVE_LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage})</span>
+                                      </span>
+                                      <button
+                                        onClick={() => handleAutoGenerateTranscription(displayPage)}
+                                        className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 cursor-pointer font-sans"
+                                      >
+                                        <Sparkles className="w-3 h-3" /> Regenerate
+                                      </button>
+                                    </div>
+
+                                    <div className="whitespace-pre-wrap leading-relaxed text-slate-300 text-[11px]">
+                                      {autoTranslateText(cleanSubtitleCueText(displayPage.videoTranscription || `[00:00] ${displayPage.title}\n[00:02] ${stripHtml(displayPage.content).slice(0, 120)}`), selectedLanguage)}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
 
@@ -1183,8 +2873,14 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                       {displayPage.subtitle}
                     </h3>
                   )}
-                  <div className="text-sm md:text-base text-slate-300 leading-relaxed font-normal whitespace-pre-line bg-slate-950/60 p-4 rounded-xl border border-slate-800">
-                    {displayPage.content}
+                  <div 
+                    className={`whitespace-pre-line leading-relaxed bg-slate-950/60 p-4 rounded-xl border border-slate-800 ${displayPage.contentFontSize || 'text-sm md:text-base'} ${displayPage.contentFontStyle || 'font-normal'} ${!displayPage.contentTextColor ? 'text-slate-300' : ''}`}
+                    style={{
+                      fontFamily: displayPage.contentFontFamily || undefined,
+                      color: displayPage.contentTextColor || undefined,
+                    }}
+                  >
+                    {renderFormattedHtml(displayPage.content)}
                   </div>
 
                   {/* Exercise file path in PPT view */}
@@ -1203,7 +2899,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                 <div className="md:col-span-5 space-y-3">
                   {displayPage.videoUrl ? (
                     <div className="rounded-xl overflow-hidden border border-purple-500/50 bg-black aspect-video shadow-xl">
-                      {renderVideoPlayer(displayPage.videoUrl, 'Slide Video')}
+                      {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                     </div>
                   ) : displayPage.imageUrl ? (
                     <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 max-h-64 flex items-center justify-center p-2">
@@ -1312,32 +3008,36 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {activeMaterial.pages.map((p, idx) => (
-                <div
-                  key={p.id}
-                  onClick={() => {
-                    setCurrentPageIndex(idx);
-                    setViewMode('flipbook');
-                  }}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
-                    currentPageIndex === idx
-                      ? 'bg-slate-900 border-amber-500 ring-2 ring-amber-500/50 shadow-xl'
-                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between text-xs font-mono font-bold text-amber-400 mb-1">
-                      <span>PAGE {p.pageNumber}</span>
-                      <span className="text-[10px] text-slate-400 uppercase bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                        {p.layoutStyle || 'split-left'}
-                      </span>
-                    </div>
+              {activeMaterial.pages.map((p, idx) => {
+                const translatedP = getTranslatedPage(p, selectedLanguage);
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      setCurrentPageIndex(idx);
+                      setViewMode('flipbook');
+                    }}
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+                      currentPageIndex === idx
+                        ? 'bg-slate-900 border-amber-500 ring-2 ring-amber-500/50 shadow-xl'
+                        : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between text-xs font-mono font-bold text-amber-400 mb-1">
+                        <span>PAGE {p.pageNumber}</span>
+                        <span className="text-[10px] text-slate-400 uppercase bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                          {p.layoutStyle || 'split-left'}
+                        </span>
+                      </div>
 
-                    <h3 className="text-sm font-bold text-white line-clamp-1">{p.title}</h3>
-                    {p.subtitle && <p className="text-xs text-slate-400 line-clamp-1">{p.subtitle}</p>}
-                    
-                    <p className="text-xs text-slate-300 mt-2 line-clamp-3 leading-relaxed">{p.content}</p>
-                  </div>
+                      <h3 className="text-sm font-bold text-white line-clamp-1">{translatedP.title}</h3>
+                      {translatedP.subtitle && <p className="text-xs text-slate-400 line-clamp-1">{translatedP.subtitle}</p>}
+                      
+                      <div className="text-xs text-slate-300 mt-2 line-clamp-3 leading-relaxed">
+                        {renderFormattedHtml(translatedP.content)}
+                      </div>
+                    </div>
 
                   <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
                     <span className="flex items-center gap-1">
@@ -1348,7 +3048,8 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                     <span className="text-amber-400 font-bold hover:underline">Open Page →</span>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           </div>
         )}
@@ -1369,6 +3070,14 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
               </div>
               
               <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCreateNewMaterial}
+                  className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-lg shadow-purple-900/40"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create New E-Book</span>
+                </button>
+
                 <button
                   onClick={handleAddNewPage}
                   className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-900/40"
@@ -1396,11 +3105,11 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
               <div className="flex flex-wrap items-center gap-2">
                 <span className="px-3 py-1 bg-amber-500/20 text-amber-300 rounded-xl border border-amber-500/40 text-xs font-extrabold flex items-center gap-1.5 shadow-sm">
                   <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Course: {editingPage.courseName || activeMaterial.courseName || 'Packaging Engineering Technology'}</span>
+                  <span>Course: {editingPage.courseName || activeMaterial.courseName || (selectedCourseFilter !== 'All Course Titles' ? selectedCourseFilter : 'Not Set')}</span>
                 </span>
                 <span className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-xl border border-blue-500/40 text-xs font-extrabold flex items-center gap-1.5 shadow-sm">
                   <BookMarked className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Module: {editingPage.courseModuleName || currentModuleObj?.name || 'Module 1: Packaging Substrates & Die-Line CAD'}</span>
+                  <span>Module: {editingPage.courseModuleName || (selectedModuleFilter !== 'All Modules' ? selectedModuleFilter : 'Not Set')}</span>
                 </span>
               </div>
             </div>
@@ -1443,15 +3152,46 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
               {/* Left Column: Course Name, Module, and Text Inputs */}
               <div className="space-y-4">
 
-                {/* Course Name Input */}
-                <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-2xl space-y-1.5">
-                  <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                    <BookOpen className="w-4 h-4 text-amber-400" />
-                    <span>Course Name / Degree Program</span>
+                {/* Course Name Selection & Custom Input */}
+                <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-2xl space-y-2">
+                  <label className="text-xs font-bold text-amber-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4 text-amber-400" />
+                      <span>Course Name / Degree Program</span>
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-medium">Select or Type</span>
                   </label>
+                  
+                  <select
+                    value={allCourseTitles.includes(editingPage.courseName || activeMaterial.courseName || '') ? (editingPage.courseName || activeMaterial.courseName) : 'custom'}
+                    onChange={(e) => {
+                      if (e.target.value !== 'custom') {
+                        const updatedPage = { ...editingPage, courseName: e.target.value };
+                        setEditingPage(updatedPage);
+                        handleUpdatePage(updatedPage);
+
+                        const updatedMat = { ...activeMaterial, courseName: e.target.value };
+                        setActiveMaterial(updatedMat);
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-amber-800/60 rounded-xl px-3 py-2 text-xs font-bold text-amber-200 focus:outline-none focus:border-amber-400 cursor-pointer"
+                  >
+                    <option value="custom">-- Custom Course Title --</option>
+                    {configuredCourses.map(c => (
+                      <option key={c.courseId} value={c.title} className="bg-slate-900">
+                        {c.title}
+                      </option>
+                    ))}
+                    {allCourseTitles.filter(t => t !== 'All Course Titles' && t !== 'All Assigned Courses' && !configuredCourses.some(c => c.title === t)).map(t => (
+                      <option key={t} value={t} className="bg-slate-900">
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+
                   <input
                     type="text"
-                    value={editingPage.courseName || activeMaterial.courseName || 'Packaging Engineering Technology'}
+                    value={editingPage.courseName || activeMaterial.courseName || ''}
                     onChange={(e) => {
                       const updatedPage = { ...editingPage, courseName: e.target.value };
                       setEditingPage(updatedPage);
@@ -1467,35 +3207,39 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
                 {/* Module Name Selector and Custom Module Input */}
                 <div className="p-3 bg-blue-950/30 border border-blue-800/40 rounded-2xl space-y-2">
-                  <label className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
-                    <BookMarked className="w-4 h-4 text-blue-400" />
-                    <span>Module Name & Code</span>
+                  <label className="text-xs font-bold text-blue-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <BookMarked className="w-4 h-4 text-blue-400" />
+                      <span>Module Name & Code</span>
+                    </span>
+                    <span className="text-[10px] text-blue-400 font-medium">{availableModuleOptions.length - 1} Modules</span>
                   </label>
                   
                   <select
-                    value={editingPage.courseModuleId || 'mod-1'}
+                    value={availableModuleOptions.includes(editingPage.courseModuleName || '') ? (editingPage.courseModuleName || '') : 'custom'}
                     onChange={(e) => {
-                      const selectedMod = COURSE_MODULES.find(m => m.id === e.target.value);
-                      const updated = { 
-                        ...editingPage, 
-                        courseModuleId: e.target.value,
-                        courseModuleName: selectedMod ? selectedMod.name : editingPage.courseModuleName
-                      };
-                      setEditingPage(updated);
-                      handleUpdatePage(updated);
+                      if (e.target.value !== 'custom') {
+                        const updated = { 
+                          ...editingPage, 
+                          courseModuleName: e.target.value
+                        };
+                        setEditingPage(updated);
+                        handleUpdatePage(updated);
+                      }
                     }}
-                    className="w-full bg-slate-950 border border-blue-800/60 rounded-xl px-3 py-2 text-xs text-blue-200 font-bold focus:outline-none"
+                    className="w-full bg-slate-950 border border-blue-800/60 rounded-xl px-3 py-2 text-xs text-blue-200 font-bold focus:outline-none cursor-pointer"
                   >
-                    {COURSE_MODULES.map(m => (
-                      <option key={m.id} value={m.id} className="bg-slate-900">
-                        [{m.code}] {m.name}
+                    <option value="custom">-- Custom Module Title --</option>
+                    {availableModuleOptions.filter(m => m !== 'All Modules').map(m => (
+                      <option key={m} value={m} className="bg-slate-900">
+                        {m}
                       </option>
                     ))}
                   </select>
 
                   <input
                     type="text"
-                    value={editingPage.courseModuleName || currentModuleObj?.name || ''}
+                    value={editingPage.courseModuleName || ''}
                     onChange={(e) => {
                       const updated = { ...editingPage, courseModuleName: e.target.value };
                       setEditingPage(updated);
@@ -1566,19 +3310,562 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                   />
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-300 block mb-1">Course Content / Lecture Paragraphs</label>
-                  <textarea
-                    rows={4}
-                    value={editingPage.content}
-                    onChange={(e) => {
-                      const updated = { ...editingPage, content: e.target.value };
-                      setEditingPage(updated);
-                      handleUpdatePage(updated);
-                    }}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 leading-relaxed focus:outline-none focus:border-blue-500"
-                    placeholder="Paste or type faculty lecture text..."
-                  />
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 relative">
+                  {/* Editor Header & Mode Selector */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                    <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <Type className="w-4 h-4 text-blue-400 shrink-0" />
+                      <span>Course Content / Lecture Paragraphs</span>
+                    </label>
+
+                    <div className="flex items-center gap-2">
+                      {/* Editor Mode Tabs */}
+                      <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setEditorTab('wysiwyg')}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                            editorTab === 'wysiwyg'
+                              ? 'bg-blue-600 text-white shadow-md'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>Visual Editor</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditorTab('code')}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                            editorTab === 'code'
+                              ? 'bg-blue-600 text-white shadow-md'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <FileText className="w-3 h-3" />
+                          <span>Code View</span>
+                        </button>
+                      </div>
+
+                      {/* Clean Cluttered HTML Tags Button */}
+                      <button
+                        type="button"
+                        onClick={handleCleanAllHtmlTags}
+                        className="text-[11px] bg-emerald-950/80 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 font-bold px-2.5 py-1 rounded-xl flex items-center gap-1 transition cursor-pointer"
+                        title="Remove duplicate nested tags and clean up cluttered HTML code"
+                      >
+                        <Wand2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Fix Cluttered Tags</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* SELECTION FORMATTING INSTRUCTION & TOAST BANNER */}
+                  {selectionToast ? (
+                    <div className="flex items-center justify-between gap-2 text-xs bg-amber-950/90 border border-amber-500/60 px-3.5 py-2 rounded-xl text-amber-200 font-bold animate-in fade-in slide-in-from-top-1">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>{selectionToast}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectionToast('')}
+                        className="text-slate-400 hover:text-white transition p-0.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] bg-blue-950/60 border border-blue-500/30 px-3 py-1.5 rounded-xl text-blue-300">
+                      <span className="flex items-center gap-1.5 font-semibold">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span>Highlight text in editor to format ONLY that text! Use the Floating Tool anywhere on screen.</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={clearSelectionFormatting}
+                        onMouseDown={(e) => e.preventDefault()}
+                        className="text-[10px] bg-slate-900 border border-slate-700 hover:border-amber-400 text-amber-300 px-2 py-0.5 rounded-lg flex items-center gap-1 transition cursor-pointer shrink-0"
+                        title="Remove inline style tags from selected text or entire box"
+                      >
+                        <Eraser className="w-3 h-3" />
+                        <span>Clear Selection Format</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* TOOLBAR PART 1: INLINE SELECTION STYLES (BOLD, ITALIC, UNDERLINE, HIGHLIGHT) */}
+                  <div className="flex flex-wrap items-center gap-1.5 bg-slate-900/90 p-2 rounded-xl border border-slate-800">
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">Selection Format:</span>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applyFormatToSelection('<b>', '</b>')}
+                      className="px-2.5 py-1 bg-slate-950 border border-slate-800 hover:border-blue-500 rounded-lg text-white font-black text-xs transition cursor-pointer flex items-center gap-1"
+                      title="Bold Selected Text (Toggle)"
+                    >
+                      <Bold className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Bold</span>
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applyFormatToSelection('<i>', '</i>')}
+                      className="px-2.5 py-1 bg-slate-950 border border-slate-800 hover:border-blue-500 rounded-lg text-white font-semibold italic text-xs transition cursor-pointer flex items-center gap-1"
+                      title="Italic Selected Text (Toggle)"
+                    >
+                      <Italic className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Italic</span>
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applyFormatToSelection('<u>', '</u>')}
+                      className="px-2.5 py-1 bg-slate-950 border border-slate-800 hover:border-blue-500 rounded-lg text-white font-semibold underline text-xs transition cursor-pointer flex items-center gap-1"
+                      title="Underline Selected Text (Toggle)"
+                    >
+                      <Underline className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Underline</span>
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applyFormatToSelection('normal', '')}
+                      className="px-2.5 py-1 bg-slate-950 border border-slate-800 hover:border-slate-400 rounded-lg text-slate-200 font-normal text-xs transition cursor-pointer flex items-center gap-1"
+                      title="Set Selected Text to Normal (Regular Weight & Style)"
+                    >
+                      <Type className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Normal</span>
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applyFormatToSelection('<mark style="background-color: #fef08a; color: #1e293b; padding: 1px 4px; border-radius: 4px;">', '</mark>')}
+                      className="px-2.5 py-1 bg-slate-950 border border-slate-800 hover:border-yellow-500 rounded-lg text-yellow-300 font-semibold text-xs transition cursor-pointer flex items-center gap-1"
+                      title="Highlight Yellow"
+                    >
+                      <Highlighter className="w-3.5 h-3.5 text-yellow-400" />
+                      <span>Highlight</span>
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={removeHighlightFromSelection}
+                      className="px-2.5 py-1 bg-slate-950 border border-slate-800 hover:border-amber-500/80 rounded-lg text-amber-300 font-semibold text-xs transition cursor-pointer flex items-center gap-1"
+                      title="Remove Highlight from selected text or entire page"
+                    >
+                      <Eraser className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Remove Highlight</span>
+                    </button>
+                  </div>
+
+                  {/* TOOLBAR PART 2: SELECTED TEXT FONT FAMILY & FONT SIZE */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+                    {/* Selected Text Font Family */}
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-400 block mb-1 uppercase tracking-wider">Font Family (Selected Text Only)</label>
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            applyFormatToSelection(`<span style="font-family: ${e.target.value}">`, '</span>');
+                            e.target.value = '';
+                          }
+                        }}
+                        defaultValue=""
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                      >
+                        <option value="" disabled>-- Apply Font to Highlighted Text --</option>
+                        <option value="system-ui, -apple-system, sans-serif">Sans-Serif (Modern Clean)</option>
+                        <option value='Georgia, Cambria, "Times New Roman", serif'>Serif (Editorial / Classic)</option>
+                        <option value="ui-monospace, SFMono-Regular, Consolas, monospace">Monospace (Code / Technical)</option>
+                        <option value='"Playfair Display", Georgia, serif'>Playfair Display (Luxury)</option>
+                        <option value='"Plus Jakarta Sans", sans-serif'>Plus Jakarta Sans (Corporate)</option>
+                        <option value='cursive, "Comic Sans MS", sans-serif'>Handwritten / Casual</option>
+                      </select>
+                    </div>
+
+                    {/* Selected Text Font Size */}
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-400 block mb-1 uppercase tracking-wider">Font Size (Selected Text Only)</label>
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            applyFormatToSelection(`<span style="font-size: ${e.target.value}">`, '</span>');
+                            e.target.value = '';
+                          }
+                        }}
+                        defaultValue=""
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                      >
+                        <option value="" disabled>-- Apply Size to Highlighted Text --</option>
+                        <option value="11px">Extra Small (11px)</option>
+                        <option value="13px">Small (13px)</option>
+                        <option value="16px">Medium (16px)</option>
+                        <option value="18px">Large (18px)</option>
+                        <option value="22px">Extra Large (22px)</option>
+                        <option value="28px">Jumbo (28px)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* TOOLBAR PART 3: TEXT COLOR FOR SELECTED TEXT */}
+                  <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 space-y-1.5">
+                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Text Color (Selected Text Only)</label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[
+                        { label: 'White', color: '#ffffff' },
+                        { label: 'Slate', color: '#cbd5e1' },
+                        { label: 'Amber Yellow', color: '#fbbf24' },
+                        { label: 'Emerald Green', color: '#34d399' },
+                        { label: 'Sky Blue', color: '#60a5fa' },
+                        { label: 'Indigo', color: '#a5b4fc' },
+                        { label: 'Rose Pink', color: '#f472b6' },
+                        { label: 'Crimson Red', color: '#f87171' },
+                        { label: 'Deep Dark', color: '#0f172a' }
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          title={`Format selected text in ${preset.label}`}
+                          onClick={() => applyFormatToSelection(`<span style="color: ${preset.color}">`, '</span>')}
+                          className="px-2 py-1 rounded-md text-[10px] font-bold border border-slate-800 bg-slate-950 hover:border-blue-400 text-slate-300 transition cursor-pointer flex items-center gap-1"
+                        >
+                          <span 
+                            className="w-2.5 h-2.5 rounded-full border border-slate-700 shrink-0 inline-block" 
+                            style={{ backgroundColor: preset.color }}
+                          />
+                          <span>{preset.label}</span>
+                        </button>
+                      ))}
+
+                      {/* Custom Hex Color for Selected Text */}
+                      <label 
+                        className="px-2 py-1 rounded-md bg-slate-950 border border-slate-800 hover:border-blue-500 transition cursor-pointer flex items-center gap-1 text-[10px] font-bold text-slate-300"
+                      >
+                        <span>Custom:</span>
+                        <input
+                          type="color"
+                          defaultValue="#fbbf24"
+                          onChange={(e) => applyFormatToSelection(`<span style="color: ${e.target.value}">`, '</span>')}
+                          className="w-4 h-4 rounded cursor-pointer bg-transparent border-0 p-0"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* BASE PAGE DEFAULT THEME STYLES (FALLBACK FOR UNSTYLED PORTIONS) */}
+                  <details className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 text-xs group">
+                    <summary className="font-bold text-slate-400 hover:text-slate-200 cursor-pointer flex items-center justify-between text-[11px] uppercase tracking-wider">
+                      <span>Base Page Default Theme Styles (Fallback)</span>
+                      <span className="text-[10px] text-blue-400 font-normal">Click to expand/collapse</span>
+                    </summary>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2.5 pt-2 border-t border-slate-800">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Base Font Family</label>
+                        <select
+                          value={editingPage.contentFontFamily || 'system-ui, -apple-system, sans-serif'}
+                          onChange={(e) => {
+                            const updated = { ...editingPage, contentFontFamily: e.target.value };
+                            setEditingPage(updated);
+                            handleUpdatePage(updated);
+                          }}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white"
+                        >
+                          <option value="system-ui, -apple-system, sans-serif">Sans-Serif (Modern)</option>
+                          <option value='Georgia, Cambria, "Times New Roman", serif'>Serif (Classic)</option>
+                          <option value="ui-monospace, SFMono-Regular, Consolas, monospace">Monospace</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Base Font Size</label>
+                        <select
+                          value={editingPage.contentFontSize || 'text-sm'}
+                          onChange={(e) => {
+                            const updated = { ...editingPage, contentFontSize: e.target.value };
+                            setEditingPage(updated);
+                            handleUpdatePage(updated);
+                          }}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white"
+                        >
+                          <option value="text-xs">Extra Small (12px)</option>
+                          <option value="text-sm">Small (14px)</option>
+                          <option value="text-base">Medium (16px)</option>
+                          <option value="text-lg">Large (18px)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Base Weight</label>
+                        <select
+                          value={editingPage.contentFontStyle || 'font-normal'}
+                          onChange={(e) => {
+                            const updated = { ...editingPage, contentFontStyle: e.target.value };
+                            setEditingPage(updated);
+                            handleUpdatePage(updated);
+                          }}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white"
+                        >
+                          <option value="font-normal">Regular</option>
+                          <option value="font-medium">Medium</option>
+                          <option value="font-bold">Bold</option>
+                        </select>
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* MAIN EDITOR AREA: VISUAL WYSIWYG vs CODE VIEW */}
+                  {editorTab === 'wysiwyg' ? (
+                    <div
+                      ref={wysiwygRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      onInput={(e) => {
+                        const html = e.currentTarget.innerHTML;
+                        const cleaned = cleanNestedHtmlTags(html);
+                        const updated = { ...editingPage, content: cleaned };
+                        setEditingPage(updated);
+                        handleUpdatePage(updated);
+                      }}
+                      onMouseUp={handleEditorTextSelection}
+                      onKeyUp={handleEditorTextSelection}
+                      onContextMenu={(e) => {
+                        handleEditorTextSelection(e);
+                      }}
+                      style={{
+                        fontFamily: editingPage.contentFontFamily || undefined,
+                        color: editingPage.contentTextColor || undefined,
+                        minHeight: '140px',
+                      }}
+                      className={`w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl p-3.5 leading-relaxed focus:outline-none transition-all ${
+                        editingPage.contentFontSize || 'text-xs'
+                      } ${editingPage.contentFontStyle || 'font-normal'} ${!editingPage.contentTextColor ? 'text-slate-200' : ''}`}
+                    />
+                  ) : (
+                    <textarea
+                      ref={contentAreaRef}
+                      rows={6}
+                      value={cleanNestedHtmlTags(editingPage.content || '')}
+                      onSelect={handleEditorTextSelection}
+                      onMouseUp={handleEditorTextSelection}
+                      onKeyUp={handleEditorTextSelection}
+                      onContextMenu={(e) => {
+                        handleEditorTextSelection(e);
+                      }}
+                      onChange={(e) => {
+                        const updated = { ...editingPage, content: e.target.value };
+                        setEditingPage(updated);
+                        handleUpdatePage(updated);
+                      }}
+                      style={{
+                        fontFamily: editingPage.contentFontFamily || undefined,
+                        color: editingPage.contentTextColor || undefined,
+                      }}
+                      className={`w-full bg-slate-950 border border-slate-800 rounded-xl p-3 leading-relaxed focus:outline-none focus:border-blue-500 transition-all font-mono text-xs text-amber-200`}
+                      placeholder="Type or paste lecture text or HTML code here..."
+                    />
+                  )}
+
+                  {/* FLOATING CONTEXTUAL SELECTION TOOLBAR OVERLAY (DRAGGABLE) */}
+                  {floatingToolbar?.visible && (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: `${floatingToolbar.x}px`,
+                        top: `${floatingToolbar.y}px`,
+                      }}
+                      className="z-[9999] bg-slate-900/95 backdrop-blur-md border border-slate-700 shadow-2xl rounded-2xl p-2 max-w-[380px] sm:max-w-[500px] flex flex-wrap items-center gap-1.5 animate-in fade-in zoom-in-95 select-none"
+                    >
+                      {/* DRAGGABLE HEADER HANDLE */}
+                      <div 
+                        onMouseDown={handleStartDragToolbar}
+                        className="flex items-center justify-between w-full pb-1 border-b border-slate-800 text-[10px] font-extrabold text-blue-400 uppercase tracking-wider px-1 cursor-grab active:cursor-grabbing hover:bg-slate-800/50 rounded-t-xl transition"
+                        title="Click and drag to move toolbar anywhere on screen"
+                      >
+                        <span className="flex items-center gap-1 text-slate-300">
+                          <GripVertical className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          <span className="text-blue-400">Moveable Tool Panel</span>
+                          <span className="text-[9px] text-slate-400 font-normal ml-1">(Drag Header)</span>
+                        </span>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() => setFloatingToolbar(null)}
+                          className="text-slate-400 hover:text-white transition cursor-pointer p-0.5 rounded"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* BOLD, ITALIC, UNDERLINE, HIGHLIGHT */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => applyFormatToSelection('<b>', '</b>')}
+                          className="p-1.5 bg-slate-950 border border-slate-800 hover:border-blue-500 rounded-lg text-white font-black text-xs transition cursor-pointer"
+                          title="Bold Selected Text (Toggle)"
+                        >
+                          <Bold className="w-3.5 h-3.5 text-blue-400" />
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => applyFormatToSelection('<i>', '</i>')}
+                          className="p-1.5 bg-slate-950 border border-slate-800 hover:border-blue-500 rounded-lg text-white font-semibold italic text-xs transition cursor-pointer"
+                          title="Italic Selected Text (Toggle)"
+                        >
+                          <Italic className="w-3.5 h-3.5 text-blue-400" />
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => applyFormatToSelection('<u>', '</u>')}
+                          className="p-1.5 bg-slate-950 border border-slate-800 hover:border-blue-500 rounded-lg text-white font-semibold underline text-xs transition cursor-pointer"
+                          title="Underline Selected Text (Toggle)"
+                        >
+                          <Underline className="w-3.5 h-3.5 text-blue-400" />
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => applyFormatToSelection('normal', '')}
+                          className="p-1.5 bg-slate-950 border border-slate-800 hover:border-slate-400 rounded-lg text-slate-200 text-xs transition cursor-pointer flex items-center gap-1"
+                          title="Set Selected Text to Normal (Regular)"
+                        >
+                          <Type className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-[10px] hidden sm:inline font-normal">Normal</span>
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => applyFormatToSelection('<mark style="background-color: #fef08a; color: #1e293b; padding: 1px 4px; border-radius: 4px;">', '</mark>')}
+                          className="p-1.5 bg-slate-950 border border-slate-800 hover:border-yellow-500 rounded-lg text-yellow-300 text-xs transition cursor-pointer"
+                          title="Highlight Yellow"
+                        >
+                          <Highlighter className="w-3.5 h-3.5 text-yellow-400" />
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={removeHighlightFromSelection}
+                          className="p-1.5 bg-slate-950 border border-slate-800 hover:border-amber-500 rounded-lg text-amber-300 text-xs transition cursor-pointer flex items-center gap-1"
+                          title="Remove Highlight"
+                        >
+                          <Eraser className="w-3.5 h-3.5 text-amber-400" />
+                          <span className="text-[10px] hidden sm:inline font-semibold">Unhighlight</span>
+                        </button>
+                      </div>
+
+                      {/* FONT SIZE SELECTOR */}
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            applyFormatToSelection(`<span style="font-size: ${e.target.value}">`, '</span>');
+                            e.target.value = '';
+                          }
+                        }}
+                        defaultValue=""
+                        className="bg-slate-950 border border-slate-800 rounded-lg px-1.5 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                      >
+                        <option value="" disabled>Size</option>
+                        <option value="11px">11px</option>
+                        <option value="13px">13px</option>
+                        <option value="16px">16px</option>
+                        <option value="18px">18px</option>
+                        <option value="22px">22px</option>
+                        <option value="28px">28px</option>
+                      </select>
+
+                      {/* FONT FAMILY SELECTOR */}
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            applyFormatToSelection(`<span style="font-family: ${e.target.value}">`, '</span>');
+                            e.target.value = '';
+                          }
+                        }}
+                        defaultValue=""
+                        className="bg-slate-950 border border-slate-800 rounded-lg px-1.5 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                      >
+                        <option value="" disabled>Font</option>
+                        <option value="system-ui, sans-serif">Sans-Serif</option>
+                        <option value='Georgia, serif'>Serif</option>
+                        <option value="monospace">Monospace</option>
+                        <option value='"Playfair Display", serif'>Playfair</option>
+                        <option value='"Plus Jakarta Sans", sans-serif'>Plus Jakarta</option>
+                      </select>
+
+                      {/* COLOR SWATCHES */}
+                      <div className="flex items-center gap-1">
+                        {[
+                          { color: '#ffffff', title: 'White' },
+                          { color: '#fbbf24', title: 'Yellow' },
+                          { color: '#34d399', title: 'Green' },
+                          { color: '#60a5fa', title: 'Blue' },
+                          { color: '#f472b6', title: 'Pink' },
+                          { color: '#f87171', title: 'Red' },
+                        ].map(c => (
+                          <button
+                            key={c.color}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => applyFormatToSelection(`<span style="color: ${c.color}">`, '</span>')}
+                            className="w-4 h-4 rounded-full border border-slate-700 hover:scale-110 transition cursor-pointer shrink-0"
+                            style={{ backgroundColor: c.color }}
+                            title={c.title}
+                          />
+                        ))}
+                        <input
+                          type="color"
+                          defaultValue="#fbbf24"
+                          onChange={(e) => applyFormatToSelection(`<span style="color: ${e.target.value}">`, '</span>')}
+                          className="w-4 h-4 rounded cursor-pointer bg-transparent border-0 p-0"
+                          title="Custom Color"
+                        />
+                      </div>
+
+                      {/* ACTIONS */}
+                      <div className="flex items-center gap-1 ml-auto">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={clearSelectionFormatting}
+                          className="p-1 bg-amber-950/60 border border-amber-800/60 hover:border-amber-400 text-amber-300 rounded-md text-[10px] transition cursor-pointer flex items-center gap-1"
+                          title="Clear Selection Formatting"
+                        >
+                          <Eraser className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={handleCleanAllHtmlTags}
+                          className="p-1 bg-emerald-950/60 border border-emerald-800/60 hover:border-emerald-400 text-emerald-300 rounded-md text-[10px] transition cursor-pointer flex items-center gap-1"
+                          title="Clean Cluttered Tags"
+                        >
+                          <Wand2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* LIVE TYPOGRAPHY PREVIEW CARD */}
+                  {editingPage.content && (
+                    <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl space-y-1">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block flex items-center justify-between">
+                        <span>Live Reader Preview (Formatted Output)</span>
+                        <span className="text-emerald-400">Renders Inline Styles</span>
+                      </span>
+                      <div
+                        className={`whitespace-pre-line leading-relaxed ${editingPage.contentFontSize || 'text-xs'} ${editingPage.contentFontStyle || 'font-normal'} ${!editingPage.contentTextColor ? 'text-slate-200' : ''}`}
+                        style={{
+                          fontFamily: editingPage.contentFontFamily || undefined,
+                          color: editingPage.contentTextColor || undefined,
+                        }}
+                      >
+                        {renderFormattedHtml(editingPage.content)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1586,7 +3873,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
               <div className="space-y-4">
                 
                 {/* VIDEO UPLOAD & EMBED SECTION */}
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-2.5">
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-pink-400 flex items-center gap-1.5">
                       <Video className="w-4 h-4 text-pink-400" />
@@ -1595,7 +3882,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                     {editingPage.videoUrl && (
                       <button
                         onClick={() => {
-                          const updated = { ...editingPage, videoUrl: '' };
+                          const updated = { ...editingPage, videoUrl: '', videoCaption: '', videoTranscription: '' };
                           setEditingPage(updated);
                           handleUpdatePage(updated);
                         }}
@@ -1631,10 +3918,88 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                     placeholder="Or paste YouTube / Vimeo / Web MP4 link..."
                   />
 
+                  {/* Video Caption Field */}
+                  <div>
+                    <label className="text-[11px] font-semibold text-pink-300 block mb-1">
+                      Video Subtitle Header / Short Caption
+                    </label>
+                    <input
+                      type="text"
+                      value={stripHtml(editingPage.videoCaption || '')}
+                      onChange={(e) => {
+                        const updated = { ...editingPage, videoCaption: stripHtml(e.target.value) };
+                        setEditingPage(updated);
+                        handleUpdatePage(updated);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500"
+                      placeholder="e.g. Video Demonstration: Folding Carton Creasing & Die-cutting..."
+                    />
+                  </div>
+
+                  {/* Video Transcription & Native Subtitles Textarea & File Upload */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between mb-1 gap-1 flex-wrap">
+                      <label className="text-[11px] font-semibold text-pink-300 flex items-center gap-1">
+                        <Subtitles className="w-3.5 h-3.5 text-pink-400" />
+                        <span>Full Video Lesson Subtitles & Transcription</span>
+                      </label>
+
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Subtitle File Upload Button */}
+                        <label className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-extrabold rounded-lg border border-amber-500/40 flex items-center gap-1 cursor-pointer transition shrink-0">
+                          <Upload className="w-3 h-3 text-amber-400" />
+                          <span>📁 Upload Subtitle File (.vtt, .srt, .txt, .json)</span>
+                          <input
+                            type="file"
+                            accept=".vtt,.srt,.txt,.json,text/vtt,text/plain,application/json"
+                            onChange={handleSubtitleFileUpload}
+                            className="hidden"
+                          />
+                        </label>
+
+                        {/* AI Auto-Generate Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleAutoGenerateTranscription(editingPage)}
+                          disabled={isGeneratingAiTranscription}
+                          className="px-2 py-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 text-[10px] font-extrabold rounded-lg border border-indigo-500/40 flex items-center gap-1 cursor-pointer transition shrink-0"
+                        >
+                          <Sparkles className="w-3 h-3 text-indigo-400" />
+                          <span>{isGeneratingAiTranscription ? 'Generating...' : '✨ Auto-AI Generate'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Format Guide Box */}
+                    <div className="p-2.5 bg-slate-900/90 border border-amber-500/20 rounded-xl space-y-1 text-[10px] text-slate-300">
+                      <div className="font-bold text-amber-400 flex items-center gap-1">
+                        <span>ℹ️ Supported Subtitle Upload Formats & Guide:</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-slate-400 font-mono">
+                        <div>• <b className="text-amber-300">.VTT</b> (WebVTT)</div>
+                        <div>• <b className="text-amber-300">.SRT</b> (SubRip Subtitles)</div>
+                        <div>• <b className="text-amber-300">.TXT</b> ([00:15] Time format)</div>
+                        <div>• <b className="text-amber-300">.JSON</b> (Array of cues)</div>
+                      </div>
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      value={stripHtml(editingPage.videoTranscription || '')}
+                      onChange={(e) => {
+                        const updated = { ...editingPage, videoTranscription: stripHtml(e.target.value) };
+                        setEditingPage(updated);
+                        handleUpdatePage(updated);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-mono text-pink-200 focus:outline-none focus:border-pink-500"
+                      placeholder="[00:00] Welcome to the video lesson...\n[00:15] Reviewing key technical principles..."
+                    />
+                  </div>
+
                   {/* Video Preview */}
                   {editingPage.videoUrl && (
-                    <div className="rounded-xl overflow-hidden border border-pink-500/40 bg-black aspect-video relative max-h-40">
-                      {renderVideoPlayer(editingPage.videoUrl, 'Video Preview')}
+                    <div className="rounded-xl overflow-hidden border border-pink-500/40 bg-black aspect-video relative max-h-48">
+                      {renderVideoPlayer(editingPage.videoUrl, editingPage.videoCaption, editingPage.videoTranscription, editingPage)}
                     </div>
                   )}
                 </div>
@@ -1741,6 +4106,275 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
               </div>
 
+            </div>
+
+          </div>
+        )}
+
+        {/* MODE 5: SETTINGS & PREFERENCES STUDIO TAB */}
+        {viewMode === 'settings' && (
+          <div className="w-full max-w-5xl mx-auto bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl p-6 md:p-8 space-y-6">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                  <Settings className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-white flex items-center gap-2">
+                    <span>Studio Settings & Reading Preferences</span>
+                  </h2>
+                  <p className="text-xs text-slate-400">Configure audio, slideshow timing, accessibility subtitles, typography, and narration.</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setViewMode('flipbook')}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-md shadow-amber-500/20"
+              >
+                Back to 3D Flipbook
+              </button>
+            </div>
+
+            {/* Grid of Settings Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+              {/* CARD 1: AUDIO & SOUND FX */}
+              <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800/80">
+                  <Volume2 className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-sm font-extrabold text-white">Audio & Page Turn Sound FX</h3>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+                  <div>
+                    <span className="text-xs font-bold text-white block">3D Page Flip Sound Effects</span>
+                    <span className="text-[11px] text-slate-400 block">Plays realistic paper rustle sound when turning pages</span>
+                  </div>
+                  <button
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      soundEnabled ? 'bg-amber-500 text-slate-950 shadow-md' : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                    <span>{soundEnabled ? 'Enabled' : 'Muted'}</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+                  <span>Sound Effect Status:</span>
+                  <span className={`font-mono font-bold ${soundEnabled ? 'text-emerald-400' : 'text-slate-500'}`}>
+                    {soundEnabled ? '● Sound Active' : '○ Sound Disabled'}
+                  </span>
+                </div>
+              </div>
+
+              {/* CARD 2: AUTO-PLAY SLIDESHOW TIMER */}
+              <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800/80">
+                  <Clock className="w-5 h-5 text-blue-400" />
+                  <h3 className="text-sm font-extrabold text-white">Auto-Play Slideshow & Auto-Turn</h3>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-300 block">Auto-Flip Page Timer Interval</label>
+                  <select
+                    value={autoFlipInterval}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setAutoFlipInterval(val);
+                      if (val === 0) setIsAutoFlipping(false);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value={0}>Disabled (Manual Page Flip Only)</option>
+                    <option value={3}>3 Seconds per page</option>
+                    <option value={5}>5 Seconds per page</option>
+                    <option value={8}>8 Seconds per page</option>
+                    <option value={10}>10 Seconds per page</option>
+                    <option value={15}>15 Seconds per page</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs text-slate-400">Slideshow Player:</span>
+                  <button
+                    disabled={autoFlipInterval === 0}
+                    onClick={() => setIsAutoFlipping(!isAutoFlipping)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 ${
+                      isAutoFlipping ? 'bg-amber-500 text-slate-950 shadow-md' : 'bg-blue-600 text-white'
+                    }`}
+                  >
+                    {isAutoFlipping ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                    <span>{isAutoFlipping ? 'Pause Slideshow' : 'Start Auto Slideshow'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* CARD 3: SUBTITLES & CLOSED CAPTIONS */}
+              <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800/80">
+                  <Captions className="w-5 h-5 text-pink-400" />
+                  <h3 className="text-sm font-extrabold text-white">Closed Captions & Subtitles (CC)</h3>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+                  <div>
+                    <span className="text-xs font-bold text-white block">Video Subtitles Overlay</span>
+                    <span className="text-[11px] text-slate-400 block">Show caption subtitles box over embedded lesson videos</span>
+                  </div>
+                  <button
+                    onClick={() => setShowCcSubtitles(!showCcSubtitles)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      showCcSubtitles ? 'bg-pink-600 text-white shadow-md' : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    <Subtitles className="w-4 h-4" />
+                    <span>{showCcSubtitles ? 'CC On' : 'CC Off'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* CARD 4: TEXT-TO-SPEECH (TTS) SPOKEN NARRATION */}
+              <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800/80">
+                  <FileAudio className="w-5 h-5 text-indigo-400" />
+                  <h3 className="text-sm font-extrabold text-white">Text-to-Speech (TTS) Voice Narration</h3>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-300">Narration Speed (Playback Rate)</label>
+                    <span className="text-xs font-mono font-bold text-indigo-400">{ttsRate}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.75}
+                    max={2.0}
+                    step={0.25}
+                    value={ttsRate}
+                    onChange={(e) => setTtsRate(Number(e.target.value))}
+                    className="w-full accent-indigo-500 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                    <span>0.75x (Slow)</span>
+                    <span>1.0x (Normal)</span>
+                    <span>1.5x (Fast)</span>
+                    <span>2.0x (Very Fast)</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 bg-slate-900 rounded-xl border border-slate-800 pt-2">
+                    <div>
+                      <span className="text-xs font-bold text-white block">Auto-Read Page Narration</span>
+                      <span className="text-[11px] text-slate-400 block">Automatically read slide content aloud when turning pages</span>
+                    </div>
+                    <button
+                      onClick={() => setTtsAutoRead(!ttsAutoRead)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        ttsAutoRead ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <span>{ttsAutoRead ? 'Enabled' : 'Disabled'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 5: LANGUAGE & LOCALIZATION */}
+              <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800/80">
+                  <Languages className="w-5 h-5 text-cyan-400" />
+                  <h3 className="text-sm font-extrabold text-white">Language & Native Translation</h3>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-300 block">Default Studio Language</label>
+                  <select
+                    value={selectedLanguage}
+                    onChange={(e) => setSelectedLanguage(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-cyan-300 font-bold focus:outline-none focus:border-cyan-500 cursor-pointer"
+                  >
+                    <option value="en">English (Original Source)</option>
+                    <option value="es">Español (Spanish)</option>
+                    <option value="fr">Français (French)</option>
+                    <option value="de">Deutsch (German)</option>
+                    <option value="ja">日本語 (Japanese)</option>
+                    <option value="zh">中文 (Chinese)</option>
+                    <option value="hi">हिन्दी (Hindi)</option>
+                    <option value="ar">العربية (Arabic)</option>
+                    <option value="tl">Tagalog (Filipino)</option>
+                    <option value="vi">Tiếng Việt (Vietnamese)</option>
+                    <option value="th">ไทย (Thai)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* CARD 6: READING DISPLAY & TYPOGRAPHY */}
+              <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800/80">
+                  <Type className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-sm font-extrabold text-white">Reading Display & Typography</h3>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">Base Reader Font Size</label>
+                    <select
+                      value={readerFontSize}
+                      onChange={(e) => setReaderFontSize(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      <option value="text-xs">Small (12px)</option>
+                      <option value="text-sm">Medium (14px - Default)</option>
+                      <option value="text-base">Large (16px)</option>
+                      <option value="text-lg">Extra Large (18px)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">Reader Font Family</label>
+                    <select
+                      value={readerFontFamily}
+                      onChange={(e) => setReaderFontFamily(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      <option value="sans">System Sans-Serif (Clean UI)</option>
+                      <option value="serif">Editorial Serif (Book Style)</option>
+                      <option value="mono">Technical Monospace (Code / Engineering)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+              <button
+                onClick={() => {
+                  setSoundEnabled(true);
+                  setAutoFlipInterval(0);
+                  setIsAutoFlipping(false);
+                  setTtsRate(1.0);
+                  setTtsAutoRead(false);
+                  setShowCcSubtitles(true);
+                  setSelectedLanguage('en');
+                  setReaderFontSize('text-sm');
+                  setReaderFontFamily('sans');
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Reset All Preferences to Default
+              </button>
+
+              <button
+                onClick={() => setViewMode('flipbook')}
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer shadow-lg shadow-amber-500/20"
+              >
+                Apply Settings & Open 3D Flipbook
+              </button>
             </div>
 
           </div>

@@ -233,3 +233,42 @@ export function getOrdinalSuffix(num: number | string): string {
   }
   return n + "th";
 }
+
+export const normalizeTopicTitle = (title: string): string => {
+  if (!title) return '';
+  return title
+    .toLowerCase()
+    .replace(/colour/g, 'color')
+    .replace(/dieline/g, 'die line')
+    .replace(/preflight/g, 'pre flight')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(module|mod|unit|lesson|section|part|the|of|and|a|an)\b/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w))
+    .sort()
+    .join(' ');
+};
+
+export const areTopicsMatching = (titleA: string, titleB: string): boolean => {
+  if (!titleA || !titleB) return false;
+  if (titleA === titleB) return true;
+
+  const normA = normalizeTopicTitle(titleA);
+  const normB = normalizeTopicTitle(titleB);
+  if (normA === normB && normA.length > 0) return true;
+
+  const wordsA = new Set(normA.split(' ').filter(Boolean));
+  const wordsB = new Set(normB.split(' ').filter(Boolean));
+  if (wordsA.size === 0 || wordsB.size === 0) return false;
+
+  const intersection = [...wordsA].filter(w => wordsB.has(w));
+  const minSize = Math.min(wordsA.size, wordsB.size);
+
+  if (minSize > 0 && intersection.length >= minSize) {
+    return true;
+  }
+
+  return false;
+};

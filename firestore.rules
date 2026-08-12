@@ -163,6 +163,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /course_flipbooks/{flipbookId} {
+      allow read: if true;
+      allow write: if isStaff() || isAdmin() || isFaculty();
+    }
+
     match /quiz_questions/{questionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();

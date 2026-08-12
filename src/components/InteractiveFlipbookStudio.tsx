@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, Play, Pause, 
+  BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, Play, Pause, 
   Maximize2, Minimize2, Languages, RefreshCw, Layout, Image, Video, Sparkles, 
   ChevronLeft, ChevronRight, Save, Copy, Check, Download, Share2, Layers, 
   Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
@@ -28,6 +28,8 @@ export interface FlipbookPage {
   contentFontSize?: string;
   contentTextColor?: string;
   contentFontStyle?: string;
+  contentTextAlign?: 'left' | 'center' | 'right' | 'justify';
+  pageBackgroundColor?: string;
   translations?: Record<string, { title?: string; subtitle?: string; content?: string; calloutText?: string; videoCaption?: string; videoTranscription?: string }>;
   mediaType?: 'none' | 'image' | 'video' | 'both';
   imageUrl?: string;
@@ -73,6 +75,40 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'ja', name: 'Japanese (日本語)', flag: '🇯🇵' },
 ];
 
+// Safe Image component with fallback and external link option
+export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string; className?: string }) => {
+  const [hasError, setHasError] = useState(false);
+  
+  if (!src) return null;
+
+  if (hasError) {
+    return (
+      <div className={`flex flex-col items-center justify-center p-4 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-2 ${className || ''}`}>
+        <Image className="w-8 h-8 text-amber-400 opacity-80" />
+        <p className="text-xs font-bold text-slate-300">Attached Image Asset</p>
+        <p className="text-[10px] text-slate-400">Preview blocked by external host or CORS policy.</p>
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] text-amber-400 hover:underline flex items-center gap-1 bg-slate-950 px-2.5 py-1 rounded-lg border border-amber-500/30 font-bold"
+        >
+          <ExternalLink className="w-3 h-3" /> Click Here to Open / View Image File
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt || 'Page Attachment'}
+      className={className}
+      onError={() => setHasError(true)}
+    />
+  );
+};
+
 // High-quality pre-translated dictionary & AI translation fallback helper
 const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
   ms: {
@@ -101,6 +137,28 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
   ta: {
     "What is color?": "வண்ணம் என்றால் என்ன?",
     "Visual Electromagnetic Perception": "காட்சி மின்காந்த புலனுணர்வு",
+    "Colour is how our eyes and brain see different light waves.": "நமது கண்களும் மூளையும் வெவ்வேறு ஒளி அலைகளை எவ்வாறு பார்க்கின்றன என்பதே வண்ணம் ஆகும்.",
+    "Objects absorb some light and reflect other light.": "பொருட்கள் சில ஒளியை உறிஞ்சி மற்ற ஒளியை பிரதிபலிக்கின்றன.",
+    "Your eyes catch the reflected light and your brain turns it into a colour like red, blue, or green.": "உங்கள் கண்கள் பிரதிபலித்த ஒளியைப் பிடிக்கும், மேலும் உங்கள் மூளை அதை சிவப்பு, நீலம் அல்லது பச்சை போன்ற வண்ணமாக மாற்றுகிறது.",
+    "Color is the visual sensation created when electromagnetic radiation in the 380–750 nm wavelength range is captured by the human eye and interpreted by the brain.": "வண்ணம் என்பது 380–750 nm அலைநீள வரம்பில் உள்ள மின்காந்த கதிர்வீச்சை மனித கண் பிடித்து மூளையால் விளக்கும் போது உருவாக்கப்படும் காட்சி உணர்வாகும்.",
+    "How We See": "நாம் எவ்வாறு பார்க்கிறோம்",
+    "Colour Light waves:": "வண்ண ஒளி அலைகள்:",
+    "Light waves:": "ஒளி அலைகள்:",
+    "Light travels in waves.": "ஒளி அலைகளாகப் பயணிக்கிறது.",
+    "Each colour has a different size or length.": "ஒவ்வொரு வண்ணத்திற்கும் வெவ்வேறு அளவு அல்லது நீளம் உள்ளது.",
+    "Long waves look red.": "நீண்ட அலைகள் சிவப்பாக இருக்கும்.",
+    "Short waves look blue or violet.": "குறுகிய அலைகள் நீலமாக அல்லது ஊதாவாக இருக்கும்.",
+    "The eye:": "கண்:",
+    "Special cells in your eyes called cones catch these light waves.": "உங்கள் கண்களில் உள்ள கூம்புகள் எனப்படும் சிறப்பு செல்கள் இந்த ஒளி அலைகளைப் பிடிக்கின்றன.",
+    "The brain:": "மூளை:",
+    "Your brain takes signals from your eyes and names the colour.": "உங்கள் மூளை உங்கள் கண்களிலிருந்து சிக்னல்களை எடுத்து வண்ணத்திற்கு பெயரிடுகிறது.",
+    "Main Parts of Colour": "வண்ணத்தின் முக்கிய பகுதிகள்",
+    "Hue:": "நிறம் (ஹியூ):",
+    "Hue: The name of the family of the colour, like red or yellow.": "நிறம்: சிவப்பு அல்லது மஞ்சள் போன்ற வண்ணத்தின் குடும்பத்தின் பெயர்.",
+    "Lightness:": "வெளிச்சம் (லைட்னஸ்):",
+    "Lightness: How light or dark a colour is.": "வெளிச்சம்: ஒரு வண்ணம் எவ்வளவு வெளிச்சமாக அல்லது இருளாக இருக்கிறது என்பது.",
+    "Brightness:": "பிரகாசம் (பிரைட்னஸ்):",
+    "Brightness: How strong or pale a colour appears.": "பிரகாசம்: ஒரு வண்ணம் எவ்வளவு வலுவாக அல்லது வெளிறியதாகக் காணப்படுகிறது.",
     "It is a sensory experience.": "இது ஒரு உணர்ச்சி அனுபவம்.",
     "It is a sensory experience": "இது ஒரு உணர்ச்சி அனுபவம்",
     "It results from the visible spectrum,": "இது கண்ணுறு நிறமாலையிலிருந்து பெறப்படுகிறது,",
@@ -132,6 +190,12 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
     "Light Source": "ஒளி மூலம்",
     "Object (Substrate)": "பொருள் (அடி மூலக்கூறு)",
     "Observer": "பார்வையாளர்",
+    "Lightness": "வெளிச்சம்",
+    "Brightness": "பிரகாசம்",
+    "Hue": "நிறம்",
+    "Light": "ஒளி",
+    "Color": "வண்ணம்",
+    "Colour": "வண்ணம்"
   },
   zh: {
     "What is color?": "什么是颜色？",
@@ -265,8 +329,26 @@ export function autoTranslateText(text: string, targetLangCode: string): string 
       translated = translated
         .replace(/What is color\?/gi, 'வண்ணம் என்றால் என்ன?')
         .replace(/Visual Electromagnetic Perception/gi, 'காட்சி மின்காந்த புலனுணர்வு')
+        .replace(/Colour is how our eyes and brain see different light waves\./gi, 'நமது கண்களும் மூளையும் வெவ்வேறு ஒளி அலைகளை எவ்வாறு பார்க்கின்றன என்பதே வண்ணம் ஆகும்.')
+        .replace(/Objects absorb some light and reflect other light\./gi, 'பொருட்கள் சில ஒளியை உறிஞ்சி மற்ற ஒளியை பிரதிபலிக்கின்றன.')
+        .replace(/Your eyes catch the reflected light and your brain turns it into a colour like red, blue, or green\./gi, 'உங்கள் கண்கள் பிரதிபலித்த ஒளியைப் பிடிக்கும், மேலும் உங்கள் மூளை அதை சிவப்பு, நீலம் அல்லது பச்சை போன்ற வண்ணமாக மாற்றுகிறது.')
         .replace(/Color is the visual perceptual property derived from the spectrum of light interacting with the photoreceptors in the eye/gi, 'வண்ணம் என்பது கண்ணில் உள்ள ஒளிச்சேர்க்கைகளுடன் தொடர்பு கொள்ளும் ஒளியின் நிறமாலையிலிருந்து பெறப்பட்ட காட்சி புலனுணர்வுப் பண்பாகும்')
         .replace(/It is not an intrinsic physical property of an object itself, but rather a sensory experience created by the brain's interpretation of electromagnetic radiation within the visible light spectrum/gi, 'இது ஒரு பொருளின் உள்ளார்ந்த இயற்பியல் பண்பு அல்ல, மாறாக கண்ணுறு ஒளி நிறமாலையில் உள்ள மின்காந்த கதிர்வீச்சை மூளை விளக்குவதன் மூலம் உருவாக்கப்படும் உணர்ச்சி அனுபவமாகும்')
+        .replace(/How We See/gi, 'நாம் எவ்வாறு பார்க்கிறோம்')
+        .replace(/Colour Light waves:/gi, 'வண்ண ஒளி அலைகள்:')
+        .replace(/Light waves:/gi, 'ஒளி அலைகள்:')
+        .replace(/Light travels in waves\./gi, 'ஒளி அலைகளாகப் பயணிக்கிறது.')
+        .replace(/Each colour has a different size or length\./gi, 'ஒவ்வொரு வண்ணத்திற்கும் வெவ்வேறு அளவு அல்லது நீளம் உள்ளது.')
+        .replace(/Long waves look red\./gi, 'நீண்ட அலைகள் சிவப்பாக இருக்கும்.')
+        .replace(/Short waves look blue or violet\./gi, 'குறுகிய அலைகள் நீலமாக அல்லது ஊதாவாக இருக்கும்.')
+        .replace(/The eye:/gi, 'கண்:')
+        .replace(/Special cells in your eyes called cones catch these light waves\./gi, 'உங்கள் கண்களில் உள்ள கூம்புகள் எனப்படும் சிறப்பு செல்கள் இந்த ஒளி அலைகளைப் பிடிக்கின்றன.')
+        .replace(/The brain:/gi, 'மூளை:')
+        .replace(/Your brain takes signals from your eyes and names the colour\./gi, 'உங்கள் மூளை உங்கள் கண்களிலிருந்து சிக்னல்களை எடுத்து வண்ணத்திற்கு பெயரிடுகிறது.')
+        .replace(/Main Parts of Colour/gi, 'வண்ணத்தின் முக்கிய பகுதிகள்')
+        .replace(/Hue: The name of the family of the colour, like red or yellow\./gi, 'நிறம்: சிவப்பு அல்லது மஞ்சள் போன்ற வண்ணத்தின் குடும்பத்தின் பெயர்.')
+        .replace(/Lightness: How light or dark a colour is\./gi, 'வெளிச்சம்: ஒரு வண்ணம் எவ்வளவு வெளிச்சமாக அல்லது இருளாக இருக்கிறது என்பது.')
+        .replace(/Brightness: How strong or pale a colour appears\./gi, 'பிரகாசம்: ஒரு வண்ணம் எவ்வளவு வலுவாக அல்லது வெளிறியதாகக் காணப்படுகிறது.')
         .replace(/The Triad of Color Perception/gi, 'வண்ணப் புலனுணர்வின் முக்கோணம்')
         .replace(/Light Source: Emits electromagnetic radiation/gi, 'ஒளி மூலம்: மின்காந்த கதிர்வீச்சை வெளியிடுகிறது')
         .replace(/Different sources \(e\.g\., sunlight, LED, incandescent\) radiate different spectral power distributions/gi, 'வெவ்வேறு மூலங்கள் (எ.கா. சூரிய ஒளி, எல்.இ.டி, ஒளிரும் விளக்குகள்) வெவ்வேறு நிறமாலை விநியோகங்களை வெளியிடுகின்றன')
@@ -671,7 +753,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         selectedCourseFilter.toLowerCase().includes(courseTitle.toLowerCase());
 
       if (matchesCourse) {
-        const moduleLabel = mod.order !== undefined && mod.order !== null ? `Module ${mod.order}` : (mod.moduleNumber || 'Module');
+        const moduleLabel = mod.order !== undefined && mod.order !== null ? `Module ${mod.order}` : ((mod as any).moduleNumber || 'Module');
         set.add(`${moduleLabel}: ${mod.title}`);
       }
     });
@@ -2036,7 +2118,7 @@ Example:
       description: 'Faculty interactive course E-book and presentation slides.',
       courseCategory: defaultCourse || 'General',
       courseName: defaultCourse,
-      author: user?.displayName || user?.email || 'Faculty Member',
+      author: (user as any)?.displayName || user?.email || 'Faculty Member',
       coverImageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80',
       updatedAt: new Date().toISOString(),
       pages: [
@@ -2131,6 +2213,31 @@ Example:
     const updatedMat = { ...activeMaterial, pages: updatedPages };
     setActiveMaterial(updatedMat);
     setCurrentPageIndex(0);
+    handleSaveMaterial(updatedMat);
+  };
+
+  // Page Swapping / Reordering Helper
+  const handleSwapPages = (fromIdx: number, toIdx: number) => {
+    if (
+      fromIdx < 0 ||
+      fromIdx >= activeMaterial.pages.length ||
+      toIdx < 0 ||
+      toIdx >= activeMaterial.pages.length ||
+      fromIdx === toIdx
+    ) {
+      return;
+    }
+    const pagesCopy = [...activeMaterial.pages];
+    const temp = pagesCopy[fromIdx];
+    pagesCopy[fromIdx] = pagesCopy[toIdx];
+    pagesCopy[toIdx] = temp;
+
+    // Renumber pages sequentially
+    const renumbered = pagesCopy.map((p, idx) => ({ ...p, pageNumber: idx + 1 }));
+    const updatedMat = { ...activeMaterial, pages: renumbered };
+    setActiveMaterial(updatedMat);
+    setCurrentPageIndex(toIdx);
+    setEditingPage(renumbered[toIdx]);
     handleSaveMaterial(updatedMat);
   };
 
@@ -2493,7 +2600,10 @@ Example:
                 >
                   
                   {/* Left Side: Text & Content Area */}
-                  <div className="p-6 md:p-8 flex flex-col justify-between border-b md:border-b-0 md:border-r border-amber-900/10 dark:border-slate-800 bg-[#fdfbf7] dark:bg-slate-900 text-slate-900 dark:text-slate-100 relative min-h-[440px]">
+                  <div 
+                    className="p-6 md:p-8 flex flex-col justify-between border-b md:border-b-0 md:border-r border-amber-900/10 dark:border-slate-800 bg-[#fdfbf7] dark:bg-slate-900 text-slate-900 dark:text-slate-100 relative min-h-[440px]"
+                    style={displayPage.pageBackgroundColor ? { backgroundColor: displayPage.pageBackgroundColor } : undefined}
+                  >
                     
                     {/* Header Badge & Page Number */}
                     <div>
@@ -2537,6 +2647,7 @@ Example:
                         style={{
                           fontFamily: displayPage.contentFontFamily || undefined,
                           color: displayPage.contentTextColor || undefined,
+                          textAlign: displayPage.contentTextAlign || undefined,
                         }}
                       >
                         {renderFormattedHtml(displayPage.content)}
@@ -2631,7 +2742,7 @@ Example:
                                 <Image className="w-3 h-3 text-amber-400" /> CAD Technical Diagram
                               </span>
                               <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center">
-                                <img src={displayPage.imageUrl} alt="Diagram" className="max-h-32 object-contain" />
+                                <SafeImage src={displayPage.imageUrl} alt="Diagram" className="max-h-32 object-contain" />
                               </div>
                             </div>
                           )}
@@ -2719,7 +2830,7 @@ Example:
                                     <div className="flex items-center justify-between pb-1 border-b border-slate-800 text-[11px] font-sans font-bold text-indigo-300">
                                       <span className="flex items-center gap-1">
                                         <Languages className="w-3.5 h-3.5 text-indigo-400" />
-                                        <span>Native Video Transcript ({NATIVE_LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage})</span>
+                                        <span>Native Video Transcript ({SUPPORTED_LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage})</span>
                                       </span>
                                       <button
                                         onClick={() => handleAutoGenerateTranscription(displayPage)}
@@ -2742,7 +2853,7 @@ Example:
                           {displayPage.imageUrl && (
                             <div className="space-y-2">
                               <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 max-h-64 flex items-center justify-center shadow-md">
-                                <img
+                                <SafeImage
                                   src={displayPage.imageUrl}
                                   alt={displayPage.imageCaption || 'Page Image'}
                                   className="max-h-64 w-full object-contain hover:scale-105 transition-transform duration-300"
@@ -3114,36 +3225,102 @@ Example:
               </div>
             </div>
 
-            {/* Page Selector Tabs */}
+            {/* Page Selector & Reorder/Swap Tabs */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-800">
+              <span className="text-[11px] font-black uppercase text-amber-400 shrink-0 flex items-center gap-1">
+                <ArrowLeftRight className="w-3.5 h-3.5 text-amber-400" /> Page Tabs & Order:
+              </span>
               {activeMaterial.pages.map((p, idx) => (
-                <button
+                <div
                   key={p.id}
-                  onClick={() => {
-                    setCurrentPageIndex(idx);
-                    setEditingPage(p);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 shrink-0 ${
                     editingPage.id === p.id
-                      ? 'bg-blue-600 text-white shadow-md'
+                      ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/50'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  <span>Page {p.pageNumber}</span>
+                  <button
+                    onClick={() => {
+                      setCurrentPageIndex(idx);
+                      setEditingPage(p);
+                    }}
+                    className="flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Page {p.pageNumber}</span>
+                  </button>
+
+                  {/* Move Left / Swap Up */}
+                  {idx > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSwapPages(idx, idx - 1);
+                      }}
+                      className="hover:text-amber-300 ml-0.5 p-0.5 rounded transition cursor-pointer text-slate-400 hover:bg-blue-700/60"
+                      title={`Swap Page ${p.pageNumber} with Page ${p.pageNumber - 1}`}
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {/* Move Right / Swap Down */}
+                  {idx < activeMaterial.pages.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSwapPages(idx, idx + 1);
+                      }}
+                      className="hover:text-amber-300 p-0.5 rounded transition cursor-pointer text-slate-400 hover:bg-blue-700/60"
+                      title={`Swap Page ${p.pageNumber} with Page ${p.pageNumber + 1}`}
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {/* Delete Page */}
                   {activeMaterial.pages.length > 1 && (
-                    <span 
+                    <button 
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeletePage(p.id);
                       }}
-                      className="hover:text-red-400 ml-1 cursor-pointer p-0.5"
+                      className="hover:text-red-300 ml-1 cursor-pointer p-0.5 text-slate-400"
                       title="Delete Page"
                     >
-                      ✕
-                    </span>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   )}
-                </button>
+                </div>
               ))}
+
+              {/* Direct Page Swap Dropdown Tool */}
+              {activeMaterial.pages.length > 1 && (
+                <div className="ml-auto flex items-center gap-1.5 shrink-0 bg-slate-900 border border-slate-700 px-2 py-1 rounded-xl">
+                  <span className="text-[10px] font-bold text-amber-300 uppercase">Swap Page {currentPageIndex + 1} with:</span>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const targetIdx = parseInt(e.target.value, 10);
+                      if (!isNaN(targetIdx)) {
+                        handleSwapPages(currentPageIndex, targetIdx);
+                      }
+                    }}
+                    className="bg-slate-950 border border-slate-700 text-white text-xs rounded-lg px-2 py-0.5 focus:outline-none focus:border-amber-400 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Select Target Page --</option>
+                    {activeMaterial.pages.map((p, pIdx) => (
+                      pIdx !== currentPageIndex && (
+                        <option key={p.id} value={pIdx}>
+                          Page {p.pageNumber}: {stripHtml(p.title).slice(0, 20)}...
+                        </option>
+                      )
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Editor Input Form */}
@@ -3308,6 +3485,114 @@ Example:
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                     placeholder="Exercise File Display Title"
                   />
+                </div>
+
+                {/* PAGE BACKGROUND COLOR & TEXT STYLING CUSTOMIZATION PANEL */}
+                <div className="p-3.5 bg-slate-950 border border-amber-500/40 rounded-2xl space-y-3 shadow-md">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <span className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Palette className="w-4 h-4 text-amber-400" />
+                      <span>Page Background Color & Text Styling</span>
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-extrabold bg-amber-950/80 px-2 py-0.5 rounded-lg border border-amber-800/60">
+                      Active Page #{editingPage.pageNumber}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {/* Background Color Swatches & Picker */}
+                    <div>
+                      <label className="text-[11px] font-extrabold text-amber-200 block mb-1.5">
+                        Background Color Swatches & Custom Picker:
+                      </label>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[
+                          { name: 'Paper', hex: '#fdfbf7', darkText: true },
+                          { name: 'White', hex: '#ffffff', darkText: true },
+                          { name: 'Cream', hex: '#fef3c7', darkText: true },
+                          { name: 'Slate', hex: '#f1f5f9', darkText: true },
+                          { name: 'Dark', hex: '#0f172a', darkText: false },
+                          { name: 'Black', hex: '#18181b', darkText: false },
+                          { name: 'Emerald', hex: '#022c22', darkText: false },
+                          { name: 'Indigo', hex: '#1e1b4b', darkText: false },
+                        ].map((swatch) => {
+                          const isActive = (editingPage.pageBackgroundColor || '#fdfbf7').toLowerCase() === swatch.hex.toLowerCase();
+                          return (
+                            <button
+                              key={swatch.name}
+                              type="button"
+                              onClick={() => {
+                                const updated = { ...editingPage, pageBackgroundColor: swatch.hex };
+                                setEditingPage(updated);
+                                handleUpdatePage(updated);
+                              }}
+                              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
+                                isActive
+                                  ? 'border-amber-400 ring-2 ring-amber-400/60 shadow-md scale-105'
+                                  : 'border-slate-700 hover:border-amber-400/60'
+                              }`}
+                              style={{
+                                backgroundColor: swatch.hex,
+                                color: swatch.darkText ? '#0f172a' : '#f8fafc',
+                              }}
+                              title={`Apply ${swatch.name} (${swatch.hex}) background`}
+                            >
+                              <span
+                                className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0 inline-block"
+                                style={{ backgroundColor: swatch.hex }}
+                              />
+                              <span>{swatch.name}</span>
+                            </button>
+                          );
+                        })}
+
+                        {/* Custom Color Input */}
+                        <label
+                          className="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 hover:border-amber-400 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold text-amber-300"
+                          title="Pick custom hex background color"
+                        >
+                          <input
+                            type="color"
+                            value={editingPage.pageBackgroundColor || '#fdfbf7'}
+                            onChange={(e) => {
+                              const updated = { ...editingPage, pageBackgroundColor: e.target.value };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className="w-4 h-4 rounded cursor-pointer bg-transparent border-0 p-0"
+                          />
+                          <span>Custom Hex</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Text Alignment */}
+                    <div>
+                      <label className="text-[11px] font-extrabold text-amber-200 block mb-1">
+                        Page Text Alignment:
+                      </label>
+                      <div className="grid grid-cols-4 gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                        {(['left', 'center', 'right', 'justify'] as const).map((align) => (
+                          <button
+                            key={align}
+                            type="button"
+                            onClick={() => {
+                              const updated = { ...editingPage, contentTextAlign: align };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className={`py-1 rounded-lg text-xs font-bold capitalize transition cursor-pointer ${
+                              (editingPage.contentTextAlign || 'left') === align
+                                ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {align}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 relative">
@@ -3560,7 +3845,106 @@ Example:
                       <span>Base Page Default Theme Styles (Fallback)</span>
                       <span className="text-[10px] text-blue-400 font-normal">Click to expand/collapse</span>
                     </summary>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2.5 pt-2 border-t border-slate-800">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-2.5 pt-2 border-t border-slate-800">
+                      {/* Text Alignment Settings */}
+                      <div>
+                        <label className="text-[10px] text-amber-300 font-extrabold uppercase block mb-1">Page Text Alignment</label>
+                        <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = { ...editingPage, contentTextAlign: 'left' as const };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className={`p-1.5 rounded text-[10px] font-bold transition flex justify-center items-center cursor-pointer ${
+                              (editingPage.contentTextAlign || 'left') === 'left' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                            }`}
+                            title="Align Text Left"
+                          >
+                            Left
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = { ...editingPage, contentTextAlign: 'center' as const };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className={`p-1.5 rounded text-[10px] font-bold transition flex justify-center items-center cursor-pointer ${
+                              editingPage.contentTextAlign === 'center' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                            }`}
+                            title="Align Text Center"
+                          >
+                            Center
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = { ...editingPage, contentTextAlign: 'right' as const };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className={`p-1.5 rounded text-[10px] font-bold transition flex justify-center items-center cursor-pointer ${
+                              editingPage.contentTextAlign === 'right' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                            }`}
+                            title="Align Text Right"
+                          >
+                            Right
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = { ...editingPage, contentTextAlign: 'justify' as const };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className={`p-1.5 rounded text-[10px] font-bold transition flex justify-center items-center cursor-pointer ${
+                              editingPage.contentTextAlign === 'justify' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                            }`}
+                            title="Justify Text"
+                          >
+                            Justify
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Page Background Color Setting */}
+                      <div>
+                        <label className="text-[10px] text-amber-300 font-extrabold uppercase block mb-1">Page Background Color</label>
+                        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                          <input
+                            type="color"
+                            value={editingPage.pageBackgroundColor || '#fdfbf7'}
+                            onChange={(e) => {
+                              const updated = { ...editingPage, pageBackgroundColor: e.target.value };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className="w-7 h-7 rounded cursor-pointer bg-transparent border-0 p-0"
+                            title="Select Custom Page Background Color"
+                          />
+                          <select
+                            value={editingPage.pageBackgroundColor || '#fdfbf7'}
+                            onChange={(e) => {
+                              const updated = { ...editingPage, pageBackgroundColor: e.target.value };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className="w-full bg-slate-900 text-white text-[11px] rounded px-1.5 py-1 font-bold focus:outline-none"
+                          >
+                            <option value="#fdfbf7">Classic Paper (#fdfbf7)</option>
+                            <option value="#ffffff">Pure White (#ffffff)</option>
+                            <option value="#fef3c7">Vintage Cream (#fef3c7)</option>
+                            <option value="#f1f5f9">Slate Gray (#f1f5f9)</option>
+                            <option value="#0f172a">Night Dark (#0f172a)</option>
+                            <option value="#18181b">Charcoal Black (#18181b)</option>
+                            <option value="#022c22">Deep Emerald (#022c22)</option>
+                            <option value="#1e1b4b">Royal Indigo (#1e1b4b)</option>
+                          </select>
+                        </div>
+                      </div>
+
                       <div>
                         <label className="text-[10px] text-slate-400 block mb-1">Base Font Family</label>
                         <select
@@ -3577,38 +3961,39 @@ Example:
                           <option value="ui-monospace, SFMono-Regular, Consolas, monospace">Monospace</option>
                         </select>
                       </div>
+
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-1">Base Font Size</label>
-                        <select
-                          value={editingPage.contentFontSize || 'text-sm'}
-                          onChange={(e) => {
-                            const updated = { ...editingPage, contentFontSize: e.target.value };
-                            setEditingPage(updated);
-                            handleUpdatePage(updated);
-                          }}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white"
-                        >
-                          <option value="text-xs">Extra Small (12px)</option>
-                          <option value="text-sm">Small (14px)</option>
-                          <option value="text-base">Medium (16px)</option>
-                          <option value="text-lg">Large (18px)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-1">Base Weight</label>
-                        <select
-                          value={editingPage.contentFontStyle || 'font-normal'}
-                          onChange={(e) => {
-                            const updated = { ...editingPage, contentFontStyle: e.target.value };
-                            setEditingPage(updated);
-                            handleUpdatePage(updated);
-                          }}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white"
-                        >
-                          <option value="font-normal">Regular</option>
-                          <option value="font-medium">Medium</option>
-                          <option value="font-bold">Bold</option>
-                        </select>
+                        <label className="text-[10px] text-slate-400 block mb-1">Base Font Size & Weight</label>
+                        <div className="grid grid-cols-2 gap-1">
+                          <select
+                            value={editingPage.contentFontSize || 'text-sm'}
+                            onChange={(e) => {
+                              const updated = { ...editingPage, contentFontSize: e.target.value };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white"
+                          >
+                            <option value="text-xs">Extra Small (12px)</option>
+                            <option value="text-sm">Small (14px)</option>
+                            <option value="text-base">Medium (16px)</option>
+                            <option value="text-lg">Large (18px)</option>
+                          </select>
+
+                          <select
+                            value={editingPage.contentFontStyle || 'font-normal'}
+                            onChange={(e) => {
+                              const updated = { ...editingPage, contentFontStyle: e.target.value };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white"
+                          >
+                            <option value="font-normal">Regular</option>
+                            <option value="font-medium">Medium</option>
+                            <option value="font-bold">Bold</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
                   </details>
@@ -4053,7 +4438,7 @@ Example:
                   {/* Image Preview */}
                   {editingPage.imageUrl && (
                     <div className="rounded-xl overflow-hidden border border-amber-500/40 bg-slate-900 p-2 max-h-36 flex items-center justify-center">
-                      <img src={editingPage.imageUrl} alt="Diagram Preview" className="max-h-32 object-contain rounded-lg" />
+                      <SafeImage src={editingPage.imageUrl} alt="Diagram Preview" className="max-h-32 object-contain rounded-lg" />
                     </div>
                   )}
                 </div>
@@ -4311,14 +4696,80 @@ Example:
                 </div>
               </div>
 
-              {/* CARD 6: READING DISPLAY & TYPOGRAPHY */}
-              <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-4">
+              {/* CARD 6: READING DISPLAY, TEXT ALIGNMENT & BACKGROUND COLOR */}
+              <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-4 md:col-span-2">
                 <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800/80">
                   <Type className="w-5 h-5 text-emerald-400" />
-                  <h3 className="text-sm font-extrabold text-white">Reading Display & Typography</h3>
+                  <h3 className="text-sm font-extrabold text-white">Text Alignment, Background Color & Reader Typography</h3>
                 </div>
 
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Setting 1: Text Alignment */}
+                  <div>
+                    <label className="text-xs font-bold text-amber-300 block mb-1">Text Alignment Setting</label>
+                    <div className="grid grid-cols-4 gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                      {(['left', 'center', 'right', 'justify'] as const).map((align) => (
+                        <button
+                          key={align}
+                          type="button"
+                          onClick={() => {
+                            if (editingPage) {
+                              const updated = { ...editingPage, contentTextAlign: align };
+                              setEditingPage(updated);
+                              handleUpdatePage(updated);
+                            }
+                          }}
+                          className={`py-1.5 rounded-lg text-xs font-extrabold capitalize transition cursor-pointer ${
+                            (editingPage?.contentTextAlign || 'left') === align ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {align}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Setting 2: Background Color */}
+                  <div>
+                    <label className="text-xs font-bold text-amber-300 block mb-1">Page Background Color</label>
+                    <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800">
+                      <input
+                        type="color"
+                        value={editingPage?.pageBackgroundColor || '#fdfbf7'}
+                        onChange={(e) => {
+                          if (editingPage) {
+                            const updated = { ...editingPage, pageBackgroundColor: e.target.value };
+                            setEditingPage(updated);
+                            handleUpdatePage(updated);
+                          }
+                        }}
+                        className="w-8 h-8 rounded cursor-pointer bg-transparent border-0 p-0 shrink-0"
+                        title="Pick Custom Background Color"
+                      />
+                      <select
+                        value={editingPage?.pageBackgroundColor || '#fdfbf7'}
+                        onChange={(e) => {
+                          if (editingPage) {
+                            const updated = { ...editingPage, pageBackgroundColor: e.target.value };
+                            setEditingPage(updated);
+                            handleUpdatePage(updated);
+                          }
+                        }}
+                        className="w-full bg-slate-950 text-white text-xs rounded-lg px-2 py-1 font-bold focus:outline-none"
+                      >
+                        <option value="#fdfbf7">Classic Paper (#fdfbf7)</option>
+                        <option value="#ffffff">Pure White (#ffffff)</option>
+                        <option value="#fef3c7">Vintage Cream (#fef3c7)</option>
+                        <option value="#f1f5f9">Slate Gray (#f1f5f9)</option>
+                        <option value="#0f172a">Night Dark (#0f172a)</option>
+                        <option value="#18181b">Charcoal Black (#18181b)</option>
+                        <option value="#022c22">Deep Emerald (#022c22)</option>
+                        <option value="#1e1b4b">Royal Indigo (#1e1b4b)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Setting 3: Base Reader Font Size */}
                   <div>
                     <label className="text-xs font-bold text-slate-300 block mb-1">Base Reader Font Size</label>
                     <select
@@ -4333,6 +4784,7 @@ Example:
                     </select>
                   </div>
 
+                  {/* Setting 4: Reader Font Family */}
                   <div>
                     <label className="text-xs font-bold text-slate-300 block mb-1">Reader Font Family</label>
                     <select

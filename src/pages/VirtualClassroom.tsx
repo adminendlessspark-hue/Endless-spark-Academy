@@ -14,12 +14,17 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Play, 
-  BookOpen
+  BookOpen,
+  CircleDot,
+  Film,
+  Link as LinkIcon
 } from 'lucide-react';
-import { collection, query, where, getDocs, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, onSnapshot, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import ScreenRecorder from '../components/ScreenRecorder';
 import SecurePdfViewer from '../components/SecurePdfViewer';
+import SecureVideoPlayer from '../components/SecureVideoPlayer';
+import RecordingLinkModal from '../components/RecordingLinkModal';
 import { useSettings } from '../hooks/useSettings';
 
 export default function VirtualClassroom() {
@@ -40,6 +45,38 @@ export default function VirtualClassroom() {
   const [layoutMode, setLayoutMode] = useState<'split' | 'jitsi' | 'slides'>('split');
   const [embedJitsi, setEmbedJitsi] = useState<boolean>(true);
   const [screenshareOptimization, setScreenshareOptimization] = useState<'text' | 'motion' | 'lowres_text' | 'lowres_motion'>('lowres_text');
+
+  // Recording & Replay Modals state
+  const [isRecorderModalOpen, setIsRecorderModalOpen] = useState<boolean>(false);
+  const [isRecordingLinkModalOpen, setIsRecordingLinkModalOpen] = useState<boolean>(false);
+  const [isReplayModalOpen, setIsReplayModalOpen] = useState<boolean>(false);
+
+  const handleSaveRecordingUrl = async (formattedUrl: string) => {
+    try {
+      if (sessionDocId) {
+        await updateDoc(doc(db, 'live_sessions', sessionDocId), {
+          recordingUrl: formattedUrl
+        });
+      } else if (roomId) {
+        const docRef = await addDoc(collection(db, 'live_sessions'), {
+          roomId: roomId,
+          title: sessionData?.title || `Live Session - ${roomId}`,
+          recordingUrl: formattedUrl,
+          createdAt: new Date().toISOString(),
+          status: 'completed',
+          scheduledFor: new Date().toISOString(),
+          facultyName: user?.name || 'Faculty'
+        });
+        setSessionDocId(docRef.id);
+      }
+      setSessionData((prev: any) => ({ ...prev, recordingUrl: formattedUrl }));
+      alert("Recording link saved successfully to this live session!");
+      setIsRecordingLinkModalOpen(false);
+    } catch (err) {
+      console.error("Error saving recording link:", err);
+      alert("Failed to save recording link: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
 
   const handleGoBack = () => {
     navigate(-1);
@@ -362,6 +399,40 @@ export default function VirtualClassroom() {
 
         {/* Jitsi Mode Controller & Settings */}
         <div className="flex flex-wrap items-center gap-3">
+          {/* Record Live Class Button - Prominent Red Pulse */}
+          <button
+            onClick={() => setIsRecorderModalOpen(true)}
+            className="px-3.5 py-1.5 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white font-black rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shadow-red-600/30 cursor-pointer animate-pulse shrink-0"
+            title="Start Screen & Audio Recording for this Live Class"
+          >
+            <CircleDot className="w-4 h-4 text-white" />
+            <span>Record Class</span>
+          </button>
+
+          {/* Watch Recording Replay Button (If session has recordingUrl) */}
+          {sessionData?.recordingUrl && (
+            <button
+              onClick={() => setIsReplayModalOpen(true)}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shadow-purple-600/30 cursor-pointer shrink-0"
+              title="Watch recorded replay of this live class"
+            >
+              <Film className="w-3.5 h-3.5 text-purple-200" />
+              <span>Watch Replay</span>
+            </button>
+          )}
+
+          {/* For Admin/Faculty Presenters: Add / Edit Recording Link */}
+          {isPresenter && (
+            <button
+              onClick={() => setIsRecordingLinkModalOpen(true)}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer shrink-0"
+              title="Attach or edit video recording link for students"
+            >
+              <LinkIcon className="w-3.5 h-3.5 text-pink-400" />
+              <span className="hidden sm:inline">{sessionData?.recordingUrl ? 'Edit Recording Link' : 'Add Recording Link'}</span>
+            </button>
+          )}
+
           <a
             href="/ebook-studio"
             target="_blank"
@@ -543,15 +614,15 @@ export default function VirtualClassroom() {
               </div>
             )}
 
-            {/* Sidebar Guidelines & Screen Recorder panel (mainly for admins/faculties) */}
-            {isPresenter && (
+            {/* Sidebar Guidelines & Screen Recorder panel (Available to all participants) */}
+            {(isPresenter || user) && (
               <div className="w-full md:w-96 bg-slate-950/35 border border-slate-850 p-6 rounded-3xl space-y-6 overflow-auto">
                 <div className="p-5 bg-slate-950/90 rounded-2xl border border-slate-850 shadow-md">
                   <h3 className="font-bold text-slate-100 flex items-center gap-2 mb-3">
-                    <Monitor className="w-4 h-4 text-pink-500" /> Screen Recording
+                    <Monitor className="w-4 h-4 text-pink-500" /> Screen & Class Recording
                   </h3>
-                  <p className="text-xs text-slate-440 mb-4 leading-relaxed">
-                    Record class presentations cleanly. Utilize Jitsi alongside presentation slides to capture classroom moments files securely.
+                  <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                    Record class presentations & audio cleanly directly in your browser tab.
                   </p>
                   <ScreenRecorder />
                 </div>
@@ -669,6 +740,98 @@ export default function VirtualClassroom() {
         )}
 
       </div>
+
+      {/* Screen & Audio Recorder Modal */}
+      {isRecorderModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="bg-slate-950 px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-red-600/20 flex items-center justify-center text-red-500 border border-red-500/30">
+                  <CircleDot className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Live Class Screen & Audio Recorder</h3>
+                  <p className="text-xs text-slate-400">Capture video, presentation slides, and class audio directly from browser</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsRecorderModalOpen(false)}
+                className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl text-xs text-slate-300 leading-relaxed space-y-2">
+                <p className="font-bold text-pink-400 flex items-center gap-1.5 text-sm">
+                  <Info className="w-4 h-4" /> Recording Instructions:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-300">
+                  <li>Click <strong className="text-white">"Select Screen to Record"</strong> below and choose your screen, browser tab, or window.</li>
+                  <li>In the browser prompt, check <strong className="text-amber-300 font-bold">"Share tab audio"</strong> or <strong className="text-amber-300 font-bold">"Share system audio"</strong> to record faculty & student voices.</li>
+                  <li>Click <strong className="text-red-400 font-bold">"Start Recording"</strong> during the live class session.</li>
+                  <li>When finished, preview your recording and click <strong className="text-emerald-400 font-bold">"Download"</strong> to save the video file (.webm) to your device.</li>
+                </ol>
+              </div>
+
+              <ScreenRecorder 
+                title="Live Classroom Session Recorder" 
+                onSave={(blob) => {
+                  alert("Recording saved! Click Download in the recorder window to save your video file.");
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recorded Replay Viewer Modal */}
+      {isReplayModalOpen && sessionData?.recordingUrl && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="bg-slate-950 px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center text-purple-400 border border-purple-500/30">
+                  <Film className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Live Class Recording Replay</h3>
+                  <p className="text-xs text-slate-400">{sessionData.title || `Room: ${roomId}`}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsReplayModalOpen(false)}
+                className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800">
+                <SecureVideoPlayer 
+                  url={sessionData.recordingUrl} 
+                  title={sessionData.title || "Live Session Recording"}
+                  userName={user?.name || "Student"}
+                  userId={user?.id || "ID"}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recording Link Attachment Modal */}
+      <RecordingLinkModal 
+        isOpen={isRecordingLinkModalOpen}
+        initialUrl={sessionData?.recordingUrl || ''}
+        onClose={() => setIsRecordingLinkModalOpen(false)}
+        onSave={handleSaveRecordingUrl}
+        title="Add Live Class Recording Link"
+        subtitle="Attach video recording URLs or class notes so students can replay recorded lectures"
+      />
     </div>
   );
 }

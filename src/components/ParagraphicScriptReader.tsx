@@ -244,6 +244,7 @@ English Script:
 ${scriptText}`;
 
       const res = await generateGeminiContent({
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { systemInstruction: 'You are an expert bilingual speech and translation coach.' }
       });

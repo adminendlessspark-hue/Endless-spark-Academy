@@ -525,6 +525,7 @@ Provide:
 4. Phonetic Pronunciation Index (List 4 key technical or complex words with IPA-like respelling e.g., /PAK-ij-ing/).`;
 
       const response = await generateGeminiContent({
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { systemInstruction: 'You are an encouraging speech coach and script writer for non-native English students.' }
       });
@@ -571,6 +572,7 @@ Please give:
 4. 🚀 **Next Practice Step** (Actionable goal for the next attempt)`;
 
       const response = await generateGeminiContent({
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { systemInstruction: 'You are a warm, supportive video recording coach for Indian college students.' }
       });

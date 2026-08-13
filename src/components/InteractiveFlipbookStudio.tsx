@@ -16,6 +16,7 @@ import { useSettings } from '../hooks/useSettings';
 import { formatCourseName } from '../utils';
 import { CourseModule } from '../types';
 import { saveMediaToIDB, getMediaFromIDB } from '../utils/mediaStore';
+import { generateGeminiContent } from '../services/gemini';
 
 export interface FlipbookPage {
   id: string;
@@ -122,18 +123,25 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
 
   if (hasError) {
     return (
-      <div className={`flex flex-col items-center justify-center p-4 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-2 ${className || ''}`}>
-        <Image className="w-8 h-8 text-amber-400 opacity-80" />
-        <p className="text-xs font-bold text-slate-300">Attached Image Asset</p>
-        <p className="text-[10px] text-slate-400">Preview blocked by external host or CORS policy.</p>
+      <div className={`flex flex-col items-center justify-center p-2 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-1 ${className || ''}`}>
+        <img
+          src={resolvedSrc || src}
+          alt={alt || 'Page Attachment'}
+          className={className || 'max-h-48 object-contain rounded-lg'}
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            // Secondary fallback if primary fails
+            (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80';
+          }}
+        />
         {resolvedSrc && !resolvedSrc.startsWith('idb:') && (
           <a
             href={resolvedSrc}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[11px] text-amber-400 hover:underline flex items-center gap-1 bg-slate-950 px-2.5 py-1 rounded-lg border border-amber-500/30 font-bold"
+            className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 font-semibold"
           >
-            <ExternalLink className="w-3 h-3" /> Click Here to Open / View Image File
+            <ExternalLink className="w-3 h-3" /> View Source Image
           </a>
         )}
       </div>
@@ -145,6 +153,7 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
       src={resolvedSrc || src}
       alt={alt || 'Page Attachment'}
       className={className}
+      referrerPolicy="no-referrer"
       onError={() => setHasError(true)}
     />
   );
@@ -346,203 +355,28 @@ export function autoTranslateText(text: string, targetLangCode: string): string 
       return part;
     }
 
-    if (!part.trim()) return part;
+    const trimmedPart = part.trim();
+    if (!trimmedPart) return part;
 
+    // Check runtime translation cache for this part
+    if (RUNTIME_TRANSLATION_CACHE[targetLangCode]?.[trimmedPart]) {
+      return part.replace(trimmedPart, RUNTIME_TRANSLATION_CACHE[targetLangCode][trimmedPart]);
+    }
+
+    // Check dictionary exact match for this part
+    if (TRANSLATION_DICTIONARY[targetLangCode]?.[trimmedPart]) {
+      return part.replace(trimmedPart, TRANSLATION_DICTIONARY[targetLangCode][trimmedPart]);
+    }
+
+    // Replace full exact phrases from dictionary if present in part
     let translated = part;
-
-    if (targetLangCode === 'ms') {
-      translated = translated
-        .replace(/What is color\?/gi, 'Apakah itu warna?')
-        .replace(/Visual Electromagnetic Perception/gi, 'Persepsi Elektromagnetik Visual')
-        .replace(/Color is the visual perceptual property derived from the spectrum of light interacting with the photoreceptors in the eye/gi, 'Warna ialah sifat persepsi visual yang diperoleh daripada spektrum cahaya yang berinteraksi dengan fotoreseptor di dalam mata')
-        .replace(/It is not an intrinsic physical property of an object itself, but rather a sensory experience created by the brain's interpretation of electromagnetic radiation within the visible light spectrum/gi, 'Ia bukan sifat fizikal intrinsik sesuatu objek itu sendiri, sebaliknya pengalaman deria yang dicipta oleh tafsiran otak terhadap radiasi elektromagnet di dalam spektrum cahaya kelihatan')
-        .replace(/The Triad of Color Perception/gi, 'Triad Persepsi Warna')
-        .replace(/Light Source: Emits electromagnetic radiation/gi, 'Sumber Cahaya: Memancarkan radiasi elektromagnet')
-        .replace(/Different sources \(e\.g\., sunlight, LED, incandescent\) radiate different spectral power distributions/gi, 'Sumber berbeza (cth., cahaya matahari, LED, pijar) memancarkan taburan kuasa spektrum yang berbeza')
-        .replace(/Object \(Substrate\): Interacts with light through absorption, reflection, transmission, or scattering depending on its physical and chemical properties/gi, 'Objek (Substrat): Berinteraksi dengan cahaya melalui penyerapan, pantulan, penghantaran, atau penyebaran bergantung pada sifat fizikal dan kimianya')
-        .replace(/Observer: The human eye receives light via wavelength-sensitive photoreceptors \(S, M, and L cones\), sending neural signals to the visual cortex where the final color perception is constructed/gi, 'Pemerhati: Mata manusia menerima cahaya melalui fotoreseptor sensitif panjang gelombang (kon S, M, dan L), menghantar isyarat saraf ke korteks visual di mana persepsi warna akhir dibina')
-        .replace(/Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!/gi, 'Petua Pengajar: Sentiasa sahkan arah urat mesin sebelum mengunci dimensi garis acuan pada ArtiosCAD!')
-        .replace(/Packaging/gi, 'Pembungkusan')
-        .replace(/Engineering/gi, 'Kejuruteraan')
-        .replace(/Workflow/gi, 'Aliran Kerja')
-        .replace(/Printing/gi, 'Percetakan')
-        .replace(/Design/gi, 'Reka Bentuk')
-        .replace(/Quality Control/gi, 'Kawalan Kualiti')
-        .replace(/Introduction/gi, 'Pengenalan')
-        .replace(/Chapter/gi, 'Bab')
-        .replace(/Step/gi, 'Langkah')
-        .replace(/Important/gi, 'Penting')
-        .replace(/Note/gi, 'Nota')
-        .replace(/Verify/gi, 'Sahkan')
-        .replace(/Material/gi, 'Bahan')
-        .replace(/Fundamentals/gi, 'Asas')
-        .replace(/Module/gi, 'Modul')
-        .replace(/Exercise/gi, 'Latihan')
-        .replace(/Overview/gi, 'Gambaran Keseluruhan')
-        .replace(/Guide/gi, 'Panduan');
-      return translated;
-    } else if (targetLangCode === 'ta') {
-      translated = translated
-        .replace(/What is color\?/gi, 'வண்ணம் என்றால் என்ன?')
-        .replace(/Visual Electromagnetic Perception/gi, 'காட்சி மின்காந்த புலனுணர்வு')
-        .replace(/Colour is how our eyes and brain see different light waves\./gi, 'நமது கண்களும் மூளையும் வெவ்வேறு ஒளி அலைகளை எவ்வாறு பார்க்கின்றன என்பதே வண்ணம் ஆகும்.')
-        .replace(/Objects absorb some light and reflect other light\./gi, 'பொருட்கள் சில ஒளியை உறிஞ்சி மற்ற ஒளியை பிரதிபலிக்கின்றன.')
-        .replace(/Your eyes catch the reflected light and your brain turns it into a colour like red, blue, or green\./gi, 'உங்கள் கண்கள் பிரதிபலித்த ஒளியைப் பிடிக்கும், மேலும் உங்கள் மூளை அதை சிவப்பு, நீலம் அல்லது பச்சை போன்ற வண்ணமாக மாற்றுகிறது.')
-        .replace(/Color is the visual perceptual property derived from the spectrum of light interacting with the photoreceptors in the eye/gi, 'வண்ணம் என்பது கண்ணில் உள்ள ஒளிச்சேர்க்கைகளுடன் தொடர்பு கொள்ளும் ஒளியின் நிறமாலையிலிருந்து பெறப்பட்ட காட்சி புலனுணர்வுப் பண்பாகும்')
-        .replace(/It is not an intrinsic physical property of an object itself, but rather a sensory experience created by the brain's interpretation of electromagnetic radiation within the visible light spectrum/gi, 'இது ஒரு பொருளின் உள்ளார்ந்த இயற்பியல் பண்பு அல்ல, மாறாக கண்ணுறு ஒளி நிறமாலையில் உள்ள மின்காந்த கதிர்வீச்சை மூளை விளக்குவதன் மூலம் உருவாக்கப்படும் உணர்ச்சி அனுபவமாகும்')
-        .replace(/How We See/gi, 'நாம் எவ்வாறு பார்க்கிறோம்')
-        .replace(/Colour Light waves:/gi, 'வண்ண ஒளி அலைகள்:')
-        .replace(/Light waves:/gi, 'ஒளி அலைகள்:')
-        .replace(/Light travels in waves\./gi, 'ஒளி அலைகளாகப் பயணிக்கிறது.')
-        .replace(/Each colour has a different size or length\./gi, 'ஒவ்வொரு வண்ணத்திற்கும் வெவ்வேறு அளவு அல்லது நீளம் உள்ளது.')
-        .replace(/Long waves look red\./gi, 'நீண்ட அலைகள் சிவப்பாக இருக்கும்.')
-        .replace(/Short waves look blue or violet\./gi, 'குறுகிய அலைகள் நீலமாக அல்லது ஊதாவாக இருக்கும்.')
-        .replace(/The eye:/gi, 'கண்:')
-        .replace(/Special cells in your eyes called cones catch these light waves\./gi, 'உங்கள் கண்களில் உள்ள கூம்புகள் எனப்படும் சிறப்பு செல்கள் இந்த ஒளி அலைகளைப் பிடிக்கின்றன.')
-        .replace(/The brain:/gi, 'மூளை:')
-        .replace(/Your brain takes signals from your eyes and names the colour\./gi, 'உங்கள் மூளை உங்கள் கண்களிலிருந்து சிக்னல்களை எடுத்து வண்ணத்திற்கு பெயரிடுகிறது.')
-        .replace(/Main Parts of Colour/gi, 'வண்ணத்தின் முக்கிய பகுதிகள்')
-        .replace(/Hue: The name of the family of the colour, like red or yellow\./gi, 'நிறம்: சிவப்பு அல்லது மஞ்சள் போன்ற வண்ணத்தின் குடும்பத்தின் பெயர்.')
-        .replace(/Lightness: How light or dark a colour is\./gi, 'வெளிச்சம்: ஒரு வண்ணம் எவ்வளவு வெளிச்சமாக அல்லது இருளாக இருக்கிறது என்பது.')
-        .replace(/Brightness: How strong or pale a colour appears\./gi, 'பிரகாசம்: ஒரு வண்ணம் எவ்வளவு வலுவாக அல்லது வெளிறியதாகக் காணப்படுகிறது.')
-        .replace(/The Triad of Color Perception/gi, 'வண்ணப் புலனுணர்வின் முக்கோணம்')
-        .replace(/Light Source: Emits electromagnetic radiation/gi, 'ஒளி மூலம்: மின்காந்த கதிர்வீச்சை வெளியிடுகிறது')
-        .replace(/Different sources \(e\.g\., sunlight, LED, incandescent\) radiate different spectral power distributions/gi, 'வெவ்வேறு மூலங்கள் (எ.கா. சூரிய ஒளி, எல்.இ.டி, ஒளிரும் விளக்குகள்) வெவ்வேறு நிறமாலை விநியோகங்களை வெளியிடுகின்றன')
-        .replace(/Object \(Substrate\): Interacts with light through absorption, reflection, transmission, or scattering depending on its physical and chemical properties/gi, 'பொருள் (அடி மூலக்கூறு): அதன் இயற்பியல் மற்றும் வேதியியல் பண்புகளைப் பொறுத்து உறிஞ்சுதல், பிரதிபலிப்பு, பரிமாற்றம் அல்லது சிதறல் மூலம் ஒளியுடன் தொடர்பு கொள்கிறது')
-        .replace(/Observer: The human eye receives light via wavelength-sensitive photoreceptors \(S, M, and L cones\), sending neural signals to the visual cortex where the final color perception is constructed/gi, 'பார்வையாளர்: மனித கண் அலைநீள-உணர்திறன் கொண்ட புகைப்பட ஏற்பிகள் (S, M, மற்றும் L கூம்புகள்) மூலம் ஒளியைப் பெறுகிறது, நரம்பியல் சிக்னல்களை காட்சி புறணிக்கு அனுப்புகிறது, அங்கு இறுதி வண்ண புலனுணர்வு உருவாக்கப்படுகிறது')
-        .replace(/Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!/gi, 'ஆசிரியர் குறிப்பு: ஆர்டியோஸ்கேடில் டை-லைன் பரிமாணங்களைப் பூட்டுவதற்கு முன்பு எப்போதும் இயந்திர தானிய திசையைச் சரிபார்க்கவும்!')
-        .replace(/Packaging/gi, 'பேக்கேஜிங்')
-        .replace(/Engineering/gi, 'பொறியியல்')
-        .replace(/Workflow/gi, 'பணிப்பாய்வு')
-        .replace(/Printing/gi, 'அச்சிடுதல்')
-        .replace(/Design/gi, 'வடிவமைப்பு')
-        .replace(/Quality Control/gi, 'தரக் கட்டுப்பாடு')
-        .replace(/Color Management/gi, 'வண்ண மேலாண்மை')
-        .replace(/Color/gi, 'வண்ணம்')
-        .replace(/Light/gi, 'ஒளி')
-        .replace(/Spectrum/gi, 'நிறமாலை')
-        .replace(/Introduction/gi, 'அறிமுகம்')
-        .replace(/Chapter/gi, 'அத்தியாயம்')
-        .replace(/Step/gi, 'படி')
-        .replace(/Important/gi, 'முக்கியமானது')
-        .replace(/Note/gi, 'குறிப்பு')
-        .replace(/Verify/gi, 'சரிபார்க்கவும்')
-        .replace(/Material/gi, 'பாடப் பொருள்')
-        .replace(/Fundamentals/gi, 'அடிப்படைகள்')
-        .replace(/Module/gi, 'தொகுதி')
-        .replace(/Exercise/gi, 'பயிற்சி')
-        .replace(/Overview/gi, 'மேலோட்டம்')
-        .replace(/Guide/gi, 'வழிகாட்டி');
-      return translated;
-    } else if (targetLangCode === 'zh') {
-      translated = translated
-        .replace(/What is color\?/gi, '什么是颜色？')
-        .replace(/Visual Electromagnetic Perception/gi, '视觉电磁感知')
-        .replace(/Color is the visual perceptual property derived from the spectrum of light interacting with the photoreceptors in the eye/gi, '颜色是光光谱与眼睛中的光感受器相互作用产生的视觉感知特性')
-        .replace(/It is not an intrinsic physical property of an object itself, but rather a sensory experience created by the brain's interpretation of electromagnetic radiation within the visible light spectrum/gi, '它不是物体本身的本质物理特性，而是大脑对可见光光谱内电磁辐射的解释所创造感官体验')
-        .replace(/The Triad of Color Perception/gi, '色彩感知三要素')
-        .replace(/Light Source: Emits electromagnetic radiation/gi, '光源：发射电磁辐射')
-        .replace(/Different sources \(e\.g\., sunlight, LED, incandescent\) radiate different spectral power distributions/gi, '不同光源（如日光、LED、白炽灯）辐射不同的光谱功率分布')
-        .replace(/Object \(Substrate\): Interacts with light through absorption, reflection, transmission, or scattering depending on its physical and chemical properties/gi, '物体（承印物）：根据其物理和化学特性，通过吸收、反射、透射或散射与光相互作用')
-        .replace(/Observer: The human eye receives light via wavelength-sensitive photoreceptors \(S, M, and L cones\), sending neural signals to the visual cortex where the final color perception is constructed/gi, '观察者：人眼通过波长敏感的光感受器（S、M 和 L 锥体细胞）接收光线，向视觉皮层发送神经信号，在其中构建最终的色彩感知')
-        .replace(/Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!/gi, '教师提示：在 ArtiosCAD 上锁定刀模线尺寸之前，请务必验证机器纹理方向！')
-        .replace(/Packaging/gi, '包装')
-        .replace(/Engineering/gi, '工程')
-        .replace(/Workflow/gi, '工作流程')
-        .replace(/Printing/gi, '印刷')
-        .replace(/Design/gi, '设计')
-        .replace(/Quality Control/gi, '质量控制')
-        .replace(/Color Management/gi, '色彩管理')
-        .replace(/Introduction/gi, '介绍')
-        .replace(/Chapter/gi, '章节')
-        .replace(/Step/gi, '步骤')
-        .replace(/Important/gi, '重要')
-        .replace(/Note/gi, '笔记')
-        .replace(/Verify/gi, '验证')
-        .replace(/Material/gi, '材料')
-        .replace(/Fundamentals/gi, '基础')
-        .replace(/Module/gi, '模块')
-        .replace(/Exercise/gi, '练习')
-        .replace(/Overview/gi, '概述')
-        .replace(/Guide/gi, '指南');
-      return translated;
-    } else if (targetLangCode === 'hi') {
-      translated = translated
-        .replace(/What is color\?/gi, 'रंग क्या है?')
-        .replace(/Visual Electromagnetic Perception/gi, 'दृश्य विद्युतचुंबकीय धारणा')
-        .replace(/The Triad of Color Perception/gi, 'रंग धारणा का त्रय')
-        .replace(/Light Source: Emits electromagnetic radiation/gi, 'प्रकाश स्रोत: विद्युतचुंबकीय विकिरण उत्सर्जित करता है')
-        .replace(/Faculty Tip: Always verify machine grain direction before locking die-line dimensions on ArtiosCAD!/gi, 'संकाय युक्ति: ArtiosCAD पर डाई-लाइन आयामों को लॉक करने से पहले हमेशा मशीन ग्रेन दिशा की पुष्टि करें!')
-        .replace(/Packaging/gi, 'पैकेजिंग')
-        .replace(/Engineering/gi, 'इंजीनियरिंग')
-        .replace(/Workflow/gi, 'कार्यप्रवाह')
-        .replace(/Printing/gi, 'प्रिंटिंग')
-        .replace(/Design/gi, 'डिजाइन')
-        .replace(/Quality Control/gi, 'गुणवत्ता नियंत्रण')
-        .replace(/Color Management/gi, 'रंग प्रबंधन')
-        .replace(/Introduction/gi, 'परिचय')
-        .replace(/Chapter/gi, 'अध्याय')
-        .replace(/Step/gi, 'चरण')
-        .replace(/Important/gi, 'महत्वपूर्ण')
-        .replace(/Note/gi, 'नोट')
-        .replace(/Verify/gi, 'सत्यापित करें')
-        .replace(/Material/gi, 'सामग्री')
-        .replace(/Fundamentals/gi, 'मूल बातें')
-        .replace(/Module/gi, 'मॉड्यूल')
-        .replace(/Exercise/gi, 'अभ्यास')
-        .replace(/Overview/gi, 'अवलोकन')
-        .replace(/Guide/gi, 'मार्गदर्शिका');
-      return translated;
-    } else if (targetLangCode === 'es') {
-      translated = translated
-        .replace(/What is color\?/gi, '¿Qué es el color?')
-        .replace(/Visual Electromagnetic Perception/gi, 'Percepción Electromagnética Visual')
-        .replace(/The Triad of Color Perception/gi, 'La Tríada de la Percepción del Color')
-        .replace(/Packaging/gi, 'Embalaje')
-        .replace(/Engineering/gi, 'Ingeniería')
-        .replace(/Workflow/gi, 'Flujo de trabajo')
-        .replace(/Printing/gi, 'Impresión')
-        .replace(/Design/gi, 'Diseño')
-        .replace(/Quality Control/gi, 'Control de calidad')
-        .replace(/Color Management/gi, 'Gestión del color')
-        .replace(/Introduction/gi, 'Introducción')
-        .replace(/Chapter/gi, 'Capítulo')
-        .replace(/Step/gi, 'Paso')
-        .replace(/Important/gi, 'Importante')
-        .replace(/Note/gi, 'Nota')
-        .replace(/Verify/gi, 'Verificar')
-        .replace(/Material/gi, 'Material')
-        .replace(/Fundamentals/gi, 'Fundamentos')
-        .replace(/Module/gi, 'Módulo')
-        .replace(/Exercise/gi, 'Ejercicio')
-        .replace(/Overview/gi, 'Visión general')
-        .replace(/Guide/gi, 'Guía');
-      return translated;
-    } else if (targetLangCode === 'fr') {
-      translated = translated
-        .replace(/What is color\?/gi, "Qu'est-ce que la couleur ?")
-        .replace(/Visual Electromagnetic Perception/gi, 'Perception Électromagnétique Visuelle')
-        .replace(/The Triad of Color Perception/gi, 'La Triade de la Perception des Couleurs')
-        .replace(/Packaging/gi, 'Emballage')
-        .replace(/Engineering/gi, 'Ingénierie')
-        .replace(/Workflow/gi, 'Flux de travail')
-        .replace(/Printing/gi, 'Impression')
-        .replace(/Design/gi, 'Conception')
-        .replace(/Quality Control/gi, 'Contrôle qualité')
-        .replace(/Color Management/gi, 'Gestion des couleurs')
-        .replace(/Introduction/gi, 'Introduction')
-        .replace(/Chapter/gi, 'Chapitre')
-        .replace(/Step/gi, 'Étape')
-        .replace(/Important/gi, 'Important')
-        .replace(/Note/gi, 'Remarque')
-        .replace(/Verify/gi, 'Vérifier')
-        .replace(/Material/gi, 'Matériel')
-        .replace(/Fundamentals/gi, 'Fondamentaux')
-        .replace(/Module/gi, 'Module')
-        .replace(/Exercise/gi, 'Exercice')
-        .replace(/Overview/gi, 'Aperçu')
-        .replace(/Guide/gi, 'Guide');
-      return translated;
+    const dict = TRANSLATION_DICTIONARY[targetLangCode];
+    if (dict) {
+      Object.keys(dict).forEach(phrase => {
+        if (phrase.length > 5 && translated.includes(phrase)) {
+          translated = translated.split(phrase).join(dict[phrase]);
+        }
+      });
     }
 
     return translated;
@@ -599,7 +433,7 @@ Pertimbangan struktur utama meliputi:
         mediaType: 'both',
         imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1000&q=80',
         imageCaption: 'Fig 1.1: Corrugated Board Flute Profile Architecture & Crease Scores',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
         videoCaption: 'Video Tutorial: Folding Carton Creasing & Die-cutting Demonstration',
         layoutStyle: 'grid-2x2',
         calloutText: '',
@@ -630,6 +464,18 @@ Peraturan Asas Prasemak:
 • Resolusi Imej: Tepat 300 DPI pada skala 100%.
 • Jarak Trapping: 0.15 mm - 0.3 mm untuk mesin cetak fleksografi bagi mengelakkan ruang putih.`,
             calloutText: ''
+          },
+          ta: {
+            title: 'முன்-பரிசோதனை மற்றும் வண்ண மேலாண்மை பணிப்பாய்வு',
+            subtitle: '',
+            content: `முன்-பரிசோதனை (Preflighting) என்பது RIP செயலாக்கத்திற்கு முன் வண்ணப் பிரிப்பு, எழுத்துருக் கோடுகள், குறைந்தபட்ச கோடு எடைகள் மற்றும் தெளிவுத்திறன் அமைப்புகளைச் சரிபார்ப்பதன் மூலம் பிழையற்ற தட்டு வெளியீட்டிற்கு உத்தரவாதம் அளிக்கிறது.
+
+ஃப்ளெக்ஸோகிராஃபிக் & ஆப்செட் பிரீபிரஸிற்கான முக்கிய விதிகள்:
+• குறைந்தபட்ச கோடு எடை: ஒற்றை வண்ணத்திற்கு 0.25 pt, தலைகீழ் நாக் அவுட் உரைகளுக்கு 0.5 pt.
+• படத் தெளிவுத்திறன்: 100% பொருத்துதல் அளவில் சரியாக 300 DPI.
+• ட்ராப்பிங் தூரம்: பதிவு நகர்வினால் ஏற்படும் வெள்ளை இடைவெளிகளைத் தடுக்க ஃப்ளெக்ஸோகிராஃபிக் அச்சகங்களுக்கு 0.15 மிமீ - 0.3 மிமீ.`,
+            calloutText: '',
+            imageCaption: 'படம் 2.1: அடோப் அக்ரோபேட் புரோ DC இல் முன்-பரிசோதனை கண்டறிதல் குழு'
           }
         },
         mediaType: 'image',
@@ -666,10 +512,23 @@ Langkah Semakan:
 3. Jalankan skrip "Tambah Limpahan Bleed 3mm".
 4. Eksport PDF/X-4 Resolusi Tinggi untuk pembentukan plat.`,
             calloutText: ''
+          },
+          ta: {
+            title: 'இன்டராக்டிவ் கேஸ் ஸ்டடி: அக்ரோபேட் பிரீஃப்ளைட் ஆட்டோ-ஃபிக்ஸ்',
+            subtitle: '',
+            content: `தானியங்கி அக்ரோபேட் பிரீஃப்ளைட் சுயவிவரங்கள் விடுபட்ட ப்ளீட்ஸ் (3மிமீ), RGB வண்ண இடைவெளிகள், சிதைந்த எழுத்துருக்கள் மற்றும் குறைந்த தெளிவுத்திறன் கொண்ட ராஸ்டர் பொருள்களை எவ்வாறு முறையாகக் கண்டறிகின்றன என்பதைக் கவனிக்க கீழே உள்ள வீடியோ சொற்பொழிவைப் பார்க்கவும்.
+
+படி-படியாக சரிபார்ப்புப் பட்டியலைப் பின்தொடரவும்:
+1. அக்ரோபேட் புரோ பிரீஃப்ளைட் கருவியில் PDF கோப்பைத் திறக்கவும்.
+2. "அனைத்து RGB ஐயும் CMYK ஆக மாற்று (FOGRA39 / GRACoL 2013)" என்பதைத் தேர்ந்தெடுக்கவும்.
+3. "3மிமீ ப்ளீட் பாக்ஸ் விரிவாக்கத்தைச் சேர்" ஸ்கிரிப்டைச் செயல்படுத்தவும்.
+4. தட்டு வெளியீட்டிற்கு உயர் தெளிவுத்திறன் கொண்ட PDF/X-4 PDF ஐ ஏற்றுமதி செய்யவும்.`,
+            calloutText: '',
+            videoCaption: 'வீடியோ விரிவுரை: ஆசிரியரின் பின்னணி குரலுடன் பிரீஃப்ளைட்டிங் மாஸ்டர்கிளாஸ்'
           }
         },
         mediaType: 'video',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
         videoCaption: 'Video Lecture: Preflighting Masterclass with Faculty Voiceover',
         layoutStyle: 'media-top',
         calloutText: '',
@@ -984,43 +843,23 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     if (langCode === 'en' || !page) return page;
 
     const existingTrans = page.translations?.[langCode];
-
-    // Known static default template titles
-    const defaultTemplateTitles = [
-      "Structural Packaging Design Introduction",
-      "Preflighting & File Verification",
-      "Flexographic Inks & Spectrophotometer Calibration"
-    ];
-
-    const isDefaultTemplateTitle = defaultTemplateTitles.includes(page.title);
-
     const rawCallout = page.calloutText && !isDefaultCalloutText(page.calloutText) ? page.calloutText : '';
 
-    // If custom edited and a specific translation for langCode was saved during edit, use it
-    if (existingTrans && page.isCustomEdited) {
-      const transCallout = existingTrans.calloutText && !isDefaultCalloutText(existingTrans.calloutText) ? existingTrans.calloutText : '';
-      return {
-        ...page,
-        title: existingTrans.title || autoTranslateText(page.title, langCode),
-        subtitle: existingTrans.subtitle !== undefined ? existingTrans.subtitle : (page.subtitle ? autoTranslateText(page.subtitle, langCode) : ''),
-        content: existingTrans.content || autoTranslateText(page.content, langCode),
-        calloutText: transCallout || (rawCallout ? autoTranslateText(rawCallout, langCode) : ''),
-      };
-    }
-
-    // If unedited initial default template page, use static translation
-    if (existingTrans && !page.isCustomEdited && isDefaultTemplateTitle) {
+    if (existingTrans) {
       const transCallout = existingTrans.calloutText && !isDefaultCalloutText(existingTrans.calloutText) ? existingTrans.calloutText : '';
       return {
         ...page,
         title: existingTrans.title || page.title,
-        subtitle: existingTrans.subtitle || page.subtitle,
+        subtitle: existingTrans.subtitle !== undefined && existingTrans.subtitle !== '' ? existingTrans.subtitle : (page.subtitle || ''),
         content: existingTrans.content || page.content,
         calloutText: transCallout || rawCallout,
+        imageCaption: existingTrans.imageCaption || page.imageCaption || '',
+        videoCaption: existingTrans.videoCaption || page.videoCaption || '',
+        videoTranscription: existingTrans.videoTranscription || page.videoTranscription || ''
       };
     }
 
-    // Dynamic translation on NEW or UPDATED English text
+    // Dynamic translation on English text
     return {
       ...page,
       title: autoTranslateText(page.title, langCode),
@@ -1487,22 +1326,38 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     }
   };
 
-  // Convert YouTube/Vimeo URLs to Embeddable URLs
+  // Convert YouTube/Vimeo/Drive/Loom URLs to Embeddable URLs
   const getEmbedVideoUrl = (url?: string) => {
     if (!url) return '';
-    if (url.includes('youtube.com/watch?v=')) {
-      const id = url.split('v=')[1]?.split('&')[0];
+    const clean = url.trim();
+    if (clean.includes('youtube.com/watch?v=')) {
+      const id = clean.split('v=')[1]?.split('&')[0];
       return `https://www.youtube.com/embed/${id}?autoplay=0&modestbranding=1&rel=0`;
     }
-    if (url.includes('youtu.be/')) {
-      const id = url.split('youtu.be/')[1]?.split('?')[0];
+    if (clean.includes('youtu.be/')) {
+      const id = clean.split('youtu.be/')[1]?.split('?')[0];
       return `https://www.youtube.com/embed/${id}?autoplay=0&modestbranding=1&rel=0`;
     }
-    if (url.includes('vimeo.com/')) {
-      const id = url.split('vimeo.com/')[1];
+    if (clean.includes('youtube.com/shorts/')) {
+      const id = clean.split('shorts/')[1]?.split('?')[0];
+      return `https://www.youtube.com/embed/${id}?autoplay=0&modestbranding=1&rel=0`;
+    }
+    if (clean.includes('youtube.com/embed/')) {
+      return clean;
+    }
+    if (clean.includes('vimeo.com/')) {
+      const id = clean.split('vimeo.com/')[1]?.split('?')[0];
       return `https://player.vimeo.com/video/${id}`;
     }
-    return url;
+    if (clean.includes('drive.google.com/file/d/')) {
+      const id = clean.split('/d/')[1]?.split('/')[0];
+      return `https://drive.google.com/file/d/${id}/preview`;
+    }
+    if (clean.includes('loom.com/share/')) {
+      const id = clean.split('share/')[1]?.split('?')[0];
+      return `https://www.loom.com/embed/${id}`;
+    }
+    return clean;
   };
 
   // Helper to strip HTML tags from strings (removes <mark>, style attributes, etc.)
@@ -1540,7 +1395,20 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   // Helper to check if a URL is a direct video (local upload Data URL, blob, IDB key, MP4, WebM, MOV)
   const isDirectVideo = (url?: string) => {
     if (!url) return false;
-    return url.startsWith('data:video') || url.startsWith('blob:') || url.startsWith('idb:') || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov') || url.endsWith('.ogg');
+    const lower = url.toLowerCase().trim();
+    return (
+      lower.startsWith('data:video') ||
+      lower.startsWith('blob:') ||
+      lower.startsWith('idb:') ||
+      lower.endsWith('.mp4') ||
+      lower.endsWith('.webm') ||
+      lower.endsWith('.mov') ||
+      lower.endsWith('.ogg') ||
+      lower.includes('.mp4?') ||
+      lower.includes('.webm?') ||
+      lower.includes('commondatastorage.googleapis.com') ||
+      lower.includes('w3schools.com/html/mov')
+    );
   };
 
   // Video Player Component with Synchronized Subtitle Cues, WebVTT Track, and Real-Time Timeupdate
@@ -1554,9 +1422,39 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     const [duration, setDuration] = useState<number>(0);
     const [vttTrackUrl, setVttTrackUrl] = useState<string>('');
     const [translationVersion, setTranslationVersion] = useState<number>(0);
+    const [resolvedUrl, setResolvedUrl] = useState<string>('');
+    const [hasPlaybackError, setHasPlaybackError] = useState<boolean>(false);
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
-    const realUrl = resolveMediaUrl(url);
+    // Asynchronously resolve IndexedDB idb: keys to valid blob object URLs
+    useEffect(() => {
+      setHasPlaybackError(false);
+      if (!url) {
+        setResolvedUrl('');
+        return;
+      }
+      if (url.startsWith('idb:')) {
+        const key = url.replace('idb:', '');
+        if (mediaCache[key]) {
+          setResolvedUrl(mediaCache[key]);
+        } else {
+          getMediaFromIDB(key)
+            .then(resolved => {
+              if (resolved) {
+                setResolvedUrl(resolved);
+                setMediaCache(prev => ({ ...prev, [key]: resolved }));
+              } else {
+                setHasPlaybackError(true);
+              }
+            })
+            .catch(() => setHasPlaybackError(true));
+        }
+      } else {
+        setResolvedUrl(url);
+      }
+    }, [url, mediaCache]);
+
+    const activeUrl = resolvedUrl || (url && !url.startsWith('idb:') ? url : '');
     const rawCap = caption || pageObj?.videoCaption || '';
     const rawTx = transcription || pageObj?.videoTranscription || '';
 
@@ -1713,10 +1611,10 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
 
     return (
       <div className="relative w-full h-full group bg-black rounded-xl overflow-hidden flex flex-col justify-center">
-        {(isDirectVideo(url) || realUrl.startsWith('blob:') || realUrl.startsWith('data:video')) ? (
+        {(isDirectVideo(url) || activeUrl.startsWith('blob:') || activeUrl.startsWith('data:video') || activeUrl.endsWith('.mp4') || activeUrl.endsWith('.webm') || activeUrl.includes('commondatastorage.googleapis.com')) ? (
           <video
             ref={videoRef}
-            src={realUrl || url}
+            src={activeUrl}
             controls
             onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
@@ -1734,7 +1632,7 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
           </video>
         ) : (
           <iframe
-            src={getEmbedVideoUrl(realUrl || url)}
+            src={getEmbedVideoUrl(activeUrl || url)}
             title={cleanCap || "Lesson Video"}
             className="w-full h-full border-0 rounded-lg"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -2126,13 +2024,129 @@ Example:
     }
   };
 
-  // Auto Translate all pages in current material
-  const handleAutoTranslateAll = () => {
+  const translatingRef = useRef<Set<string>>(new Set());
+
+  // AI Auto Translate all pages in material using Gemini
+  const translateMaterialPagesWithAI = async (mat: FlipbookMaterial, langCode: string) => {
+    if (langCode === 'en' || !mat || !mat.pages || mat.pages.length === 0) return;
+
+    const reqKey = `${mat.id}_${langCode}`;
+    if (translatingRef.current.has(reqKey)) return;
+
+    // Check if any pages need translation
+    const needsTranslation = mat.pages.some(p => !p.translations?.[langCode]?.title || !p.translations?.[langCode]?.content);
+    if (!needsTranslation) return;
+
+    translatingRef.current.add(reqKey);
     setIsTranslating(true);
-    setTimeout(() => {
+
+    const langObj = SUPPORTED_LANGUAGES.find(l => l.code === langCode);
+    const langName = langObj ? langObj.name : langCode;
+
+    try {
+      const pagesToTranslate = mat.pages.map(p => ({
+        id: p.id,
+        title: p.title,
+        subtitle: p.subtitle || '',
+        content: p.content,
+        calloutText: p.calloutText || '',
+        imageCaption: p.imageCaption || '',
+        videoCaption: p.videoCaption || ''
+      }));
+
+      const prompt = `You are a professional educational textbook translator.
+Translate ALL of the following ebook pages into ${langName} (${langCode}).
+CRITICAL REQUIREMENTS:
+1. Translate every page completely into natural, accurate, high-quality ${langName}.
+2. Do NOT leave English sentences or partial English words in the translated text.
+3. Preserve paragraph breaks, list numbers (1., 2., 3.), bullet points (•), technical numbers/units, and formatting.
+4. Return ONLY a valid JSON array of objects with the exact structure:
+[
+  {
+    "id": "page_id",
+    "title": "Translated Page Title",
+    "subtitle": "Translated Subtitle",
+    "content": "Translated Full Page Content",
+    "calloutText": "Translated Callout",
+    "imageCaption": "Translated Image Caption",
+    "videoCaption": "Translated Video Caption"
+  }
+]
+
+Pages to translate:
+${JSON.stringify(pagesToTranslate, null, 2)}`;
+
+      const res = await generateGeminiContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          systemInstruction: `You are an expert educational translator specializing in ${langName}. Always respond with clean, valid JSON array only.`
+        }
+      });
+
+      if (res && res.text) {
+        let cleanText = res.text.trim();
+        if (cleanText.startsWith('```json')) {
+          cleanText = cleanText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (cleanText.startsWith('```')) {
+          cleanText = cleanText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+
+        const translatedArray = JSON.parse(cleanText);
+        if (Array.isArray(translatedArray)) {
+          const updatedPages = mat.pages.map(p => {
+            const match = translatedArray.find((t: any) => t.id === p.id);
+            if (match) {
+              const transObj = {
+                title: match.title || p.title,
+                subtitle: match.subtitle || p.subtitle || '',
+                content: match.content || p.content,
+                calloutText: match.calloutText || p.calloutText || '',
+                imageCaption: match.imageCaption || p.imageCaption || '',
+                videoCaption: match.videoCaption || p.videoCaption || ''
+              };
+
+              if (!RUNTIME_TRANSLATION_CACHE[langCode]) RUNTIME_TRANSLATION_CACHE[langCode] = {};
+              RUNTIME_TRANSLATION_CACHE[langCode][p.title.trim()] = transObj.title;
+              RUNTIME_TRANSLATION_CACHE[langCode][p.content.trim()] = transObj.content;
+
+              return {
+                ...p,
+                translations: {
+                  ...p.translations,
+                  [langCode]: transObj
+                }
+              };
+            }
+            return p;
+          });
+
+          const updatedMat = { ...mat, pages: updatedPages };
+          setActiveMaterial(updatedMat);
+          setMaterials(prev => prev.map(m => m.id === updatedMat.id ? updatedMat : m));
+        }
+      }
+    } catch (err) {
+      console.error('AI Auto-translation error:', err);
+    } finally {
       setIsTranslating(false);
-    }, 600);
+      translatingRef.current.delete(reqKey);
+    }
   };
+
+  // Auto Translate all pages in current material
+  const handleAutoTranslateAll = (langCode?: string) => {
+    const targetLang = langCode || selectedLanguage;
+    if (targetLang === 'en' || !activeMaterial) return;
+    translateMaterialPagesWithAI(activeMaterial, targetLang);
+  };
+
+  // Automatically trigger AI translation when selectedLanguage changes or activeMaterial updates
+  useEffect(() => {
+    if (selectedLanguage !== 'en' && activeMaterial && activeMaterial.pages.length > 0) {
+      translateMaterialPagesWithAI(activeMaterial, selectedLanguage);
+    }
+  }, [selectedLanguage, activeMaterial?.id]);
 
   // Save current material to Firestore with payload size optimization (IndexedDB offloading)
   const handleSaveMaterial = async (mat: FlipbookMaterial) => {
@@ -3140,7 +3154,7 @@ Example:
                     </div>
                   ) : displayPage.imageUrl ? (
                     <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 max-h-64 flex items-center justify-center p-2">
-                      <img src={displayPage.imageUrl} alt="Slide Visual" className="max-h-56 object-contain rounded-lg" />
+                      <SafeImage src={displayPage.imageUrl} alt="Slide Visual" className="max-h-56 object-contain rounded-lg" />
                     </div>
                   ) : (
                     <div className="p-6 rounded-xl bg-purple-950/30 border border-purple-800/40 text-center text-purple-200 text-xs font-semibold">

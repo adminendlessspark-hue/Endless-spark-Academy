@@ -523,7 +523,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
 
     try {
       const scores = user.scores ? { ...user.scores } : {};
-      const scoreKeyMap: Record<CourseType, keyof User['scores']> = {
+      const scoreKeyMap: Record<string, keyof User['scores']> = {
         'packaging-engineer': 'packagingEngineer',
         'production-art-engineer': 'productionArtEngineer',
         'print-ready-engineer': 'printReadyEngineer',
@@ -1899,7 +1899,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
           ) : (
             <div className="space-y-8">
               {assignedCourses.map(courseId => {
-                const topicsMap: Record<CourseType, { title: string, videoUrl?: string }[]> = {
+                const topicsMap: Record<string, { title: string, videoUrl?: string }[]> = {
                   'packaging-engineer': packagingEngineerTopics,
                   'production-art-engineer': productionArtEngineerTopics,
                   'print-ready-engineer': printReadyEngineerTopics,
@@ -1909,7 +1909,7 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
                   'printing-and-packaging-cross-courses': printingAndPackagingTopics
                 };
                 
-                const scoreKeyMap: Record<CourseType, keyof User['scores']> = {
+                const scoreKeyMap: Record<string, keyof User['scores']> = {
                   'packaging-engineer': 'packagingEngineer',
                   'production-art-engineer': 'productionArtEngineer',
                   'print-ready-engineer': 'printReadyEngineer',

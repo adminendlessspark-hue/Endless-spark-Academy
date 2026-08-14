@@ -14,6 +14,14 @@ import JSZip from "jszip";
 import nodemailer from "nodemailer";
 import { Readable } from "stream";
 
+// Global process-level safety handlers to prevent unhandled errors from terminating Node
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception thrown:", error);
+});
+
 let aiClient: GoogleGenAI | null = null;
 function getGenAIClient(): GoogleGenAI {
   if (!aiClient) {
@@ -338,20 +346,52 @@ async function activateRazorpay() {
 }
 
 
-// Initialize Firebase Admin
-const firebaseConfig = JSON.parse(fs.readFileSync("./firebase-applet-config.json", "utf-8"));
+// Initialize Firebase Admin with safe multi-path discovery and fallbacks
+let firebaseConfig: any = {
+  projectId: "ai-studio-5ce0ebf9-ebb5-4648-b703-1dcc1c0b3060",
+  storageBucket: "ai-studio-5ce0ebf9-ebb5-4648-b703-1dcc1c0b3060.firebasestorage.app",
+  firestoreDatabaseId: "ai-studio-5ce0ebf9-ebb5-4648-b703-1dcc1c0b3060"
+};
+
+const configCandidates = [
+  path.join(process.cwd(), "firebase-applet-config.json"),
+  path.join(safeDirname, "firebase-applet-config.json"),
+  path.join(safeDirname, "..", "firebase-applet-config.json"),
+  "./firebase-applet-config.json"
+];
+
+for (const candidate of configCandidates) {
+  try {
+    if (fs.existsSync(candidate)) {
+      const parsed = JSON.parse(fs.readFileSync(candidate, "utf-8"));
+      firebaseConfig = { ...firebaseConfig, ...parsed };
+      console.log(`Loaded Firebase configuration from: ${candidate}`);
+      break;
+    }
+  } catch (err) {
+    console.warn(`Could not read Firebase config at ${candidate}:`, err);
+  }
+}
 
 // Ensure upload directory exists
 const uploadDir = "/tmp/uploads";
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (e) {
+  console.warn("Could not create /tmp/uploads dir:", e);
 }
 
 if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: firebaseConfig.projectId,
-    storageBucket: firebaseConfig.storageBucket,
-  });
+  try {
+    admin.initializeApp({
+      projectId: firebaseConfig.projectId,
+      storageBucket: firebaseConfig.storageBucket,
+    });
+  } catch (initErr) {
+    console.warn("Firebase Admin initializeApp error:", initErr);
+  }
 }
 
 // Helper to get Firestore with correct database ID
@@ -754,7 +794,7 @@ const upload = multer({
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
@@ -773,12 +813,40 @@ async function startServer() {
     next();
   });
 
+  // Fast Health Check Endpoints (for Hostinger, uptime monitors, and reverse proxies)
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({
+      status: "healthy",
+      uptime: process.uptime(),
+      port: PORT,
+      timestamp: new Date().toISOString()
+    });
+  });
+  app.get("/healthz", (_req, res) => {
+    res.status(200).send("OK");
+  });
+  app.get("/ping", (_req, res) => {
+    res.status(200).send("pong");
+  });
+
   // Local static uploads folder as a seamless fallback if GCS storage is not enabled
   if (!fs.existsSync(localUploadsDir)) {
-    fs.mkdirSync(localUploadsDir, { recursive: true });
+    try {
+      fs.mkdirSync(localUploadsDir, { recursive: true });
+    } catch (e) {}
   }
-  ensureAssignmentPdfExists();
-  await activateRazorpay();
+
+  // Run non-critical background seeding without blocking port binding / server startup
+  setTimeout(() => {
+    try {
+      ensureAssignmentPdfExists();
+    } catch (e) {
+      console.warn("Background assignment PDF seeding failed:", e);
+    }
+    activateRazorpay().catch(err => {
+      console.warn("Background Razorpay activation failed:", err);
+    });
+  }, 100);
   app.use("/uploads", async (req: any, res: any, next: any) => {
     // Remove leading slash and decode
     const decodedPath = decodeURIComponent(req.path); // e.g. "/course_modules/assignment_papers/xyz.pdf"
@@ -2530,8 +2598,16 @@ async function startServer() {
     });
   }
 
+  // Global Express error handler to prevent hanging requests on unexpected exceptions
+  app.use((err: any, _req: any, res: any, _next: any) => {
+    console.error("Unhandled Express route error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal Server Error", message: err?.message || String(err) });
+    }
+  });
+
   const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server successfully listening on host 0.0.0.0 on port ${PORT} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
   });
 
   // WebSocket for AI Agent Live Bridge

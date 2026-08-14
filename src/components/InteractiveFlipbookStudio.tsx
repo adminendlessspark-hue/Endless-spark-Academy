@@ -15,7 +15,7 @@ import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { formatCourseName } from '../utils';
 import { CourseModule } from '../types';
-import { saveMediaToIDB, getMediaFromIDB } from '../utils/mediaStore';
+import { saveMediaToIDB, getMediaFromIDB, fileToDataUrl } from '../utils/mediaStore';
 import { generateGeminiContent } from '../services/gemini';
 
 export interface FlipbookPage {
@@ -31,7 +31,16 @@ export interface FlipbookPage {
   contentFontStyle?: string;
   contentTextAlign?: 'left' | 'center' | 'right' | 'justify';
   pageBackgroundColor?: string;
-  translations?: Record<string, { title?: string; subtitle?: string; content?: string; calloutText?: string; videoCaption?: string; videoTranscription?: string }>;
+  translations?: Record<string, { 
+    title?: string; 
+    subtitle?: string; 
+    content?: string; 
+    calloutText?: string; 
+    imageCaption?: string; 
+    secondaryImageCaption?: string; 
+    videoCaption?: string; 
+    videoTranscription?: string 
+  }>;
   mediaType?: 'none' | 'image' | 'video' | 'both';
   imageUrl?: string;
   imageCaption?: string;
@@ -78,7 +87,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'ja', name: 'Japanese (日本語)', flag: '🇯🇵' },
 ];
 
-// Safe Image component with fallback, IndexedDB resolution, and external link option
+// Safe Image component with fallback, IndexedDB resolution, and clean diagram placeholder
 export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string; className?: string }) => {
   const [hasError, setHasError] = useState(false);
   const [resolvedSrc, setResolvedSrc] = useState<string>('');
@@ -86,7 +95,7 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
 
   useEffect(() => {
     setHasError(false);
-    if (!src) {
+    if (!src || src.trim() === '') {
       setResolvedSrc('');
       setIsLoading(false);
       return;
@@ -99,6 +108,7 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
         .then(resolved => {
           if (resolved) {
             setResolvedSrc(resolved);
+            setHasError(false);
           } else {
             setHasError(true);
           }
@@ -111,37 +121,32 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
     }
   }, [src]);
 
-  if (!src) return null;
+  if (!src || src.trim() === '') return null;
 
   if (isLoading) {
     return (
-      <div className={`flex items-center justify-center p-3 bg-slate-900/60 rounded-xl border border-amber-500/20 ${className || ''}`}>
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
+      <div className={`flex items-center justify-center p-4 bg-slate-900/80 rounded-xl border border-amber-500/20 ${className || 'min-h-[140px]'}`}>
+        <div className="flex items-center gap-2 text-xs font-semibold text-amber-400">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
+          <span>Loading diagram...</span>
+        </div>
       </div>
     );
   }
 
-  if (hasError) {
+  if (hasError || !resolvedSrc) {
     return (
-      <div className={`flex flex-col items-center justify-center p-2 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-1 ${className || ''}`}>
-        <img
-          src={resolvedSrc || src}
-          alt={alt || 'Page Attachment'}
-          className={className || 'max-h-48 object-contain rounded-lg'}
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            // Secondary fallback if primary fails
-            (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80';
-          }}
-        />
-        {resolvedSrc && !resolvedSrc.startsWith('idb:') && (
+      <div className={`flex flex-col items-center justify-center p-3 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-1.5 ${className || 'min-h-[140px]'}`}>
+        <Image className="w-6 h-6 text-amber-400/80" />
+        <span className="text-[11px] font-semibold text-amber-200">{alt || 'Diagram Attachment'}</span>
+        {resolvedSrc && !resolvedSrc.startsWith('idb:') && !resolvedSrc.startsWith('data:') && (
           <a
             href={resolvedSrc}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 font-semibold"
           >
-            <ExternalLink className="w-3 h-3" /> View Source Image
+            <ExternalLink className="w-3 h-3" /> View Source Link
           </a>
         )}
       </div>
@@ -150,7 +155,7 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
 
   return (
     <img
-      src={resolvedSrc || src}
+      src={resolvedSrc}
       alt={alt || 'Page Attachment'}
       className={className}
       referrerPolicy="no-referrer"
@@ -178,6 +183,7 @@ export const isDefaultCalloutText = (text?: string): boolean => {
 const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
   ms: {
     "What is color?": "Apakah itu warna?",
+    "Fundamentals of Color": "Asas-Asas Teori Warna",
     "Visual Electromagnetic Perception": "Persepsi Elektromagnetik Visual",
     "Packaging Engineering Fundamentals": "Asas Kejuruteraan Pembungkusan",
     "Preflight & Printing Workflow": "Prasemak & Aliran Kerja Percetakan",
@@ -198,9 +204,13 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
     "Light Source": "Sumber Cahaya",
     "Object (Substrate)": "Objek (Substrat)",
     "Observer": "Pemerhati",
+    "Primary Colors": "Warna Primer",
+    "Secondary Colors": "Warna Sekunder",
+    "Tertiary Colors": "Warna Tertier",
   },
   ta: {
     "What is color?": "வண்ணம் என்றால் என்ன?",
+    "Fundamentals of Color": "வண்ணக் கோட்பாட்டின் அடிப்படைகள்",
     "Visual Electromagnetic Perception": "காட்சி மின்காந்த புலனுணர்வு",
     "Colour is how our eyes and brain see different light waves.": "நமது கண்களும் மூளையும் வெவ்வேறு ஒளி அலைகளை எவ்வாறு பார்க்கின்றன என்பதே வண்ணம் ஆகும்.",
     "Objects absorb some light and reflect other light.": "பொருட்கள் சில ஒளியை உறிஞ்சி மற்ற ஒளியை பிரதிபலிக்கின்றன.",
@@ -255,15 +265,14 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
     "Light Source": "ஒளி மூலம்",
     "Object (Substrate)": "பொருள் (அடி மூலக்கூறு)",
     "Observer": "பார்வையாளர்",
-    "Lightness": "வெளிச்சம்",
-    "Brightness": "பிரகாசம்",
-    "Hue": "நிறம்",
-    "Light": "ஒளி",
-    "Color": "வண்ணம்",
-    "Colour": "வண்ணம்"
+    "Primary Colors": "முதன்மை வண்ணங்கள்",
+    "Secondary Colors": "இரண்டாம் நிலை வண்ணங்கள்",
+    "Tertiary Colors": "மூன்றாம் நிலை வண்ணங்கள்",
+    "Core Structure": "முக்கிய கட்டமைப்பு"
   },
   zh: {
     "What is color?": "什么是颜色？",
+    "Fundamentals of Color": "色彩理论基础",
     "Visual Electromagnetic Perception": "视觉电磁感知",
     "Packaging Engineering Fundamentals": "包装工程基础知识",
     "Preflight & Printing Workflow": "预检和印刷工作流程",
@@ -284,9 +293,13 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
     "Light Source": "光源",
     "Object (Substrate)": "物体（承印物）",
     "Observer": "观察者",
+    "Primary Colors": "原色 / 一次色",
+    "Secondary Colors": "二次色",
+    "Tertiary Colors": "三次色",
   },
   hi: {
     "What is color?": "रंग क्या है?",
+    "Fundamentals of Color": "रंग सिद्धांत के मूल सिद्धांत",
     "Visual Electromagnetic Perception": "दृश्य विद्युतचुंबकीय धारणा",
     "Packaging Engineering Fundamentals": "पैकेजिंग इंजीनियरिंग की बुनियादी बातें",
     "Preflight & Printing Workflow": "प्रीफ्लाइट और प्रिंटिंग वर्कफ़्लो",
@@ -307,45 +320,80 @@ const TRANSLATION_DICTIONARY: Record<string, Record<string, string>> = {
     "Light Source": "प्रकाश स्रोत",
     "Object (Substrate)": "वस्तु (सब्सट्रेट)",
     "Observer": "पर्यवेक्षक",
+    "Primary Colors": "प्राथमिक रंग",
+    "Secondary Colors": "द्वितीयक रंग",
+    "Tertiary Colors": "तृतीयक रंग",
   },
   es: {
     "What is color?": "¿Qué es el color?",
+    "Fundamentals of Color": "Fundamentos del Color",
     "Visual Electromagnetic Perception": "Percepción Electromagnética Visual",
     "Diploma in Production Art Engineer": "Diplomado en Ingeniería de Arte de Producción",
     "Module 1: Color Management": "Módulo 1: Gestión del Color",
     "FACULTY TAKEAWAY NOTE": "NOTA DEL PROFESOR",
     "The Triad of Color Perception": "La Tríada de la Percepción del Color",
+    "Primary Colors": "Colores Primarios",
+    "Secondary Colors": "Colores Secundarios",
+    "Tertiary Colors": "Colores Terciarios",
   },
   fr: {
     "What is color?": "Qu'est-ce que la couleur ?",
+    "Fundamentals of Color": "Fondamentaux de la Couleur",
     "Visual Electromagnetic Perception": "Perception Électromagnétique Visuelle",
     "Diploma in Production Art Engineer": "Diplôme en Ingénierie de l'Art de Production",
     "Module 1: Color Management": "Module 1 : Gestion des Couleurs",
     "FACULTY TAKEAWAY NOTE": "NOTE DE L'ENSEIGNANT",
     "The Triad of Color Perception": "La Triade de la Perception des Couleurs",
+    "Primary Colors": "Couleurs Primaires",
+    "Secondary Colors": "Couleurs Secondaires",
+    "Tertiary Colors": "Couleurs Tertiaires",
+  },
+  de: {
+    "What is color?": "Was ist Farbe?",
+    "Fundamentals of Color": "Grundlagen der Farblehre",
+    "Visual Electromagnetic Perception": "Visuelle elektromagnetische Wahrnehmung",
+    "Diploma in Production Art Engineer": "Diplom im Bereich Produktionskunst-Ingenieurwesen",
+    "Module 1: Color Management": "Modul 1: Farbmanagement",
+    "FACULTY TAKEAWAY NOTE": "DOZENTEN-HINWEIS",
+    "The Triad of Color Perception": "Die Triade der Farbwahrnehmung",
+    "Primary Colors": "Primärfarben",
+    "Secondary Colors": "Sekundärfarben",
+    "Tertiary Colors": "Tertiärfarben",
+  },
+  ja: {
+    "What is color?": "色彩とは何か？",
+    "Fundamentals of Color": "色彩理論の基礎",
+    "Visual Electromagnetic Perception": "視覚的電磁波知覚",
+    "Diploma in Production Art Engineer": "プロダクションアートエンジニア・ディプロマ",
+    "Module 1: Color Management": "モジュール1：カラーマネジメント",
+    "FACULTY TAKEAWAY NOTE": "講師からの重要ポイント",
+    "The Triad of Color Perception": "色彩知覚の3要素",
+    "Primary Colors": "原色（一次色）",
+    "Secondary Colors": "二次色",
+    "Tertiary Colors": "三次色",
   }
 };
 
 // Global runtime translation cache for dynamic Gemini AI native translation
 const RUNTIME_TRANSLATION_CACHE: Record<string, Record<string, string>> = {};
 
-// Automatic native language translator mock/helper
+// Automatic native language translator helper
 export function autoTranslateText(text: string, targetLangCode: string): string {
   if (!text || targetLangCode === 'en') return text;
 
   const cleanText = text.trim();
 
-  // Check runtime translation cache
+  // 1. Check runtime translation cache by exact string
   if (RUNTIME_TRANSLATION_CACHE[targetLangCode]?.[cleanText]) {
     return RUNTIME_TRANSLATION_CACHE[targetLangCode][cleanText];
   }
 
-  // Check dictionary exact match
-  if (TRANSLATION_DICTIONARY[targetLangCode] && TRANSLATION_DICTIONARY[targetLangCode][cleanText]) {
+  // 2. Check dictionary exact match
+  if (TRANSLATION_DICTIONARY[targetLangCode]?.[cleanText]) {
     return TRANSLATION_DICTIONARY[targetLangCode][cleanText];
   }
 
-  // Preserve HTML tags (e.g. <b>, <i>, <u>, <mark...>, <span...>, <br />) during translation
+  // 3. Preserve HTML tags during translation
   const tagRegex = /(<[^>]+>)/g;
   const parts = text.split(tagRegex);
 
@@ -368,12 +416,12 @@ export function autoTranslateText(text: string, targetLangCode: string): string 
       return part.replace(trimmedPart, TRANSLATION_DICTIONARY[targetLangCode][trimmedPart]);
     }
 
-    // Replace full exact phrases from dictionary if present in part
+    // Replace complete multi-word phrases only (length >= 10) to avoid mixed language corruption
     let translated = part;
     const dict = TRANSLATION_DICTIONARY[targetLangCode];
     if (dict) {
       Object.keys(dict).forEach(phrase => {
-        if (phrase.length > 5 && translated.includes(phrase)) {
+        if (phrase.length >= 10 && translated.includes(phrase)) {
           translated = translated.split(phrase).join(dict[phrase]);
         }
       });
@@ -385,161 +433,7 @@ export function autoTranslateText(text: string, targetLangCode: string): string 
   return translatedParts.join('');
 }
 
-// Sample Default Flipbooks for Faculty Materials
-const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
-  {
-    id: 'material-packaging-101',
-    title: 'Packaging Engineering Fundamentals & Die-Line Masterclass',
-    description: 'Complete faculty handbook covering corrugated board architecture, flexographic prepress, trapping tolerance, and structural CAD die-lines.',
-    courseCategory: 'packaging-engineer',
-    author: 'Chief Faculty - Packaging Academy',
-    coverImageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80',
-    updatedAt: new Date().toISOString(),
-    pages: [
-      {
-        id: 'p1',
-        pageNumber: 1,
-        title: 'Introduction to Structural Packaging Design',
-        subtitle: '',
-        content: `Structural packaging engineering is the backbone of retail presentation and physical product protection. Engineers must carefully balance strength-to-weight ratios, folding tolerances, and printing precision.
-
-Key structural considerations include:
-1. Substrates: Solid bleached sulfate (SBS), Folding boxboard (FBB), Corrugated B/C/E/F flute.
-2. Machine Grain Direction: Parallel to primary folds to avoid board cracking during high-speed gluing.
-3. Crease Scores & Caliper Compensation: Adjusting score widths based on board thickness (pt/mm).`,
-        translations: {
-          ms: {
-            title: 'Pengenalan kepada Reka Bentuk Pembungkusan Struktur',
-            subtitle: '',
-            content: `Kejuruteraan pembungkusan struktur adalah teras persembahan runcit dan perlindungan fizikal produk. Jurutera mesti mengimbangi nisbah kekuatan, toleransi lipatan, dan ketepatan cetakan.
-
-Pertimbangan struktur utama meliputi:
-1. Substrat: Papan bertutup SBS, FBB, dan profil seruling B/C/E/F corrugated.
-2. Arah Urat Mesin (Grain Direction): Selari dengan lipatan utama untuk mengelakkan kertas retak semasa penggaman berkelajuan tinggi.
-3. Toleransi Alur & Ketebalan Papan: Pelarasan lebar garisan acuan berdasarkan ketebalan papan (pt/mm).`,
-            calloutText: ''
-          },
-          ta: {
-            title: 'கட்டமைப்பு பேக்கேஜிங் வடிவமைப்பு அறிமுகம்',
-            subtitle: '',
-            content: `கட்டமைப்பு பேக்கேஜிங் பொறியியல் என்பது சில்லறை விற்பனை விளக்கக்காட்சி மற்றும் தயாரிப்பு பாதுகாப்பின் முக்கிய அம்சமாகும். பொறியாளர்கள் வலிமை, மடிப்பு சகிப்புத்தன்மை மற்றும் அச்சிடும் துல்லியத்தை சமநிலைப்படுத்த வேண்டும்.
-
-முக்கிய பரிசீலனைகள்:
-1. அடி மூலக்கூறுகள்: SBS, FBB, மற்றும் நெளி பலகை B/C/E/F புல்லாங்குழல்.
-2. இயந்திர தானிய திசை: அதிவேக ஒட்டுதலின் போது உடைப்பைத் தவிர்க்க முதன்மை மடிப்புகளுக்கு இணையாக.`,
-            calloutText: ''
-          }
-        },
-        mediaType: 'both',
-        imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1000&q=80',
-        imageCaption: 'Fig 1.1: Corrugated Board Flute Profile Architecture & Crease Scores',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        videoCaption: 'Video Tutorial: Folding Carton Creasing & Die-cutting Demonstration',
-        layoutStyle: 'grid-2x2',
-        calloutText: '',
-        bgTheme: 'classic-paper',
-        courseModuleId: 'mod-1',
-        exerciseFilePath: '',
-        exerciseTitle: ''
-      },
-      {
-        id: 'p2',
-        pageNumber: 2,
-        title: 'Preflight & Color Management Workflow',
-        subtitle: '',
-        content: `Preflighting guarantees error-free plate output by validating color separation, font outlines, minimum line weights, and resolution settings before RIP processing.
-
-Core Rules for Flexographic & Offset Prepress:
-• Minimum Line Weight: 0.25 pt for single color, 0.5 pt for reverse knockout text.
-• Image Resolution: Exactly 300 DPI at 100% placement scale.
-• Trapping Distance: 0.15 mm - 0.3 mm for flexographic presses to prevent white gaps caused by registration drift.`,
-        translations: {
-          ms: {
-            title: 'Aliran Kerja Prasemak & Pengurusan Warna',
-            subtitle: '',
-            content: `Prasemak (Preflight) menjamin output plat tanpa ralat dengan mengesahkan pemisahan warna, garis luar fon, dan ketetapan resolusi sebelum pemprosesan RIP.
-
-Peraturan Asas Prasemak:
-• Lebar Garis Minimum: 0.25 pt untuk warna tunggal, 0.5 pt untuk teks knockout terbalik.
-• Resolusi Imej: Tepat 300 DPI pada skala 100%.
-• Jarak Trapping: 0.15 mm - 0.3 mm untuk mesin cetak fleksografi bagi mengelakkan ruang putih.`,
-            calloutText: ''
-          },
-          ta: {
-            title: 'முன்-பரிசோதனை மற்றும் வண்ண மேலாண்மை பணிப்பாய்வு',
-            subtitle: '',
-            content: `முன்-பரிசோதனை (Preflighting) என்பது RIP செயலாக்கத்திற்கு முன் வண்ணப் பிரிப்பு, எழுத்துருக் கோடுகள், குறைந்தபட்ச கோடு எடைகள் மற்றும் தெளிவுத்திறன் அமைப்புகளைச் சரிபார்ப்பதன் மூலம் பிழையற்ற தட்டு வெளியீட்டிற்கு உத்தரவாதம் அளிக்கிறது.
-
-ஃப்ளெக்ஸோகிராஃபிக் & ஆப்செட் பிரீபிரஸிற்கான முக்கிய விதிகள்:
-• குறைந்தபட்ச கோடு எடை: ஒற்றை வண்ணத்திற்கு 0.25 pt, தலைகீழ் நாக் அவுட் உரைகளுக்கு 0.5 pt.
-• படத் தெளிவுத்திறன்: 100% பொருத்துதல் அளவில் சரியாக 300 DPI.
-• ட்ராப்பிங் தூரம்: பதிவு நகர்வினால் ஏற்படும் வெள்ளை இடைவெளிகளைத் தடுக்க ஃப்ளெக்ஸோகிராஃபிக் அச்சகங்களுக்கு 0.15 மிமீ - 0.3 மிமீ.`,
-            calloutText: '',
-            imageCaption: 'படம் 2.1: அடோப் அக்ரோபேட் புரோ DC இல் முன்-பரிசோதனை கண்டறிதல் குழு'
-          }
-        },
-        mediaType: 'image',
-        imageUrl: 'https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?auto=format&fit=crop&w=1000&q=80',
-        imageCaption: 'Fig 2.1: Preflight Diagnostic Panel in Adobe Acrobat Pro DC',
-        layoutStyle: 'grid-bento',
-        calloutText: '',
-        bgTheme: 'clean-white',
-        courseModuleId: 'mod-2',
-        exerciseFilePath: '',
-        exerciseTitle: ''
-      },
-      {
-        id: 'p3',
-        pageNumber: 3,
-        title: 'Interactive Case Study: Acrobat Preflight Auto-Fix',
-        subtitle: '',
-        content: `Watch the video lecture below to observe how automated Acrobat Preflight profiles systematically identify missing Bleeds (3mm), RGB color spaces, corrupt fonts, and low-resolution raster objects.
-
-Follow along with the step-by-step checklist:
-1. Open PDF file in Acrobat Pro Preflight tool.
-2. Select "Convert All RGB to CMYK (FOGRA39 / GRACoL 2013)".
-3. Execute "Add 3mm Bleed Box Expansion" script.
-4. Export High-Res PDF/X-4 PDF for plate output.`,
-        translations: {
-          ms: {
-            title: 'Kajian Kes Interaktif: Pembaikan Automatik Acrobat Preflight',
-            subtitle: '',
-            content: `Tonton kuliah video di bawah untuk melihat bagaimana profil Acrobat Preflight mengesan limpahan warna (Bleed 3mm), ruang warna RGB, dan objek resolusi rendah.
-
-Langkah Semakan:
-1. Buka fail PDF dalam alat Acrobat Preflight.
-2. Pilih "Tukar Semua RGB ke CMYK (GRACoL / FOGRA39)".
-3. Jalankan skrip "Tambah Limpahan Bleed 3mm".
-4. Eksport PDF/X-4 Resolusi Tinggi untuk pembentukan plat.`,
-            calloutText: ''
-          },
-          ta: {
-            title: 'இன்டராக்டிவ் கேஸ் ஸ்டடி: அக்ரோபேட் பிரீஃப்ளைட் ஆட்டோ-ஃபிக்ஸ்',
-            subtitle: '',
-            content: `தானியங்கி அக்ரோபேட் பிரீஃப்ளைட் சுயவிவரங்கள் விடுபட்ட ப்ளீட்ஸ் (3மிமீ), RGB வண்ண இடைவெளிகள், சிதைந்த எழுத்துருக்கள் மற்றும் குறைந்த தெளிவுத்திறன் கொண்ட ராஸ்டர் பொருள்களை எவ்வாறு முறையாகக் கண்டறிகின்றன என்பதைக் கவனிக்க கீழே உள்ள வீடியோ சொற்பொழிவைப் பார்க்கவும்.
-
-படி-படியாக சரிபார்ப்புப் பட்டியலைப் பின்தொடரவும்:
-1. அக்ரோபேட் புரோ பிரீஃப்ளைட் கருவியில் PDF கோப்பைத் திறக்கவும்.
-2. "அனைத்து RGB ஐயும் CMYK ஆக மாற்று (FOGRA39 / GRACoL 2013)" என்பதைத் தேர்ந்தெடுக்கவும்.
-3. "3மிமீ ப்ளீட் பாக்ஸ் விரிவாக்கத்தைச் சேர்" ஸ்கிரிப்டைச் செயல்படுத்தவும்.
-4. தட்டு வெளியீட்டிற்கு உயர் தெளிவுத்திறன் கொண்ட PDF/X-4 PDF ஐ ஏற்றுமதி செய்யவும்.`,
-            calloutText: '',
-            videoCaption: 'வீடியோ விரிவுரை: ஆசிரியரின் பின்னணி குரலுடன் பிரீஃப்ளைட்டிங் மாஸ்டர்கிளாஸ்'
-          }
-        },
-        mediaType: 'video',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        videoCaption: 'Video Lecture: Preflighting Masterclass with Faculty Voiceover',
-        layoutStyle: 'media-top',
-        calloutText: '',
-        bgTheme: 'dark-studio',
-        courseModuleId: 'mod-3',
-        exerciseFilePath: '',
-        exerciseTitle: ''
-      }
-    ]
-  }
-];
+import { DEFAULT_FLIPBOOKS } from '../data/defaultFlipbooks';
 
 export interface InteractiveFlipbookStudioProps {
   initialMaterial?: FlipbookMaterial;
@@ -715,6 +609,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   // Multi-language Translation State
   const [selectedLanguage, setSelectedLanguage] = useState<string>('en');
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
+  const [translationStatus, setTranslationStatus] = useState<string>('');
 
   // Presentation Mode Drawing / Laser Pointer Tool
   const [laserPointerActive, setLaserPointerActive] = useState<boolean>(false);
@@ -817,23 +712,51 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [guideStep, setGuideStep] = useState<number>(1);
 
-  // Load Flipbooks from Firestore on mount
+  // Load Flipbooks from Firestore on mount & merge with default curriculum flipbooks
   useEffect(() => {
     const unsub = onSnapshot(
       collection(db, 'course_flipbooks'),
       (snapshot) => {
-        if (!snapshot.empty) {
-          const loaded = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as FlipbookMaterial));
-          setMaterials(loaded);
-          if (!initialMaterial && loaded.length > 0) {
-            setActiveMaterial(loaded[0]);
+        const loaded = !snapshot.empty 
+          ? snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as FlipbookMaterial))
+          : [];
+        
+        // Merge with DEFAULT_FLIPBOOKS so all standard 16-page handbooks are available as initial templates
+        const merged = [...loaded];
+        DEFAULT_FLIPBOOKS.forEach(def => {
+          const existingIndex = merged.findIndex(m => m.id === def.id);
+          if (existingIndex === -1) {
+            merged.push(def);
           }
-        }
+        });
+
+        setMaterials(merged);
+        setActiveMaterial(prevActive => {
+          if (!prevActive) {
+            return initialMaterial || merged[0];
+          }
+          const matched = merged.find(m => m.id === prevActive.id);
+          return matched || prevActive;
+        });
       },
-      (err) => console.warn('Firestore flipbooks load notice:', err.message)
+      (err) => {
+        console.warn('Firestore flipbooks load notice:', err.message);
+        setMaterials(DEFAULT_FLIPBOOKS);
+      }
     );
     return () => unsub();
   }, [initialMaterial]);
+
+  // Auto-sync activeMaterial when filtered materials change
+  useEffect(() => {
+    if (filteredMaterials.length > 0) {
+      const isCurrentInFiltered = filteredMaterials.some(m => m.id === activeMaterial?.id);
+      if (!isCurrentInFiltered) {
+        setActiveMaterial(filteredMaterials[0]);
+        setCurrentPageIndex(0);
+      }
+    }
+  }, [filteredMaterials, activeMaterial?.id]);
 
   // Current Active Page
   const currentPage = activeMaterial.pages[currentPageIndex] || activeMaterial.pages[0];
@@ -845,27 +768,35 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     const existingTrans = page.translations?.[langCode];
     const rawCallout = page.calloutText && !isDefaultCalloutText(page.calloutText) ? page.calloutText : '';
 
-    if (existingTrans) {
+    if (existingTrans && (existingTrans.title || existingTrans.content)) {
       const transCallout = existingTrans.calloutText && !isDefaultCalloutText(existingTrans.calloutText) ? existingTrans.calloutText : '';
       return {
         ...page,
-        title: existingTrans.title || page.title,
+        title: existingTrans.title || autoTranslateText(page.title, langCode),
         subtitle: existingTrans.subtitle !== undefined && existingTrans.subtitle !== '' ? existingTrans.subtitle : (page.subtitle || ''),
-        content: existingTrans.content || page.content,
-        calloutText: transCallout || rawCallout,
+        content: existingTrans.content || autoTranslateText(page.content, langCode),
+        calloutText: transCallout || (rawCallout ? autoTranslateText(rawCallout, langCode) : ''),
         imageCaption: existingTrans.imageCaption || page.imageCaption || '',
+        secondaryImageCaption: existingTrans.secondaryImageCaption || page.secondaryImageCaption || '',
         videoCaption: existingTrans.videoCaption || page.videoCaption || '',
         videoTranscription: existingTrans.videoTranscription || page.videoTranscription || ''
       };
     }
 
+    // Check runtime cache by page ID or raw text
+    const cachedTitle = RUNTIME_TRANSLATION_CACHE[langCode]?.[page.title?.trim()];
+    const cachedContent = RUNTIME_TRANSLATION_CACHE[langCode]?.[page.content?.trim()];
+
     // Dynamic translation on English text
     return {
       ...page,
-      title: autoTranslateText(page.title, langCode),
+      title: cachedTitle || autoTranslateText(page.title, langCode),
       subtitle: page.subtitle ? autoTranslateText(page.subtitle, langCode) : '',
-      content: autoTranslateText(page.content, langCode),
+      content: cachedContent || autoTranslateText(page.content, langCode),
       calloutText: rawCallout ? autoTranslateText(rawCallout, langCode) : '',
+      imageCaption: page.imageCaption ? autoTranslateText(page.imageCaption, langCode) : '',
+      secondaryImageCaption: page.secondaryImageCaption ? autoTranslateText(page.secondaryImageCaption, langCode) : '',
+      videoCaption: page.videoCaption ? autoTranslateText(page.videoCaption, langCode) : '',
     };
   };
 
@@ -1609,13 +1540,33 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
       };
     }, [cues, duration, selectedLanguage, translationVersion]);
 
+    if (url.startsWith('idb:') && !activeUrl && !hasPlaybackError) {
+      return (
+        <div className="relative w-full h-full min-h-[160px] bg-slate-950 rounded-xl border border-pink-500/20 p-4 flex flex-col items-center justify-center text-center space-y-2">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-pink-400"></div>
+          <div className="text-xs font-semibold text-pink-300">Loading video demonstration...</div>
+        </div>
+      );
+    }
+
+    if (url.startsWith('idb:') && !activeUrl && hasPlaybackError) {
+      return (
+        <div className="relative w-full h-full min-h-[160px] bg-slate-950 rounded-xl border border-pink-500/30 p-4 flex flex-col items-center justify-center text-center space-y-2">
+          <Film className="w-8 h-8 text-pink-400" />
+          <div className="text-xs font-bold text-pink-200">{cleanCap || 'Video Demonstration Attached'}</div>
+          <div className="text-[11px] text-slate-400">Uploaded video is stored in local editor cache</div>
+        </div>
+      );
+    }
+
     return (
       <div className="relative w-full h-full group bg-black rounded-xl overflow-hidden flex flex-col justify-center">
-        {(isDirectVideo(url) || activeUrl.startsWith('blob:') || activeUrl.startsWith('data:video') || activeUrl.endsWith('.mp4') || activeUrl.endsWith('.webm') || activeUrl.includes('commondatastorage.googleapis.com')) ? (
+        {(isDirectVideo(url) || activeUrl.startsWith('blob:') || activeUrl.startsWith('data:video') || activeUrl.endsWith('.mp4') || activeUrl.endsWith('.webm') || activeUrl.endsWith('.mov') || activeUrl.includes('commondatastorage.googleapis.com')) ? (
           <video
             ref={videoRef}
             src={activeUrl}
             controls
+            playsInline
             onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
             className="w-full h-full object-contain bg-black rounded-lg"
@@ -1690,18 +1641,20 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
     );
   };
 
-  // Image File Upload Handler with IndexedDB Persistent Storage
+  // Image File Upload Handler with instant Base64 data URL & IndexedDB Persistent Storage
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
+      const dataUrl = await fileToDataUrl(file);
       const idbKey = `image_idb_${editingPage.id}`;
       await saveMediaToIDB(idbKey, file);
-      const objectUrl = URL.createObjectURL(file);
-      setMediaCache(prev => ({ ...prev, [idbKey]: objectUrl }));
+      
+      const finalImageUrl = dataUrl || `idb:${idbKey}`;
+      setMediaCache(prev => ({ ...prev, [idbKey]: finalImageUrl }));
 
       const updated: FlipbookPage = {
         ...editingPage,
-        imageUrl: `idb:${idbKey}`,
+        imageUrl: finalImageUrl,
         imageCaption: editingPage.imageCaption || file.name.replace(/\.[^/.]+$/, ""),
       };
       setEditingPage(updated);
@@ -1709,18 +1662,20 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
     }
   };
 
-  // Secondary Image File Upload Handler with IndexedDB Persistent Storage
+  // Secondary Image File Upload Handler with instant Base64 data URL & IndexedDB Persistent Storage
   const handleSecondaryImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
+      const dataUrl = await fileToDataUrl(file);
       const idbKey = `sec_image_idb_${editingPage.id}`;
       await saveMediaToIDB(idbKey, file);
-      const objectUrl = URL.createObjectURL(file);
-      setMediaCache(prev => ({ ...prev, [idbKey]: objectUrl }));
+
+      const finalImageUrl = dataUrl || `idb:${idbKey}`;
+      setMediaCache(prev => ({ ...prev, [idbKey]: finalImageUrl }));
 
       const updated: FlipbookPage = {
         ...editingPage,
-        secondaryImageUrl: `idb:${idbKey}`,
+        secondaryImageUrl: finalImageUrl,
         secondaryImageCaption: editingPage.secondaryImageCaption || file.name.replace(/\.[^/.]+$/, ""),
       };
       setEditingPage(updated);
@@ -2026,55 +1981,53 @@ Example:
 
   const translatingRef = useRef<Set<string>>(new Set());
 
-  // AI Auto Translate all pages in material using Gemini
-  const translateMaterialPagesWithAI = async (mat: FlipbookMaterial, langCode: string) => {
-    if (langCode === 'en' || !mat || !mat.pages || mat.pages.length === 0) return;
-
-    const reqKey = `${mat.id}_${langCode}`;
+  // Fast AI Single Page Translation Helper
+  const translateSinglePageWithAI = async (pageToTranslate: FlipbookPage, langCode: string, force: boolean = true) => {
+    if (langCode === 'en' || !pageToTranslate) return;
+    const reqKey = `${pageToTranslate.id}_${langCode}`;
     if (translatingRef.current.has(reqKey)) return;
-
-    // Check if any pages need translation
-    const needsTranslation = mat.pages.some(p => !p.translations?.[langCode]?.title || !p.translations?.[langCode]?.content);
-    if (!needsTranslation) return;
 
     translatingRef.current.add(reqKey);
     setIsTranslating(true);
-
     const langObj = SUPPORTED_LANGUAGES.find(l => l.code === langCode);
     const langName = langObj ? langObj.name : langCode;
+    setTranslationStatus(`Translating Page ${pageToTranslate.pageNumber} into ${langName}...`);
 
     try {
-      const pagesToTranslate = mat.pages.map(p => ({
-        id: p.id,
-        title: p.title,
-        subtitle: p.subtitle || '',
-        content: p.content,
-        calloutText: p.calloutText || '',
-        imageCaption: p.imageCaption || '',
-        videoCaption: p.videoCaption || ''
-      }));
+      const pagePayload = [{
+        id: pageToTranslate.id,
+        title: pageToTranslate.title,
+        subtitle: pageToTranslate.subtitle || '',
+        content: pageToTranslate.content,
+        calloutText: pageToTranslate.calloutText || '',
+        imageCaption: pageToTranslate.imageCaption || '',
+        secondaryImageCaption: pageToTranslate.secondaryImageCaption || '',
+        videoCaption: pageToTranslate.videoCaption || ''
+      }];
 
-      const prompt = `You are a professional educational textbook translator.
-Translate ALL of the following ebook pages into ${langName} (${langCode}).
+      const prompt = `You are a professional educational textbook translator and curriculum specialist.
+Translate the following ebook page into natural, fluent, and mathematically/scientifically accurate ${langName} (${langCode}).
+
 CRITICAL REQUIREMENTS:
-1. Translate every page completely into natural, accurate, high-quality ${langName}.
-2. Do NOT leave English sentences or partial English words in the translated text.
-3. Preserve paragraph breaks, list numbers (1., 2., 3.), bullet points (•), technical numbers/units, and formatting.
+1. Translate completely into natural, accurate, high-quality ${langName}.
+2. Do NOT leave English sentences or untranslated partial words in the output.
+3. Preserve paragraph structure, line breaks, bullet points, numbers, and technical terminology.
 4. Return ONLY a valid JSON array of objects with the exact structure:
 [
   {
-    "id": "page_id",
+    "id": "${pageToTranslate.id}",
     "title": "Translated Page Title",
     "subtitle": "Translated Subtitle",
     "content": "Translated Full Page Content",
     "calloutText": "Translated Callout",
     "imageCaption": "Translated Image Caption",
+    "secondaryImageCaption": "Translated Secondary Image Caption",
     "videoCaption": "Translated Video Caption"
   }
 ]
 
-Pages to translate:
-${JSON.stringify(pagesToTranslate, null, 2)}`;
+Page to translate:
+${JSON.stringify(pagePayload, null, 2)}`;
 
       const res = await generateGeminiContent({
         model: 'gemini-2.5-flash',
@@ -2093,27 +2046,28 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         }
 
         const translatedArray = JSON.parse(cleanText);
-        if (Array.isArray(translatedArray)) {
-          const updatedPages = mat.pages.map(p => {
-            const match = translatedArray.find((t: any) => t.id === p.id);
-            if (match) {
-              const transObj = {
-                title: match.title || p.title,
-                subtitle: match.subtitle || p.subtitle || '',
-                content: match.content || p.content,
-                calloutText: match.calloutText || p.calloutText || '',
-                imageCaption: match.imageCaption || p.imageCaption || '',
-                videoCaption: match.videoCaption || p.videoCaption || ''
-              };
+        if (Array.isArray(translatedArray) && translatedArray.length > 0) {
+          const match = translatedArray[0];
+          const transObj = {
+            title: match.title || pageToTranslate.title,
+            subtitle: match.subtitle || pageToTranslate.subtitle || '',
+            content: match.content || pageToTranslate.content,
+            calloutText: match.calloutText || pageToTranslate.calloutText || '',
+            imageCaption: match.imageCaption || pageToTranslate.imageCaption || '',
+            secondaryImageCaption: match.secondaryImageCaption || pageToTranslate.secondaryImageCaption || '',
+            videoCaption: match.videoCaption || pageToTranslate.videoCaption || ''
+          };
 
-              if (!RUNTIME_TRANSLATION_CACHE[langCode]) RUNTIME_TRANSLATION_CACHE[langCode] = {};
-              RUNTIME_TRANSLATION_CACHE[langCode][p.title.trim()] = transObj.title;
-              RUNTIME_TRANSLATION_CACHE[langCode][p.content.trim()] = transObj.content;
+          if (!RUNTIME_TRANSLATION_CACHE[langCode]) RUNTIME_TRANSLATION_CACHE[langCode] = {};
+          RUNTIME_TRANSLATION_CACHE[langCode][pageToTranslate.title.trim()] = transObj.title;
+          RUNTIME_TRANSLATION_CACHE[langCode][pageToTranslate.content.trim()] = transObj.content;
 
+          const updatedPages = activeMaterial.pages.map(p => {
+            if (p.id === pageToTranslate.id) {
               return {
                 ...p,
                 translations: {
-                  ...p.translations,
+                  ...(p.translations || {}),
                   [langCode]: transObj
                 }
               };
@@ -2121,38 +2075,211 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             return p;
           });
 
-          const updatedMat = { ...mat, pages: updatedPages };
+          const updatedMat = { ...activeMaterial, pages: updatedPages };
           setActiveMaterial(updatedMat);
           setMaterials(prev => prev.map(m => m.id === updatedMat.id ? updatedMat : m));
+          if (editingPage && editingPage.id === pageToTranslate.id) {
+            setEditingPage(updatedPages.find(p => p.id === pageToTranslate.id) || null);
+          }
+
+          // Persist translated page
+          try {
+            await setDoc(doc(db, 'course_flipbooks', updatedMat.id), {
+              ...updatedMat,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          } catch (e) {
+            console.warn('Firestore auto-sync single page translation notice:', e);
+          }
         }
       }
     } catch (err) {
-      console.error('AI Auto-translation error:', err);
+      console.error('AI Single Page Translation error:', err);
     } finally {
       setIsTranslating(false);
+      setTranslationStatus('');
+      translatingRef.current.delete(reqKey);
+    }
+  };
+
+  // AI Auto Translate all pages in material using Gemini with chunked batching for 30+ page modules
+  const translateMaterialPagesWithAI = async (mat: FlipbookMaterial, langCode: string, forceReTranslate: boolean = false) => {
+    if (langCode === 'en' || !mat || !mat.pages || mat.pages.length === 0) return;
+
+    const reqKey = `${mat.id}_${langCode}`;
+    if (translatingRef.current.has(reqKey)) return;
+
+    // Check if any pages need translation
+    const rawPagesNeeding = forceReTranslate
+      ? [...mat.pages]
+      : mat.pages.filter(p => !p.translations?.[langCode]?.title || !p.translations?.[langCode]?.content);
+    
+    if (rawPagesNeeding.length === 0) return;
+
+    // Sort to prioritize currently active page first for instantaneous user feedback
+    const activePageId = mat.pages[currentPageIndex]?.id;
+    const pagesNeedingTranslation = [...rawPagesNeeding].sort((a, b) => {
+      if (a.id === activePageId) return -1;
+      if (b.id === activePageId) return 1;
+      return a.pageNumber - b.pageNumber;
+    });
+
+    translatingRef.current.add(reqKey);
+    setIsTranslating(true);
+    const langObj = SUPPORTED_LANGUAGES.find(l => l.code === langCode);
+    const langName = langObj ? langObj.name : langCode;
+    const totalPages = pagesNeedingTranslation.length;
+
+    try {
+      // Chunk pages into batches of 4 for speed, reliability, and to avoid token timeouts on 30+ page modules
+      const CHUNK_SIZE = 4;
+      let currentWorkingMat = { ...mat };
+
+      for (let i = 0; i < totalPages; i += CHUNK_SIZE) {
+        const chunk = pagesNeedingTranslation.slice(i, i + CHUNK_SIZE);
+        const chunkStart = i + 1;
+        const chunkEnd = Math.min(i + CHUNK_SIZE, totalPages);
+        const progressPct = Math.round((chunkEnd / totalPages) * 100);
+        
+        setTranslationStatus(`Translating pages ${chunkStart}-${chunkEnd} of ${totalPages} into ${langName} (${progressPct}%)...`);
+
+        const pagesToTranslate = chunk.map(p => ({
+          id: p.id,
+          title: p.title,
+          subtitle: p.subtitle || '',
+          content: p.content,
+          calloutText: p.calloutText || '',
+          imageCaption: p.imageCaption || '',
+          secondaryImageCaption: p.secondaryImageCaption || '',
+          videoCaption: p.videoCaption || ''
+        }));
+
+        const prompt = `You are a professional educational textbook translator and curriculum specialist.
+Translate the following ebook pages into natural, fluent, and mathematically/scientifically accurate ${langName} (${langCode}).
+
+CRITICAL REQUIREMENTS:
+1. Translate every page completely into natural, accurate, high-quality ${langName}.
+2. Do NOT leave English sentences or untranslated partial words in the output.
+3. Preserve paragraph structure, line breaks, bullet points, numbers, and technical terminology in the appropriate ${langName} translation.
+4. Return ONLY a valid JSON array of objects with the exact structure:
+[
+  {
+    "id": "page_id",
+    "title": "Translated Page Title",
+    "subtitle": "Translated Subtitle",
+    "content": "Translated Full Page Content",
+    "calloutText": "Translated Callout",
+    "imageCaption": "Translated Image Caption",
+    "secondaryImageCaption": "Translated Secondary Image Caption",
+    "videoCaption": "Translated Video Caption"
+  }
+]
+
+Pages to translate:
+${JSON.stringify(pagesToTranslate, null, 2)}`;
+
+        try {
+          const res = await generateGeminiContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            config: {
+              systemInstruction: `You are an expert educational translator specializing in ${langName}. Always respond with clean, valid JSON array only.`
+            }
+          });
+
+          if (res && res.text) {
+            let cleanText = res.text.trim();
+            if (cleanText.startsWith('```json')) {
+              cleanText = cleanText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+            } else if (cleanText.startsWith('```')) {
+              cleanText = cleanText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+            }
+
+            const translatedArray = JSON.parse(cleanText);
+            if (Array.isArray(translatedArray)) {
+              const updatedPages = currentWorkingMat.pages.map(p => {
+                const match = translatedArray.find((t: any) => t.id === p.id);
+                if (match) {
+                  const transObj = {
+                    title: match.title || p.title,
+                    subtitle: match.subtitle || p.subtitle || '',
+                    content: match.content || p.content,
+                    calloutText: match.calloutText || p.calloutText || '',
+                    imageCaption: match.imageCaption || p.imageCaption || '',
+                    secondaryImageCaption: match.secondaryImageCaption || p.secondaryImageCaption || '',
+                    videoCaption: match.videoCaption || p.videoCaption || ''
+                  };
+
+                  if (!RUNTIME_TRANSLATION_CACHE[langCode]) RUNTIME_TRANSLATION_CACHE[langCode] = {};
+                  RUNTIME_TRANSLATION_CACHE[langCode][p.title.trim()] = transObj.title;
+                  RUNTIME_TRANSLATION_CACHE[langCode][p.content.trim()] = transObj.content;
+
+                  return {
+                    ...p,
+                    translations: {
+                      ...(p.translations || {}),
+                      [langCode]: transObj
+                    }
+                  };
+                }
+                return p;
+              });
+
+              currentWorkingMat = { ...currentWorkingMat, pages: updatedPages };
+              setActiveMaterial(currentWorkingMat);
+              setMaterials(prev => prev.map(m => m.id === currentWorkingMat.id ? currentWorkingMat : m));
+              
+              // Persist chunk progress to Firestore immediately
+              try {
+                await setDoc(doc(db, 'course_flipbooks', currentWorkingMat.id), {
+                  ...currentWorkingMat,
+                  updatedAt: new Date().toISOString()
+                }, { merge: true });
+              } catch (e) {
+                console.warn('Firestore chunk auto-sync translation notice:', e);
+              }
+            }
+          }
+        } catch (chunkErr) {
+          console.warn(`Chunk translation error for pages ${chunkStart}-${chunkEnd}:`, chunkErr);
+        }
+      }
+    } catch (err) {
+      console.error('AI Auto-translation overall error:', err);
+    } finally {
+      setIsTranslating(false);
+      setTranslationStatus('');
       translatingRef.current.delete(reqKey);
     }
   };
 
   // Auto Translate all pages in current material
-  const handleAutoTranslateAll = (langCode?: string) => {
+  const handleAutoTranslateAll = (langCode?: string, force: boolean = true) => {
     const targetLang = langCode || selectedLanguage;
     if (targetLang === 'en' || !activeMaterial) return;
-    translateMaterialPagesWithAI(activeMaterial, targetLang);
+    translateMaterialPagesWithAI(activeMaterial, targetLang, force);
   };
 
-  // Automatically trigger AI translation when selectedLanguage changes or activeMaterial updates
+  // Auto Translate current page only
+  const handleAutoTranslateCurrentPage = (langCode?: string) => {
+    const targetLang = langCode || selectedLanguage;
+    const pageObj = activeMaterial.pages[currentPageIndex] || editingPage;
+    if (targetLang === 'en' || !pageObj) return;
+    translateSinglePageWithAI(pageObj, targetLang, true);
+  };
+
+  // Automatically trigger AI translation when selectedLanguage changes or activeMaterial pages count changes
   useEffect(() => {
     if (selectedLanguage !== 'en' && activeMaterial && activeMaterial.pages.length > 0) {
-      translateMaterialPagesWithAI(activeMaterial, selectedLanguage);
+      translateMaterialPagesWithAI(activeMaterial, selectedLanguage, false);
     }
-  }, [selectedLanguage, activeMaterial?.id]);
+  }, [selectedLanguage, activeMaterial?.id, activeMaterial?.pages?.length]);
 
-  // Save current material to Firestore with payload size optimization (IndexedDB offloading)
+  // Save current material to Firestore with payload size optimization (IndexedDB offloading & data URL persistence)
   const handleSaveMaterial = async (mat: FlipbookMaterial) => {
     setIsSaving(true);
     try {
-      // Clean object and strip heavy base64 data URLs if any exist by storing them in IndexedDB
+      // Clean object and ensure media backups in IndexedDB without prematurely stripping data URLs
       const sanitizedPages = await Promise.all(
         mat.pages.map(async (page) => {
           const p = { ...page };
@@ -2161,10 +2288,20 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             await saveMediaToIDB(idbKey, p.videoUrl);
             p.videoUrl = `idb:${idbKey}`;
           }
-          if (p.imageUrl && p.imageUrl.startsWith('data:image') && p.imageUrl.length > 200000) {
+          if (p.imageUrl && p.imageUrl.startsWith('data:image')) {
             const idbKey = `image_idb_${p.id}`;
             await saveMediaToIDB(idbKey, p.imageUrl);
-            p.imageUrl = `idb:${idbKey}`;
+            // Only convert to idb: reference if image payload exceeds Firestore's 800KB single field threshold
+            if (p.imageUrl.length > 800000) {
+              p.imageUrl = `idb:${idbKey}`;
+            }
+          }
+          if (p.secondaryImageUrl && p.secondaryImageUrl.startsWith('data:image')) {
+            const idbKey = `sec_image_idb_${p.id}`;
+            await saveMediaToIDB(idbKey, p.secondaryImageUrl);
+            if (p.secondaryImageUrl.length > 800000) {
+              p.secondaryImageUrl = `idb:${idbKey}`;
+            }
           }
           return p;
         })
@@ -2208,62 +2345,105 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     const newMatId = `mat_${Date.now()}`;
     const defaultCourse = selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses' ? selectedCourseFilter : '';
     const defaultMod = selectedModuleFilter !== 'All Modules' ? selectedModuleFilter : '';
+    
+    const initialTitle = 'Page 1: Lesson Topic Header';
+    const initialContent = 'Enter main topic description, lecture notes, or key course summary here...';
+    const initialCaption = 'Topic Illustration';
+    
+    const initialTranslations: Record<string, any> = {};
+    if (selectedLanguage !== 'en') {
+      initialTranslations[selectedLanguage] = {
+        title: autoTranslateText(initialTitle, selectedLanguage),
+        subtitle: '',
+        content: autoTranslateText(initialContent, selectedLanguage),
+        calloutText: '',
+        imageCaption: autoTranslateText(initialCaption, selectedLanguage),
+        secondaryImageCaption: '',
+        videoCaption: ''
+      };
+    }
+
     const newMat: FlipbookMaterial = {
       id: newMatId,
-      title: 'New Course E-Book / Lecture Material',
+      title: 'New Course E-Book',
       description: 'Faculty interactive course E-book and presentation slides.',
       courseCategory: defaultCourse || 'General',
       courseName: defaultCourse,
-      author: (user as any)?.displayName || user?.email || 'Faculty Member',
+      author: (user as any)?.displayName || user?.email || 'Endless School of Printing and Packaging',
       coverImageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80',
       updatedAt: new Date().toISOString(),
       pages: [
         {
           id: `p_${Date.now()}_1`,
           pageNumber: 1,
-          title: 'Page 1: Lesson Topic Header',
+          title: initialTitle,
           subtitle: '',
-          content: 'Enter main topic description, lecture notes, or key course summary here...',
+          content: initialContent,
           layoutStyle: 'grid-2x2',
           mediaType: 'image',
           imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
-          imageCaption: 'Topic Illustration',
+          imageCaption: initialCaption,
           calloutText: '',
           bgTheme: 'classic-paper',
           courseName: defaultCourse,
           courseModuleName: defaultMod,
           exerciseFilePath: '',
-          exerciseTitle: ''
+          exerciseTitle: '',
+          translations: initialTranslations
         }
       ]
     };
+
     setMaterials(prev => [...prev, newMat]);
     setActiveMaterial(newMat);
     setCurrentPageIndex(0);
     setEditingPage(newMat.pages[0]);
     setViewMode('editor');
     handleSaveMaterial(newMat);
+
+    // If currently in a non-English language, immediately run AI translation on the newly created material
+    if (selectedLanguage !== 'en') {
+      translateMaterialPagesWithAI(newMat, selectedLanguage, false);
+    }
   };
 
   const handleAddNewPage = () => {
     const newPageNum = activeMaterial.pages.length + 1;
+    const initialTitle = `Page ${newPageNum}: New Topic Header`;
+    const initialContent = 'Paste your course material text, lecture notes, or key summaries here...';
+    const initialCaption = 'Illustration Caption';
+
+    const initialTranslations: Record<string, any> = {};
+    if (selectedLanguage !== 'en') {
+      initialTranslations[selectedLanguage] = {
+        title: autoTranslateText(initialTitle, selectedLanguage),
+        subtitle: '',
+        content: autoTranslateText(initialContent, selectedLanguage),
+        calloutText: '',
+        imageCaption: autoTranslateText(initialCaption, selectedLanguage),
+        secondaryImageCaption: '',
+        videoCaption: ''
+      };
+    }
+
     const newPage: FlipbookPage = {
       id: `p_${Date.now()}`,
       pageNumber: newPageNum,
-      title: `Page ${newPageNum}: New Topic Header`,
+      title: initialTitle,
       subtitle: '',
-      content: 'Paste your course material text, lecture notes, or key summaries here...',
+      content: initialContent,
       layoutStyle: 'grid-2x2',
       mediaType: 'image',
       imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
-      imageCaption: 'Illustration Caption',
+      imageCaption: initialCaption,
       calloutText: '',
       bgTheme: 'classic-paper',
-      courseName: editingPage.courseName || activeMaterial.courseName || '',
-      courseModuleName: editingPage.courseModuleName || '',
+      courseName: editingPage?.courseName || activeMaterial?.courseName || '',
+      courseModuleName: editingPage?.courseModuleName || activeMaterial?.pages?.[0]?.courseModuleName || '',
       courseModuleId: '',
       exerciseFilePath: '',
-      exerciseTitle: ''
+      exerciseTitle: '',
+      translations: initialTranslations
     };
 
     const updatedPages = [...activeMaterial.pages, newPage];
@@ -2272,6 +2452,11 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     setCurrentPageIndex(updatedPages.length - 1);
     setEditingPage(newPage);
     handleSaveMaterial(updatedMat);
+
+    // If currently in a non-English language, trigger translation for the new page immediately
+    if (selectedLanguage !== 'en') {
+      translateMaterialPagesWithAI(updatedMat, selectedLanguage, false);
+    }
   };
 
   const handleUpdatePage = (updatedPage: FlipbookPage) => {
@@ -2288,10 +2473,12 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
           subtitle: updatedPage.subtitle,
           content: updatedPage.content,
           calloutText: updatedPage.calloutText,
+          imageCaption: updatedPage.imageCaption,
+          secondaryImageCaption: updatedPage.secondaryImageCaption,
+          videoCaption: updatedPage.videoCaption,
+          videoTranscription: updatedPage.videoTranscription
         }
       };
-    } else {
-      delete pageWithEditFlag.translations;
     }
 
     const updatedPages = activeMaterial.pages.map(p => p.id === updatedPage.id ? pageWithEditFlag : p);
@@ -2533,24 +2720,61 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             <span className="hidden sm:inline">How to Create E-Books</span>
           </button>
 
-          {/* Native Language Selector */}
-          <div className="flex items-center bg-slate-950 rounded-xl border border-slate-800 px-2 py-1 gap-1.5">
-            <Languages className="w-4 h-4 text-amber-400" />
-            <span className="text-[11px] font-bold text-slate-400 hidden sm:inline">Native Language:</span>
-            <select
-              value={selectedLanguage}
-              onChange={(e) => {
-                setSelectedLanguage(e.target.value);
-                handleAutoTranslateAll();
-              }}
-              className="bg-transparent text-xs font-bold text-amber-300 focus:outline-none cursor-pointer"
-            >
-              {SUPPORTED_LANGUAGES.map(lang => (
-                <option key={lang.code} value={lang.code} className="bg-slate-900 text-slate-200">
-                  {lang.flag} {lang.name}
-                </option>
-              ))}
-            </select>
+          {/* Native Language Selector & Quick Translate Action */}
+          <div className="flex items-center bg-slate-950 rounded-xl border border-slate-800 p-1 gap-1.5 shadow-inner">
+            <div className="flex items-center gap-1.5 px-2 py-0.5">
+              <Languages className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-[11px] font-bold text-slate-400 hidden sm:inline">Native Language:</span>
+              <select
+                value={selectedLanguage}
+                onChange={(e) => {
+                  const newLang = e.target.value;
+                  setSelectedLanguage(newLang);
+                  if (newLang !== 'en' && activeMaterial) {
+                    translateMaterialPagesWithAI(activeMaterial, newLang, false);
+                  }
+                }}
+                className="bg-transparent text-xs font-bold text-amber-300 focus:outline-none cursor-pointer"
+              >
+                {SUPPORTED_LANGUAGES.map(lang => (
+                  <option key={lang.code} value={lang.code} className="bg-slate-900 text-slate-200">
+                    {lang.flag} {lang.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedLanguage !== 'en' && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => handleAutoTranslateCurrentPage(selectedLanguage)}
+                  disabled={isTranslating}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-black tracking-wide uppercase transition flex items-center gap-1 cursor-pointer border ${
+                    isTranslating
+                      ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-wait'
+                      : 'bg-slate-950 hover:bg-slate-800 text-amber-300 border-amber-500/40 active:scale-95'
+                  }`}
+                  title="Translate ONLY the currently viewed page using Gemini AI"
+                >
+                  <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                  <span>Translate Page</span>
+                </button>
+
+                <button
+                  onClick={() => handleAutoTranslateAll(selectedLanguage, true)}
+                  disabled={isTranslating}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wide uppercase transition flex items-center gap-1 cursor-pointer shadow-md ${
+                    isTranslating
+                      ? 'bg-amber-600/60 text-amber-200 cursor-wait'
+                      : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 active:scale-95'
+                  }`}
+                  title="Translate all pages in batches into selected language using Gemini AI"
+                >
+                  <Sparkles className={`w-3 h-3 ${isTranslating ? 'animate-spin' : ''}`} />
+                  <span className="hidden md:inline">{isTranslating ? 'Translating...' : 'Translate All'}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Sound FX Toggle */}
@@ -2595,8 +2819,22 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             <select
               value={selectedCourseFilter}
               onChange={(e) => {
-                setSelectedCourseFilter(e.target.value);
+                const newCourse = e.target.value;
+                setSelectedCourseFilter(newCourse);
                 setSelectedModuleFilter('All Modules');
+                if (newCourse !== 'All Course Titles' && newCourse !== 'All Assigned Courses') {
+                  const match = materials.find(m => {
+                    const matCourse = m.courseName || formatCourseName(m.courseCategory);
+                    return matCourse === newCourse ||
+                      matCourse.toLowerCase().includes(newCourse.toLowerCase()) ||
+                      newCourse.toLowerCase().includes(matCourse.toLowerCase()) ||
+                      m.pages.some(p => p.courseName === newCourse || (p.courseName && p.courseName.toLowerCase().includes(newCourse.toLowerCase())));
+                  });
+                  if (match) {
+                    setActiveMaterial(match);
+                    setCurrentPageIndex(0);
+                  }
+                }
               }}
               className="w-full bg-transparent text-xs font-bold text-amber-300 focus:outline-none cursor-pointer truncate"
             >
@@ -2614,7 +2852,26 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             <span className="text-[11px] font-bold text-slate-400 shrink-0">Filter Module:</span>
             <select
               value={selectedModuleFilter}
-              onChange={(e) => setSelectedModuleFilter(e.target.value)}
+              onChange={(e) => {
+                const newMod = e.target.value;
+                setSelectedModuleFilter(newMod);
+                if (newMod !== 'All Modules') {
+                  const match = materials.find(m => 
+                    m.pages.some(p => p.courseModuleName === newMod || (p.courseModuleName && (
+                      p.courseModuleName.toLowerCase().includes(newMod.toLowerCase()) ||
+                      newMod.toLowerCase().includes(p.courseModuleName.toLowerCase())
+                    )))
+                  );
+                  if (match) {
+                    setActiveMaterial(match);
+                    const pIdx = match.pages.findIndex(p => p.courseModuleName === newMod || (p.courseModuleName && (
+                      p.courseModuleName.toLowerCase().includes(newMod.toLowerCase()) ||
+                      newMod.toLowerCase().includes(p.courseModuleName.toLowerCase())
+                    )));
+                    setCurrentPageIndex(pIdx >= 0 ? pIdx : 0);
+                  }
+                }
+              }}
               className="w-full bg-transparent text-xs font-bold text-blue-300 focus:outline-none cursor-pointer truncate"
             >
               {availableModuleOptions.map((mod) => (
@@ -2670,9 +2927,9 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
         {/* Translation Banner Loading Indicator */}
         {isTranslating && (
-          <div className="absolute top-4 z-50 bg-amber-500 text-slate-950 text-xs font-black px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 animate-bounce">
+          <div className="absolute top-4 z-50 bg-amber-500 text-slate-950 text-xs font-black px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 animate-bounce border-2 border-slate-950">
             <RefreshCw className="w-4 h-4 animate-spin" />
-            <span>Adapting Page Layout & Translating into {SUPPORTED_LANGUAGES.find(l => l.code === selectedLanguage)?.name}...</span>
+            <span>{translationStatus || `Adapting Page Layout & Translating into ${SUPPORTED_LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage}...`}</span>
           </div>
         )}
 
@@ -2706,8 +2963,9 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     {/* Clean Top Header & Page Counter */}
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-3 pb-1 border-b border-amber-900/10 dark:border-slate-800/60 text-slate-400">
-                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 tracking-wide uppercase">
-                          📖 Lecture Material
+                        <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 tracking-wide uppercase flex items-center gap-1.5 truncate">
+                          <GraduationCap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          Endless School of Printing and Packaging
                         </span>
                         <span className="text-xs font-mono font-bold text-slate-400 shrink-0">
                           Page {displayPage.pageNumber} of {activeMaterial.pages.length}
@@ -2829,7 +3087,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                                 <Image className="w-3 h-3 text-amber-400" /> Image 1 (Top): {displayPage.imageCaption || 'Primary Diagram'}
                               </span>
                               <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center">
-                                <SafeImage src={displayPage.imageUrl || 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80'} alt="Image 1" className="max-h-40 object-contain" />
+                                <SafeImage src={displayPage.imageUrl} alt="Image 1" className="max-h-40 object-contain" />
                               </div>
                               {displayPage.imageCaption && (
                                 <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-amber-200 dark:text-amber-300 pt-1">
@@ -2846,7 +3104,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                                 <Image className="w-3 h-3 text-blue-400" /> Image 2 (Bottom): {displayPage.secondaryImageCaption || 'Secondary Diagram'}
                               </span>
                               <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center">
-                                <SafeImage src={displayPage.secondaryImageUrl || displayPage.imageUrl || 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&w=800&q=80'} alt="Image 2" className="max-h-40 object-contain" />
+                                <SafeImage src={displayPage.secondaryImageUrl || displayPage.imageUrl} alt="Image 2" className="max-h-40 object-contain" />
                               </div>
                               {displayPage.secondaryImageCaption && (
                                 <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-blue-200 dark:text-blue-300 pt-1">
@@ -3022,7 +3280,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                             Module: {currentModuleName} •
                           </span>
                         )}
-                        <span className="font-semibold text-slate-600 dark:text-slate-400 shrink-0">Faculty Academy Publishing</span>
+                        <span className="font-semibold text-slate-600 dark:text-slate-400 shrink-0">Endless School of Printing and Packaging</span>
                       </div>
                     </div>
                   </div>

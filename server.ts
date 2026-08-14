@@ -14,8 +14,17 @@ import JSZip from "jszip";
 import nodemailer from "nodemailer";
 import { Readable } from "stream";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let aiClient: GoogleGenAI | null = null;
+function getGenAIClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY || "";
+    aiClient = new GoogleGenAI({ apiKey });
+  }
+  return aiClient;
+}
+
+const safeFilename = typeof __filename !== "undefined" ? __filename : (typeof import.meta !== "undefined" && import.meta.url ? fileURLToPath(import.meta.url) : "");
+const safeDirname = typeof __dirname !== "undefined" ? __dirname : (typeof import.meta !== "undefined" && import.meta.url ? path.dirname(fileURLToPath(import.meta.url)) : process.cwd());
 
 const localUploadsDir = "/tmp/uploads_fallback";
 
@@ -2545,7 +2554,7 @@ async function startServer() {
           console.log("AI Agent: Setting up Gemini Live session...");
           const { voiceName, systemInstruction, knowledgeBase } = msg.config || {};
 
-          session = await ai.live.connect({
+          session = await getGenAIClient().live.connect({
             model: "gemini-3.1-flash-live-preview",
             callbacks: {
               onopen: () => {

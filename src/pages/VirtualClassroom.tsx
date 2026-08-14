@@ -768,11 +768,12 @@ export default function VirtualClassroom() {
                 <p className="font-bold text-pink-400 flex items-center gap-1.5 text-sm">
                   <Info className="w-4 h-4" /> Recording Instructions:
                 </p>
-                <ol className="list-decimal list-inside space-y-1 text-slate-300">
-                  <li>Click <strong className="text-white">"Select Screen to Record"</strong> below and choose your screen, browser tab, or window.</li>
-                  <li>In the browser prompt, check <strong className="text-amber-300 font-bold">"Share tab audio"</strong> or <strong className="text-amber-300 font-bold">"Share system audio"</strong> to record faculty & student voices.</li>
-                  <li>Click <strong className="text-red-400 font-bold">"Start Recording"</strong> during the live class session.</li>
-                  <li>When finished, preview your recording and click <strong className="text-emerald-400 font-bold">"Download"</strong> to save the video file (.webm) to your device.</li>
+                <ol className="list-decimal list-inside space-y-1.5 text-slate-300">
+                  <li>Click <strong className="text-white">"Select Screen to Record"</strong> and choose the live classroom tab, presentation, or whiteboard window.</li>
+                  <li>In the browser dialog, check <strong className="text-cyan-300 font-bold">"Share tab audio"</strong> or <strong className="text-cyan-300 font-bold">"Share system audio"</strong>.</li>
+                  <li>The integrated Audio Mixer automatically blends <strong className="text-emerald-300 font-bold">Faculty Mic</strong> + <strong className="text-cyan-300 font-bold">System Sounds</strong> + <strong className="text-amber-300 font-bold">Student Voice</strong>.</li>
+                  <li>Adjust individual volume sliders or mute channels as needed, then click <strong className="text-red-400 font-bold">"Start Recording"</strong>.</li>
+                  <li>When finished, preview your recording and click <strong className="text-emerald-400 font-bold">"Download Video (.webm)"</strong>.</li>
                 </ol>
               </div>
 

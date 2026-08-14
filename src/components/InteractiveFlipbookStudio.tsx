@@ -87,19 +87,77 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'ja', name: 'Japanese (日本語)', flag: '🇯🇵' },
 ];
 
-// Safe Image component with fallback, IndexedDB resolution, and clean diagram placeholder
+// Normalize external domain image URLs (Google Drive, Dropbox, Imgur, GitHub, HTTP to HTTPS, etc.)
+export const normalizeExternalImageUrl = (url?: string): string => {
+  if (!url) return '';
+  let clean = url.trim();
+
+  // If already base64, blob, or idb: key, keep intact
+  if (clean.startsWith('data:') || clean.startsWith('blob:') || clean.startsWith('idb:')) {
+    return clean;
+  }
+
+  // Upgrade http to https to avoid mixed-content blocks
+  if (clean.startsWith('http://')) {
+    clean = clean.replace('http://', 'https://');
+  }
+
+  // Google Drive Image URLs
+  // Pattern 1: drive.google.com/file/d/FILE_ID/view...
+  if (clean.includes('drive.google.com/file/d/')) {
+    const id = clean.split('/d/')[1]?.split('/')[0]?.split('?')[0];
+    if (id) return `https://lh3.googleusercontent.com/d/${id}`;
+  }
+  // Pattern 2: drive.google.com/open?id=FILE_ID
+  if (clean.includes('drive.google.com/open?id=')) {
+    const id = clean.split('id=')[1]?.split('&')[0];
+    if (id) return `https://lh3.googleusercontent.com/d/${id}`;
+  }
+  // Pattern 3: drive.google.com/uc?id=FILE_ID
+  if (clean.includes('drive.google.com/uc?')) {
+    const match = clean.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) return `https://lh3.googleusercontent.com/d/${match[1]}`;
+  }
+
+  // Dropbox Image URLs
+  if (clean.includes('dropbox.com/s/')) {
+    return clean.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace(/[?&]dl=[01]/g, '');
+  }
+  if (clean.includes('dropbox.com/scl/fi/')) {
+    return clean.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace(/[?&]dl=[01]/g, '').replace('raw=0', 'raw=1');
+  }
+
+  // Imgur page URL -> direct image URL
+  if (/^https?:\/\/imgur\.com\/([a-zA-Z0-9]+)$/.test(clean)) {
+    const match = clean.match(/^https?:\/\/imgur\.com\/([a-zA-Z0-9]+)$/);
+    if (match && match[1]) return `https://i.imgur.com/${match[1]}.jpg`;
+  }
+
+  // GitHub raw file image
+  if (clean.includes('github.com/') && clean.includes('/blob/')) {
+    clean = clean.replace('github.com/', 'raw.githubusercontent.com/').replace('/blob/', '/');
+  }
+
+  return clean;
+};
+
+// Safe Image component with fallback, IndexedDB resolution, external domain normalization, and clean diagram placeholder
 export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string; className?: string }) => {
   const [hasError, setHasError] = useState(false);
+  const [useSecondaryFallback, setUseSecondaryFallback] = useState(false);
   const [resolvedSrc, setResolvedSrc] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     setHasError(false);
+    setUseSecondaryFallback(false);
     if (!src || src.trim() === '') {
       setResolvedSrc('');
       setIsLoading(false);
       return;
     }
+
+    const normalized = normalizeExternalImageUrl(src);
 
     if (src.startsWith('idb:')) {
       const key = src.replace('idb:', '');
@@ -116,7 +174,7 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
         .catch(() => setHasError(true))
         .finally(() => setIsLoading(false));
     } else {
-      setResolvedSrc(src);
+      setResolvedSrc(normalized);
       setIsLoading(false);
     }
   }, [src]);
@@ -134,20 +192,53 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
     );
   }
 
+  // Handle secondary fallback for Google Drive thumbnails or alternative direct URLs
+  const handleImageError = () => {
+    if (!useSecondaryFallback && (resolvedSrc.includes('googleusercontent.com/d/') || (src && src.includes('drive.google.com')))) {
+      const idMatch = resolvedSrc.match(/\/d\/([a-zA-Z0-9_-]+)/) || (src ? src.match(/\/d\/([a-zA-Z0-9_-]+)/) : null) || (src ? src.match(/[?&]id=([a-zA-Z0-9_-]+)/) : null);
+      if (idMatch && idMatch[1]) {
+        setUseSecondaryFallback(true);
+        setResolvedSrc(`https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`);
+        return;
+      }
+    }
+    setHasError(true);
+  };
+
   if (hasError || !resolvedSrc) {
+    const rawExternalUrl = src && !src.startsWith('idb:') ? normalizeExternalImageUrl(src) : resolvedSrc;
     return (
-      <div className={`flex flex-col items-center justify-center p-3 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-1.5 ${className || 'min-h-[140px]'}`}>
-        <Image className="w-6 h-6 text-amber-400/80" />
-        <span className="text-[11px] font-semibold text-amber-200">{alt || 'Diagram Attachment'}</span>
-        {resolvedSrc && !resolvedSrc.startsWith('idb:') && !resolvedSrc.startsWith('data:') && (
-          <a
-            href={resolvedSrc}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 font-semibold"
-          >
-            <ExternalLink className="w-3 h-3" /> View Source Link
-          </a>
+      <div className={`flex flex-col items-center justify-center p-3.5 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-2 ${className || 'min-h-[140px]'}`}>
+        <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/30">
+          <Image className="w-4 h-4 text-amber-400" />
+        </div>
+        <div>
+          <span className="text-[11px] font-bold text-amber-200 block">{alt || 'Diagram / Image Attachment'}</span>
+          <span className="text-[10px] text-slate-400 block mt-0.5">External Domain Image</span>
+        </div>
+        {rawExternalUrl && !rawExternalUrl.startsWith('idb:') && !rawExternalUrl.startsWith('data:') && (
+          <div className="flex items-center gap-2 pt-0.5">
+            <a
+              href={rawExternalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg text-[10px] text-amber-300 font-bold flex items-center gap-1 transition"
+            >
+              <ExternalLink className="w-3 h-3" />
+              <span>Open External Image</span>
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                setHasError(false);
+                setUseSecondaryFallback(false);
+                setResolvedSrc(normalizeExternalImageUrl(src));
+              }}
+              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-semibold transition cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
         )}
       </div>
     );
@@ -159,7 +250,8 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
       alt={alt || 'Page Attachment'}
       className={className}
       referrerPolicy="no-referrer"
-      onError={() => setHasError(true)}
+      loading="lazy"
+      onError={handleImageError}
     />
   );
 };
@@ -1257,36 +1349,85 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     }
   };
 
-  // Convert YouTube/Vimeo/Drive/Loom URLs to Embeddable URLs
+  // Convert YouTube/Vimeo/Drive/Loom/Dailymotion/Canva URLs to Embeddable URLs
   const getEmbedVideoUrl = (url?: string) => {
     if (!url) return '';
-    const clean = url.trim();
-    if (clean.includes('youtube.com/watch?v=')) {
-      const id = clean.split('v=')[1]?.split('&')[0];
-      return `https://www.youtube.com/embed/${id}?autoplay=0&modestbranding=1&rel=0`;
+    let clean = url.trim();
+
+    // Upgrade http to https for security
+    if (clean.startsWith('http://')) {
+      clean = clean.replace('http://', 'https://');
     }
+
+    // YouTube Standard Watch (e.g. youtube.com/watch?v=ID)
+    if (clean.includes('youtube.com/watch')) {
+      const match = clean.match(/[?&]v=([a-zA-Z0-9_-]+)/);
+      const id = match ? match[1] : clean.split('v=')[1]?.split('&')[0];
+      if (id) return `https://www.youtube-nocookie.com/embed/${id}?autoplay=0&modestbranding=1&rel=0&enablejsapi=1`;
+    }
+    // YouTube Shortened (e.g. youtu.be/ID)
     if (clean.includes('youtu.be/')) {
-      const id = clean.split('youtu.be/')[1]?.split('?')[0];
-      return `https://www.youtube.com/embed/${id}?autoplay=0&modestbranding=1&rel=0`;
+      const id = clean.split('youtu.be/')[1]?.split('?')[0]?.split('&')[0];
+      if (id) return `https://www.youtube-nocookie.com/embed/${id}?autoplay=0&modestbranding=1&rel=0&enablejsapi=1`;
     }
+    // YouTube Shorts (e.g. youtube.com/shorts/ID)
     if (clean.includes('youtube.com/shorts/')) {
-      const id = clean.split('shorts/')[1]?.split('?')[0];
-      return `https://www.youtube.com/embed/${id}?autoplay=0&modestbranding=1&rel=0`;
+      const id = clean.split('shorts/')[1]?.split('?')[0]?.split('&')[0];
+      if (id) return `https://www.youtube-nocookie.com/embed/${id}?autoplay=0&modestbranding=1&rel=0&enablejsapi=1`;
     }
+    // YouTube Live (e.g. youtube.com/live/ID)
+    if (clean.includes('youtube.com/live/')) {
+      const id = clean.split('live/')[1]?.split('?')[0]?.split('&')[0];
+      if (id) return `https://www.youtube-nocookie.com/embed/${id}?autoplay=0&modestbranding=1&rel=0&enablejsapi=1`;
+    }
+    // YouTube Embed (e.g. youtube.com/embed/ID)
     if (clean.includes('youtube.com/embed/')) {
       return clean;
     }
+    // Vimeo (e.g. vimeo.com/ID)
     if (clean.includes('vimeo.com/')) {
-      const id = clean.split('vimeo.com/')[1]?.split('?')[0];
-      return `https://player.vimeo.com/video/${id}`;
+      const match = clean.match(/vimeo\.com\/(?:video\/)?([0-9]+)/);
+      const id = match ? match[1] : clean.split('vimeo.com/')[1]?.split('?')[0];
+      if (id) return `https://player.vimeo.com/video/${id}?title=0&byline=0&portrait=0`;
     }
+    // Google Drive Video (e.g. drive.google.com/file/d/ID/view or drive.google.com/open?id=ID)
     if (clean.includes('drive.google.com/file/d/')) {
-      const id = clean.split('/d/')[1]?.split('/')[0];
-      return `https://drive.google.com/file/d/${id}/preview`;
+      const id = clean.split('/d/')[1]?.split('/')[0]?.split('?')[0];
+      if (id) return `https://drive.google.com/file/d/${id}/preview`;
     }
+    if (clean.includes('drive.google.com/open?id=')) {
+      const id = clean.split('id=')[1]?.split('&')[0];
+      if (id) return `https://drive.google.com/file/d/${id}/preview`;
+    }
+    // Loom (e.g. loom.com/share/ID)
     if (clean.includes('loom.com/share/')) {
       const id = clean.split('share/')[1]?.split('?')[0];
-      return `https://www.loom.com/embed/${id}`;
+      if (id) return `https://www.loom.com/embed/${id}`;
+    }
+    // Dailymotion
+    if (clean.includes('dailymotion.com/video/') || clean.includes('dai.ly/')) {
+      const id = clean.includes('dai.ly/')
+        ? clean.split('dai.ly/')[1]?.split('?')[0]
+        : clean.split('/video/')[1]?.split('?')[0]?.split('_')[0];
+      if (id) return `https://www.dailymotion.com/embed/video/${id}`;
+    }
+    // Dropbox Video direct link
+    if (clean.includes('dropbox.com/s/')) {
+      return clean.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace(/[?&]dl=[01]/g, '');
+    }
+    // Canva Video / Presentation Embed
+    if (clean.includes('canva.com/design/')) {
+      return clean.includes('?') ? `${clean}&embed` : `${clean}?embed`;
+    }
+    // Streamable
+    if (clean.includes('streamable.com/')) {
+      const id = clean.split('streamable.com/')[1]?.split('?')[0];
+      if (id) return `https://streamable.com/e/${id}`;
+    }
+    // Wistia
+    if (clean.includes('wistia.com/medias/')) {
+      const id = clean.split('medias/')[1]?.split('?')[0];
+      if (id) return `https://fast.wistia.net/embed/iframe/${id}`;
     }
     return clean;
   };
@@ -1323,10 +1464,27 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     return text;
   };
 
-  // Helper to check if a URL is a direct video (local upload Data URL, blob, IDB key, MP4, WebM, MOV)
+  // Helper to check if a URL is a direct video (local upload Data URL, blob, IDB key, MP4, WebM, MOV, S3, Firebase)
   const isDirectVideo = (url?: string) => {
     if (!url) return false;
     const lower = url.toLowerCase().trim();
+
+    // Explicit iframe embed providers are NOT direct videos
+    if (
+      lower.includes('youtube.com') ||
+      lower.includes('youtu.be') ||
+      lower.includes('vimeo.com') ||
+      lower.includes('drive.google.com') ||
+      lower.includes('loom.com') ||
+      lower.includes('dailymotion.com') ||
+      lower.includes('dai.ly') ||
+      lower.includes('streamable.com') ||
+      lower.includes('wistia.com') ||
+      lower.includes('canva.com')
+    ) {
+      return false;
+    }
+
     return (
       lower.startsWith('data:video') ||
       lower.startsWith('blob:') ||
@@ -1335,14 +1493,23 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       lower.endsWith('.webm') ||
       lower.endsWith('.mov') ||
       lower.endsWith('.ogg') ||
+      lower.endsWith('.m4v') ||
       lower.includes('.mp4?') ||
       lower.includes('.webm?') ||
+      lower.includes('.mov?') ||
+      lower.includes('.m4v?') ||
       lower.includes('commondatastorage.googleapis.com') ||
+      lower.includes('storage.googleapis.com') ||
+      lower.includes('firebasestorage.googleapis.com') ||
+      lower.includes('s3.amazonaws.com') ||
+      lower.includes('blob.core.windows.net') ||
+      lower.includes('raw.githubusercontent.com') ||
+      lower.includes('dl.dropboxusercontent.com') ||
       lower.includes('w3schools.com/html/mov')
     );
   };
 
-  // Video Player Component with Synchronized Subtitle Cues, WebVTT Track, and Real-Time Timeupdate
+  // Video Player Component with Synchronized Subtitle Cues, WebVTT Track, Real-Time Timeupdate, and External Domain Recovery
   const VideoSubtitledPlayer: React.FC<{
     url: string;
     caption?: string;
@@ -1355,11 +1522,14 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     const [translationVersion, setTranslationVersion] = useState<number>(0);
     const [resolvedUrl, setResolvedUrl] = useState<string>('');
     const [hasPlaybackError, setHasPlaybackError] = useState<boolean>(false);
+    const [directPlaybackFailed, setDirectPlaybackFailed] = useState<boolean>(false);
+    const [manualPlayerMode, setManualPlayerMode] = useState<'auto' | 'video' | 'iframe'>('auto');
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
     // Asynchronously resolve IndexedDB idb: keys to valid blob object URLs
     useEffect(() => {
       setHasPlaybackError(false);
+      setDirectPlaybackFailed(false);
       if (!url) {
         setResolvedUrl('');
         return;
@@ -1421,7 +1591,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       return parsed;
     }, [cleanTx, cleanCap]);
 
-    // Dynamically scale cue timestamps if the video duration is shorter than the highest cue timestamp (e.g. a 10s video with 55s cues)
+    // Dynamically scale cue timestamps if the video duration is shorter than the highest cue timestamp
     const cues = useMemo(() => {
       if (rawCues.length === 0) return [];
       const maxCueStart = Math.max(...rawCues.map(c => c.start));
@@ -1559,14 +1729,33 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
       );
     }
 
+    const shouldRenderDirectVideo =
+      manualPlayerMode === 'video' ||
+      (manualPlayerMode !== 'iframe' &&
+        !directPlaybackFailed &&
+        (isDirectVideo(url) ||
+          activeUrl.startsWith('blob:') ||
+          activeUrl.startsWith('data:video') ||
+          activeUrl.endsWith('.mp4') ||
+          activeUrl.endsWith('.webm') ||
+          activeUrl.endsWith('.mov') ||
+          activeUrl.includes('commondatastorage.googleapis.com')));
+
+    const embedUrl = getEmbedVideoUrl(activeUrl || url);
+    const rawExternalUrl = url && !url.startsWith('idb:') && !url.startsWith('data:') ? url : '';
+
     return (
       <div className="relative w-full h-full group bg-black rounded-xl overflow-hidden flex flex-col justify-center">
-        {(isDirectVideo(url) || activeUrl.startsWith('blob:') || activeUrl.startsWith('data:video') || activeUrl.endsWith('.mp4') || activeUrl.endsWith('.webm') || activeUrl.endsWith('.mov') || activeUrl.includes('commondatastorage.googleapis.com')) ? (
+        {shouldRenderDirectVideo ? (
           <video
             ref={videoRef}
             src={activeUrl}
             controls
             playsInline
+            onError={() => {
+              console.warn('Direct video playback error, switching to embed iframe fallback');
+              setDirectPlaybackFailed(true);
+            }}
             onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
             className="w-full h-full object-contain bg-black rounded-lg"
@@ -1583,16 +1772,42 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
           </video>
         ) : (
           <iframe
-            src={getEmbedVideoUrl(activeUrl || url)}
+            src={embedUrl}
             title={cleanCap || "Lesson Video"}
-            className="w-full h-full border-0 rounded-lg"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            className="w-full h-full border-0 rounded-lg min-h-[180px]"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           />
         )}
 
-        {/* CC Subtitle Control Pill overlay in Top-Right Corner */}
-        <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5 bg-black/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-amber-500/40 shadow-xl">
+        {/* Video Control Bar overlay in Top-Right Corner */}
+        <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5 bg-black/85 backdrop-blur-md px-2 py-1 rounded-lg border border-amber-500/40 shadow-xl flex-wrap">
+          {rawExternalUrl && (
+            <a
+              href={rawExternalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1 rounded text-slate-300 hover:text-amber-300 transition"
+              title="Open video in external domain tab"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
+          
+          {/* Switch Player mode button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setManualPlayerMode(prev => (prev === 'iframe' ? 'video' : 'iframe'));
+            }}
+            className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer"
+            title="Toggle between HTML5 Direct Player and Embedded Iframe"
+          >
+            {shouldRenderDirectVideo ? 'Direct' : 'Embed'}
+          </button>
+
+          {/* Closed Captions toggle */}
           <button
             type="button"
             onClick={(e) => {
@@ -4688,18 +4903,28 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     />
                   </label>
 
-                  {/* Video URL Text Input */}
-                  <input
-                    type="text"
-                    value={editingPage.videoUrl || ''}
-                    onChange={(e) => {
-                      const updated = { ...editingPage, videoUrl: e.target.value };
-                      setEditingPage(updated);
-                      handleUpdatePage(updated);
-                    }}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500"
-                    placeholder="Or paste YouTube / Vimeo / Web MP4 link..."
-                  />
+                  {/* Video URL Text Input with Domain Guide */}
+                  <div className="space-y-1">
+                    <input
+                      type="text"
+                      value={editingPage.videoUrl || ''}
+                      onChange={(e) => {
+                        const updated = { ...editingPage, videoUrl: e.target.value.trim() };
+                        setEditingPage(updated);
+                        handleUpdatePage(updated);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500"
+                      placeholder="Paste YouTube, Vimeo, Google Drive Video, Loom, or MP4 URL..."
+                    />
+                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
+                      <span className="font-semibold text-pink-300">Supported:</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">YouTube</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Vimeo</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Loom</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct MP4 / WebM</span>
+                    </div>
+                  </div>
 
                   {/* Video Caption Field */}
                   <div>
@@ -4820,18 +5045,27 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     />
                   </label>
 
-                  {/* Primary Image URL Text Input */}
-                  <input
-                    type="text"
-                    value={editingPage.imageUrl || ''}
-                    onChange={(e) => {
-                      const updated = { ...editingPage, imageUrl: e.target.value };
-                      setEditingPage(updated);
-                      handleUpdatePage(updated);
-                    }}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                    placeholder="Or paste primary image web URL..."
-                  />
+                  {/* Primary Image URL Text Input with Domain Guide */}
+                  <div className="space-y-1">
+                    <input
+                      type="text"
+                      value={editingPage.imageUrl || ''}
+                      onChange={(e) => {
+                        const updated = { ...editingPage, imageUrl: e.target.value.trim() };
+                        setEditingPage(updated);
+                        handleUpdatePage(updated);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                      placeholder="Paste Google Drive image link, Dropbox, Imgur, or direct image URL..."
+                    />
+                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
+                      <span className="font-semibold text-amber-300">Supported:</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Dropbox</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Imgur</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct Web Image</span>
+                    </div>
+                  </div>
 
                   {/* Primary Image Caption Input */}
                   <input
@@ -4887,18 +5121,27 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     />
                   </label>
 
-                  {/* Secondary Image URL Text Input */}
-                  <input
-                    type="text"
-                    value={editingPage.secondaryImageUrl || ''}
-                    onChange={(e) => {
-                      const updated = { ...editingPage, secondaryImageUrl: e.target.value };
-                      setEditingPage(updated);
-                      handleUpdatePage(updated);
-                    }}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                    placeholder="Or paste secondary image web URL..."
-                  />
+                  {/* Secondary Image URL Text Input with Domain Guide */}
+                  <div className="space-y-1">
+                    <input
+                      type="text"
+                      value={editingPage.secondaryImageUrl || ''}
+                      onChange={(e) => {
+                        const updated = { ...editingPage, secondaryImageUrl: e.target.value.trim() };
+                        setEditingPage(updated);
+                        handleUpdatePage(updated);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                      placeholder="Paste secondary image link (Google Drive, Dropbox, Imgur, or direct URL)..."
+                    />
+                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
+                      <span className="font-semibold text-blue-300">Supported:</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Dropbox</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Imgur</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct Web Image</span>
+                    </div>
+                  </div>
 
                   {/* Secondary Image Caption Input */}
                   <input

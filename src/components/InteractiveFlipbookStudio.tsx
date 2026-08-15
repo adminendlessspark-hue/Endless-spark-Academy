@@ -102,21 +102,22 @@ export const normalizeExternalImageUrl = (url?: string): string => {
     clean = clean.replace('http://', 'https://');
   }
 
-  // Google Drive Image URLs
-  // Pattern 1: drive.google.com/file/d/FILE_ID/view...
+  // Google Drive Image URLs -> Use high-res thumbnail endpoint (w1600) which works reliably in all iframes and without authentication cookies
   if (clean.includes('drive.google.com/file/d/')) {
     const id = clean.split('/d/')[1]?.split('/')[0]?.split('?')[0];
-    if (id) return `https://lh3.googleusercontent.com/d/${id}`;
+    if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
   }
-  // Pattern 2: drive.google.com/open?id=FILE_ID
   if (clean.includes('drive.google.com/open?id=')) {
     const id = clean.split('id=')[1]?.split('&')[0];
-    if (id) return `https://lh3.googleusercontent.com/d/${id}`;
+    if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
   }
-  // Pattern 3: drive.google.com/uc?id=FILE_ID
   if (clean.includes('drive.google.com/uc?')) {
     const match = clean.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    if (match && match[1]) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1600`;
+  }
+  if (clean.includes('lh3.googleusercontent.com/d/')) {
+    const id = clean.split('/d/')[1]?.split('?')[0];
+    if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
   }
 
   // Dropbox Image URLs
@@ -186,7 +187,7 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
       <div className={`flex items-center justify-center p-4 bg-slate-900/80 rounded-xl border border-amber-500/20 ${className || 'min-h-[140px]'}`}>
         <div className="flex items-center gap-2 text-xs font-semibold text-amber-400">
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
-          <span>Loading diagram...</span>
+          <span>Loading visual media...</span>
         </div>
       </div>
     );
@@ -194,12 +195,14 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
 
   // Handle secondary fallback for Google Drive thumbnails or alternative direct URLs
   const handleImageError = () => {
-    if (!useSecondaryFallback && (resolvedSrc.includes('googleusercontent.com/d/') || (src && src.includes('drive.google.com')))) {
-      const idMatch = resolvedSrc.match(/\/d\/([a-zA-Z0-9_-]+)/) || (src ? src.match(/\/d\/([a-zA-Z0-9_-]+)/) : null) || (src ? src.match(/[?&]id=([a-zA-Z0-9_-]+)/) : null);
-      if (idMatch && idMatch[1]) {
-        setUseSecondaryFallback(true);
-        setResolvedSrc(`https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`);
-        return;
+    if (!useSecondaryFallback) {
+      if (resolvedSrc.includes('googleusercontent.com') || (src && src.includes('drive.google.com'))) {
+        const idMatch = resolvedSrc.match(/\/d\/([a-zA-Z0-9_-]+)/) || (src ? src.match(/\/d\/([a-zA-Z0-9_-]+)/) : null) || (src ? src.match(/[?&]id=([a-zA-Z0-9_-]+)/) : null);
+        if (idMatch && idMatch[1]) {
+          setUseSecondaryFallback(true);
+          setResolvedSrc(`https://lh3.googleusercontent.com/d/${idMatch[1]}`);
+          return;
+        }
       }
     }
     setHasError(true);
@@ -208,24 +211,24 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
   if (hasError || !resolvedSrc) {
     const rawExternalUrl = src && !src.startsWith('idb:') ? normalizeExternalImageUrl(src) : resolvedSrc;
     return (
-      <div className={`flex flex-col items-center justify-center p-3.5 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-2 ${className || 'min-h-[140px]'}`}>
-        <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/30">
-          <Image className="w-4 h-4 text-amber-400" />
+      <div className={`flex flex-col items-center justify-center p-4 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-2 ${className || 'min-h-[140px]'}`}>
+        <div className="w-9 h-9 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/30">
+          <Image className="w-5 h-5 text-amber-400" />
         </div>
         <div>
-          <span className="text-[11px] font-bold text-amber-200 block">{alt || 'Diagram / Image Attachment'}</span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">External Domain Image</span>
+          <span className="text-xs font-bold text-amber-200 block">{alt || 'Diagram / Image Attachment'}</span>
+          <span className="text-[10px] text-slate-400 block mt-0.5">Embedded Diagram View</span>
         </div>
         {rawExternalUrl && !rawExternalUrl.startsWith('idb:') && !rawExternalUrl.startsWith('data:') && (
-          <div className="flex items-center gap-2 pt-0.5">
+          <div className="flex items-center gap-2 pt-1">
             <a
               href={rawExternalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg text-[10px] text-amber-300 font-bold flex items-center gap-1 transition"
+              className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg text-[11px] text-amber-300 font-bold flex items-center gap-1.5 transition"
             >
-              <ExternalLink className="w-3 h-3" />
-              <span>Open External Image</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>View Full Image</span>
             </a>
             <button
               type="button"
@@ -234,9 +237,9 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
                 setUseSecondaryFallback(false);
                 setResolvedSrc(normalizeExternalImageUrl(src));
               }}
-              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-semibold transition cursor-pointer"
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-semibold transition cursor-pointer"
             >
-              Retry
+              Reload
             </button>
           </div>
         )}
@@ -915,10 +918,34 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
   const { fontSizeClass, titleSizeClass } = calculateDynamicLayout(displayPage.content, selectedLanguage);
 
-  // Helper to clean up cluttered, duplicated, or nested HTML tags
+  // Helper to clean up cluttered, duplicated, malformed, or nested HTML tags and unescape entities
   const cleanNestedHtmlTags = (htmlStr: string): string => {
     if (!htmlStr) return '';
     let text = htmlStr;
+
+    // 1. Unescape HTML entities if the string contains encoded tags like &lt;span, &lt;div, &lt;p, etc.
+    if (/&lt;(span|div|p|h[1-6]|b|i|u|mark|table|tr|td|ul|ol|li|strong|em|br|img|a)\b/i.test(text)) {
+      text = text
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&');
+    }
+
+    // 2. Fix broken split opening tags like <div>style="font-weight: normal;"> or <div>style=""<b>
+    text = text.replace(/<div\s*>\s*style="([^"]*)"\s*>/gi, '<div style="$1">');
+    text = text.replace(/<span\s*>\s*style="([^"]*)"\s*>/gi, '<span style="$1">');
+    text = text.replace(/<p\s*>\s*style="([^"]*)"\s*>/gi, '<p style="$1">');
+    text = text.replace(/<h([1-6])\s*>\s*style="([^"]*)"\s*>/gi, '<h$1 style="$2">');
+    text = text.replace(/<(div|span|p|h[1-6])\s*>\s*style='([^']*)'\s*>/gi, '<$1 style=\'$2\'>');
+    text = text.replace(/<(div|span|p|h[1-6])\s*>\s*style=""\s*/gi, '<$1>');
+    text = text.replace(/<(div|span|p|h[1-6])\s*>\s*style="[^"]*"\s*/gi, '<$1>');
+
+    // 3. Remove zero-effect wrapper spans & Apple/WebKit copy artifacts
+    text = text.replace(/<span\s+style="[^"]*font-style:\s*normal;?\s*text-decoration:\s*none;?[^"]*">([\s\S]*?)<\/span>/gi, '$1');
+    text = text.replace(/<span\s+class="Apple-converted-space">([\s\S]*?)<\/span>/gi, '$1');
+    text = text.replace(/<span\s+style="[^"]*background-color:\s*transparent;?[^"]*">([\s\S]*?)<\/span>/gi, '$1');
 
     let prev = '';
     let iterations = 0;
@@ -928,8 +955,10 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
       // Unnest duplicate <b><b> -> <b>
       text = text.replace(/<b>\s*<b>([\s\S]*?)<\/b>\s*<\/b>/gi, '<b>$1</b>');
+      text = text.replace(/<strong>\s*<strong>([\s\S]*?)<\/strong>\s*<\/strong>/gi, '<strong>$1</strong>');
       // Unnest duplicate <i><i> -> <i>
       text = text.replace(/<i>\s*<i>([\s\S]*?)<\/i>\s*<\/i>/gi, '<i>$1</i>');
+      text = text.replace(/<em>\s*<em>([\s\S]*?)<\/em>\s*<\/em>/gi, '<em>$1</em>');
       // Unnest duplicate <u><u> -> <u>
       text = text.replace(/<u>\s*<u>([\s\S]*?)<\/u>\s*<\/u>/gi, '<u>$1</u>');
 
@@ -942,7 +971,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       text = text.replace(/background-color:\s*(rgb\(100,\s*116,\s*139\)|#64748b|#475569|#334155);?/gi, '');
 
       // Remove empty tags
-      text = text.replace(/<(b|i|u|mark|span)[^>]*>\s*<\/\1>/gi, '');
+      text = text.replace(/<(b|strong|i|em|u|mark|span)[^>]*>\s*<\/\1>/gi, '');
     }
 
     return text;
@@ -1031,8 +1060,9 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const renderFormattedHtml = (contentStr: string) => {
     if (!contentStr) return null;
     const cleaned = cleanNestedHtmlTags(contentStr);
-    const formatted = cleaned.replace(/\n/g, '<br />');
-    return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
+    const hasHtmlBlocks = /<(p|div|h[1-6]|ul|ol|li|table|blockquote|br)\b/i.test(cleaned);
+    const formatted = hasHtmlBlocks ? cleaned : cleaned.replace(/\n/g, '<br />');
+    return <div className="formatted-flipbook-content leading-relaxed space-y-2" dangerouslySetInnerHTML={{ __html: formatted }} />;
   };
 
   // Selection-Aware Text Formatting Helper - ONLY applies to selected range!
@@ -3202,7 +3232,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
                       {/* Main Paragraph Body */}
                       <div 
-                        className={`whitespace-pre-line space-y-3 ${displayPage.contentFontSize || fontSizeClass} ${displayPage.contentFontStyle || 'font-normal'} ${!displayPage.contentTextColor ? 'text-slate-800 dark:text-slate-200' : ''}`}
+                        className={`leading-relaxed space-y-3 ${displayPage.contentFontSize || fontSizeClass} ${displayPage.contentFontStyle || 'font-normal'} ${!displayPage.contentTextColor ? 'text-slate-800 dark:text-slate-200' : ''}`}
                         style={{
                           fontFamily: displayPage.contentFontFamily || undefined,
                           color: displayPage.contentTextColor || undefined,
@@ -3598,7 +3628,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     </h3>
                   )}
                   <div 
-                    className={`whitespace-pre-line leading-relaxed bg-slate-950/60 p-4 rounded-xl border border-slate-800 ${displayPage.contentFontSize || 'text-sm md:text-base'} ${displayPage.contentFontStyle || 'font-normal'} ${!displayPage.contentTextColor ? 'text-slate-300' : ''}`}
+                    className={`leading-relaxed bg-slate-950/60 p-4 rounded-xl border border-slate-800 ${displayPage.contentFontSize || 'text-sm md:text-base'} ${displayPage.contentFontStyle || 'font-normal'} ${!displayPage.contentTextColor ? 'text-slate-300' : ''}`}
                     style={{
                       fontFamily: displayPage.contentFontFamily || undefined,
                       color: displayPage.contentTextColor || undefined,

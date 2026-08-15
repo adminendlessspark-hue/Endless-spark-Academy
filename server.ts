@@ -2591,10 +2591,29 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const possibleDistPaths = [
+      path.join(process.cwd(), "dist"),
+      safeDirname,
+      path.join(safeDirname, "dist"),
+      path.join(safeDirname, "..", "dist"),
+      path.join(process.cwd())
+    ];
+    let distPath = path.join(process.cwd(), "dist");
+    for (const p of possibleDistPaths) {
+      if (fs.existsSync(path.join(p, "index.html"))) {
+        distPath = p;
+        break;
+      }
+    }
+    console.log(`Serving static production assets from: ${distPath}`);
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+    app.get("*", (_req, res) => {
+      const indexPath = path.join(distPath, "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(200).send(`<!DOCTYPE html><html><head><title>App Starting</title></head><body style="font-family:sans-serif;padding:40px;background:#0f172a;color:#f8fafc;text-align:center;"><h2>Application Starting...</h2><p>Static index.html is being prepared. Please refresh in a moment.</p></body></html>`);
+      }
     });
   }
 
@@ -2606,9 +2625,16 @@ async function startServer() {
     }
   });
 
-  const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server successfully listening on host 0.0.0.0 on port ${PORT} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
-  });
+  const rawPort = process.env.PORT || 3000;
+  const isNamedPipeOrSocket = typeof rawPort === "string" && isNaN(Number(rawPort));
+
+  const server = isNamedPipeOrSocket
+    ? app.listen(rawPort, () => {
+        console.log(`Server successfully listening on pipe/socket ${rawPort} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
+      })
+    : app.listen(Number(rawPort) || 3000, "0.0.0.0", () => {
+        console.log(`Server successfully listening on host 0.0.0.0 on port ${Number(rawPort) || 3000} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
+      });
 
   // WebSocket for AI Agent Live Bridge
   const wss = new WebSocketServer({ server, path: "/api/chat-live" });

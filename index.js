@@ -1,4 +1,4 @@
-// Entry point for Hostinger, cPanel, CloudLinux Passenger, and production Node environments.
+// Universal entry point for Hostinger, cPanel, CloudLinux Passenger, and Node environments.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,4 +29,3 @@ if (!loaded) {
   console.error("[Hostinger Loader Error] Could not find compiled dist/server.cjs! Please execute 'npm run build' before starting.");
   process.exit(1);
 }
-

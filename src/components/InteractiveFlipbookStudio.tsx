@@ -961,58 +961,76 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
   // Load Flipbooks from Firestore on mount & merge with default curriculum flipbooks
   useEffect(() => {
+    const processMergedMaterials = (rawLoaded: FlipbookMaterial[]) => {
+      let deletedIds: string[] = [];
+      try {
+        deletedIds = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
+      } catch (_) {}
+
+      // Filter out any explicitly deleted flipbooks
+      const cleanLoaded = rawLoaded.filter(m => !deletedIds.includes(m.id));
+      
+      // Merge with DEFAULT_FLIPBOOKS so standard templates are available unless deleted
+      const merged = [...cleanLoaded];
+      DEFAULT_FLIPBOOKS.forEach(def => {
+        if (!deletedIds.includes(def.id) && !merged.some(m => m.id === def.id)) {
+          try {
+            const localBackup = localStorage.getItem(`flipbook_backup_${def.id}`);
+            if (localBackup) {
+              const parsed = JSON.parse(localBackup);
+              if (parsed && parsed.pages && parsed.pages.length > 0) {
+                merged.push(parsed);
+                return;
+              }
+            }
+          } catch (_) {}
+          merged.push(def);
+        }
+      });
+
+      // Ensure every material's title strictly matches its course title and clean up any placeholder strings
+      const formattedMerged = merged.map(m => {
+        let effectiveCourse = m.courseName || m.pages?.[0]?.courseName || '';
+        if (!effectiveCourse || effectiveCourse.toLowerCase().includes('new course') || effectiveCourse.toLowerCase().includes('lecture material')) {
+          if (m.title && !m.title.toLowerCase().includes('new course') && !m.title.toLowerCase().includes('lecture material')) {
+            effectiveCourse = m.title;
+          } else {
+            effectiveCourse = configuredCourses[0]?.title || 'Diploma in Production Art Engineer';
+          }
+        }
+
+        // Keep pages in exact order as saved
+        const sortedPages = [...(m.pages || [])].map((p, idx) => ({
+          ...p,
+          pageNumber: p.pageNumber || idx + 1,
+          courseName: p.courseName && !p.courseName.toLowerCase().includes('new course') ? p.courseName : effectiveCourse
+        }));
+
+        return {
+          ...m,
+          courseName: effectiveCourse,
+          title: effectiveCourse,
+          pages: sortedPages
+        };
+      });
+
+      setMaterials(formattedMerged);
+      setActiveMaterial(prevActive => {
+        if (!prevActive) {
+          return initialMaterial || formattedMerged[0];
+        }
+        const matched = formattedMerged.find(m => m.id === prevActive.id);
+        return matched || formattedMerged[0] || prevActive;
+      });
+    };
+
     const unsub = onSnapshot(
       collection(db, 'course_flipbooks'),
       (snapshot) => {
         const loaded = !snapshot.empty 
           ? snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as FlipbookMaterial))
           : [];
-        
-        let deletedIds: string[] = [];
-        try {
-          deletedIds = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
-        } catch (_) {}
-
-        // Filter out any explicitly deleted flipbooks
-        const cleanLoaded = loaded.filter(m => !deletedIds.includes(m.id));
-        
-        // Merge with DEFAULT_FLIPBOOKS so standard templates are available unless deleted
-        const merged = [...cleanLoaded];
-        DEFAULT_FLIPBOOKS.forEach(def => {
-          if (!deletedIds.includes(def.id) && !merged.some(m => m.id === def.id)) {
-            merged.push(def);
-          }
-        });
-
-        // Ensure every material's title strictly matches its course title and clean up any placeholder strings
-        const formattedMerged = merged.map(m => {
-          let effectiveCourse = m.courseName || m.pages?.[0]?.courseName || '';
-          if (!effectiveCourse || effectiveCourse.toLowerCase().includes('new course') || effectiveCourse.toLowerCase().includes('lecture material')) {
-            if (m.title && !m.title.toLowerCase().includes('new course') && !m.title.toLowerCase().includes('lecture material')) {
-              effectiveCourse = m.title;
-            } else {
-              effectiveCourse = configuredCourses[0]?.title || 'Diploma in Production Art Engineer';
-            }
-          }
-          return {
-            ...m,
-            courseName: effectiveCourse,
-            title: effectiveCourse,
-            pages: m.pages?.map(p => ({
-              ...p,
-              courseName: p.courseName && !p.courseName.toLowerCase().includes('new course') ? p.courseName : effectiveCourse
-            })) || []
-          };
-        });
-
-        setMaterials(formattedMerged);
-        setActiveMaterial(prevActive => {
-          if (!prevActive) {
-            return initialMaterial || formattedMerged[0];
-          }
-          const matched = formattedMerged.find(m => m.id === prevActive.id);
-          return matched || formattedMerged[0] || prevActive;
-        });
+        processMergedMaterials(loaded);
       },
       (err) => {
         console.warn('Firestore flipbooks load notice:', err.message);
@@ -1027,8 +1045,47 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         setMaterials(filteredDefaults);
       }
     );
-    return () => unsub();
-  }, [initialMaterial]);
+
+    // Cross-tab real-time sync listener
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key && e.key.startsWith('flipbook_backup_')) {
+        try {
+          if (e.newValue) {
+            const updatedMat: FlipbookMaterial = JSON.parse(e.newValue);
+            if (updatedMat && updatedMat.id) {
+              setMaterials(prev => {
+                const idx = prev.findIndex(m => m.id === updatedMat.id);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = updatedMat;
+                  return next;
+                }
+                return [...prev, updatedMat];
+              });
+              setActiveMaterial(prev => prev?.id === updatedMat.id ? updatedMat : prev);
+            }
+          }
+        } catch (_) {}
+      }
+    };
+
+    const handleCustomSync = (e: any) => {
+      if (e.detail?.material) {
+        const updatedMat = e.detail.material;
+        setMaterials(prev => prev.map(m => m.id === updatedMat.id ? updatedMat : m));
+        setActiveMaterial(prev => prev?.id === updatedMat.id ? updatedMat : prev);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('flipbook_synced', handleCustomSync);
+
+    return () => {
+      unsub();
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('flipbook_synced', handleCustomSync);
+    };
+  }, [initialMaterial, configuredCourses]);
 
   // Auto-sync activeMaterial when filtered materials change
   useEffect(() => {
@@ -2711,9 +2768,9 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         return;
       }
 
-      // Merge current editingPage into pages array if active
+      // Merge current editingPage into pages array ONLY if no explicit material was provided (i.e. manual editor save)
       let sourcePages = baseMat.pages ? [...baseMat.pages] : [];
-      if (editingPage) {
+      if (editingPage && !mat) {
         const pageIdx = sourcePages.findIndex(p => p.id === editingPage.id);
         if (pageIdx >= 0) {
           sourcePages[pageIdx] = { ...editingPage };
@@ -2724,8 +2781,16 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
       // Ensure all media are persisted in IndexedDB and cloud-ready
       const sanitizedPages = await Promise.all(
-        sourcePages.map(async (page) => {
-          const p = { ...page };
+        sourcePages.map(async (page, pIndex) => {
+          const p = { 
+            ...page,
+            pageNumber: page.pageNumber || pIndex + 1,
+            title: page.title || `Page ${pIndex + 1}`,
+            subtitle: page.subtitle || '',
+            content: page.content || '',
+            mediaType: page.mediaType || 'image',
+            layoutStyle: page.layoutStyle || 'split-left'
+          };
           // Ensure video URLs are clean
           if (p.videoUrl) {
             p.videoUrl = p.videoUrl.trim();
@@ -2787,6 +2852,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
       try {
         localStorage.setItem(`flipbook_backup_${baseMat.id}`, JSON.stringify(cleanData));
+        localStorage.setItem('flipbook_synced_timestamp', Date.now().toString());
+        window.dispatchEvent(new CustomEvent('flipbook_synced', { detail: { material: sanitizedMat } }));
       } catch (_) {}
 
       // 2. Persist to Firestore
@@ -3067,7 +3134,31 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     handleSaveMaterial(updatedMat);
   };
 
-  // Page Swapping / Reordering Helper
+  // Move / Shift Page to exact target position index (e.g. Move Page 8 to Position 1, shifting 1..7 -> 2..8)
+  const handleMovePageToPosition = (fromIdx: number, toIdx: number) => {
+    if (
+      fromIdx < 0 ||
+      fromIdx >= activeMaterial.pages.length ||
+      toIdx < 0 ||
+      toIdx >= activeMaterial.pages.length ||
+      fromIdx === toIdx
+    ) {
+      return;
+    }
+    const pagesCopy = [...activeMaterial.pages];
+    const [movedPage] = pagesCopy.splice(fromIdx, 1);
+    pagesCopy.splice(toIdx, 0, movedPage);
+
+    // Renumber pages sequentially
+    const renumbered = pagesCopy.map((p, idx) => ({ ...p, pageNumber: idx + 1 }));
+    const updatedMat = { ...activeMaterial, pages: renumbered };
+    setActiveMaterial(updatedMat);
+    setCurrentPageIndex(toIdx);
+    setEditingPage(renumbered[toIdx]);
+    handleSaveMaterial(updatedMat);
+  };
+
+  // Page Swapping / Reordering Helper (direct 1-to-1 swap)
   const handleSwapPages = (fromIdx: number, toIdx: number) => {
     if (
       fromIdx < 0 ||
@@ -4242,13 +4333,67 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                       </div>
                     </div>
 
-                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                    <span className="flex items-center gap-1">
-                      {p.videoUrl && <Video className="w-3.5 h-3.5 text-pink-400" />}
-                      {p.imageUrl && <Image className="w-3.5 h-3.5 text-amber-400" />}
-                      {p.exerciseFilePath && <FolderArchive className="w-3.5 h-3.5 text-emerald-400" />}
-                    </span>
-                    <span className="text-amber-400 font-bold hover:underline">Open Page →</span>
+                  <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                      <span className="flex items-center gap-1">
+                        {p.videoUrl && <Video className="w-3.5 h-3.5 text-pink-400" />}
+                        {p.imageUrl && <Image className="w-3.5 h-3.5 text-amber-400" />}
+                        {p.exerciseFilePath && <FolderArchive className="w-3.5 h-3.5 text-emerald-400" />}
+                      </span>
+                      <span className="text-amber-400 font-bold hover:underline">Open Page →</span>
+                    </div>
+
+                    {/* Quick Move and Reorder in Grid */}
+                    {isFacultyOrAdmin && activeMaterial.pages.length > 1 && (
+                      <div 
+                        onClick={(e) => e.stopPropagation()} 
+                        className="flex items-center justify-between gap-1 pt-1.5 border-t border-slate-800/60"
+                      >
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => handleMovePageToPosition(idx, idx - 1)}
+                            className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 rounded text-slate-300 hover:text-white transition cursor-pointer text-[10px] font-bold flex items-center gap-0.5"
+                            title="Move 1 step left"
+                          >
+                            <ChevronLeft className="w-3 h-3" />
+                            <span>Left</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={idx === activeMaterial.pages.length - 1}
+                            onClick={() => handleMovePageToPosition(idx, idx + 1)}
+                            className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 rounded text-slate-300 hover:text-white transition cursor-pointer text-[10px] font-bold flex items-center gap-0.5"
+                            title="Move 1 step right"
+                          >
+                            <span>Right</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const targetIdx = parseInt(e.target.value, 10);
+                            if (!isNaN(targetIdx)) {
+                              handleMovePageToPosition(idx, targetIdx);
+                            }
+                          }}
+                          className="bg-slate-950 border border-slate-700 text-emerald-300 text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-emerald-400 cursor-pointer"
+                        >
+                          <option value="" disabled>Move to...</option>
+                          {activeMaterial.pages.map((_, pIdx) => (
+                            pIdx !== idx && (
+                              <option key={`grid-move-${pIdx}`} value={pIdx}>
+                                Pos {pIdx + 1} {pIdx === 0 ? '(1st)' : pIdx === activeMaterial.pages.length - 1 ? '(Last)' : ''}
+                              </option>
+                            )
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -4404,29 +4549,58 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                 </div>
               ))}
 
-              {/* Direct Page Swap Dropdown Tool */}
+              {/* Direct Page Move & Swap Dropdown Tools */}
               {activeMaterial.pages.length > 1 && (
-                <div className="ml-auto flex items-center gap-1.5 shrink-0 bg-slate-900 border border-slate-700 px-2 py-1 rounded-xl">
-                  <span className="text-[10px] font-bold text-amber-300 uppercase">Swap Page {currentPageIndex + 1} with:</span>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const targetIdx = parseInt(e.target.value, 10);
-                      if (!isNaN(targetIdx)) {
-                        handleSwapPages(currentPageIndex, targetIdx);
-                      }
-                    }}
-                    className="bg-slate-950 border border-slate-700 text-white text-xs rounded-lg px-2 py-0.5 focus:outline-none focus:border-amber-400 cursor-pointer"
-                  >
-                    <option value="" disabled>-- Select Target Page --</option>
-                    {activeMaterial.pages.map((p, pIdx) => (
-                      pIdx !== currentPageIndex && (
-                        <option key={p.id} value={pIdx}>
-                          Page {p.pageNumber}: {stripHtml(p.title).slice(0, 20)}...
-                        </option>
-                      )
-                    ))}
-                  </select>
+                <div className="ml-auto flex flex-wrap items-center gap-2 shrink-0 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-xl">
+                  {/* Move / Shift to Position */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-extrabold text-emerald-400 uppercase">Move Page {currentPageIndex + 1} to Position:</span>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const targetIdx = parseInt(e.target.value, 10);
+                        if (!isNaN(targetIdx)) {
+                          handleMovePageToPosition(currentPageIndex, targetIdx);
+                        }
+                      }}
+                      className="bg-slate-950 border border-emerald-500/50 text-white text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-emerald-400 cursor-pointer"
+                    >
+                      <option value="" disabled>-- Select Position --</option>
+                      {activeMaterial.pages.map((_, posIdx) => (
+                        posIdx !== currentPageIndex && (
+                          <option key={`pos-${posIdx}`} value={posIdx}>
+                            Position {posIdx + 1} {posIdx === 0 ? '(1st / Front)' : posIdx === activeMaterial.pages.length - 1 ? '(Last / End)' : ''}
+                          </option>
+                        )
+                      ))}
+                    </select>
+                  </div>
+
+                  <span className="text-slate-600">|</span>
+
+                  {/* Direct Swap */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-extrabold text-amber-300 uppercase">Swap with:</span>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const targetIdx = parseInt(e.target.value, 10);
+                        if (!isNaN(targetIdx)) {
+                          handleSwapPages(currentPageIndex, targetIdx);
+                        }
+                      }}
+                      className="bg-slate-950 border border-slate-700 text-white text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-amber-400 cursor-pointer"
+                    >
+                      <option value="" disabled>-- Select Page --</option>
+                      {activeMaterial.pages.map((p, pIdx) => (
+                        pIdx !== currentPageIndex && (
+                          <option key={p.id} value={pIdx}>
+                            Page {p.pageNumber}: {stripHtml(p.title).slice(0, 24)}...
+                          </option>
+                        )
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
             </div>

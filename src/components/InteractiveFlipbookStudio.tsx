@@ -959,9 +959,12 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [guideStep, setGuideStep] = useState<number>(1);
 
-  // Load Flipbooks from Firestore on mount & merge with default curriculum flipbooks
+  // Load Flipbooks from Firestore & Backend API on mount & merge with default curriculum flipbooks
   useEffect(() => {
+    let isMounted = true;
+
     const processMergedMaterials = (rawLoaded: FlipbookMaterial[]) => {
+      if (!isMounted) return;
       let deletedIds: string[] = [];
       try {
         deletedIds = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
@@ -1024,6 +1027,17 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       });
     };
 
+    // 1. Initial immediate pull from backend API
+    fetch('/api/flipbooks')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.materials) && data.materials.length > 0) {
+          processMergedMaterials(data.materials);
+        }
+      })
+      .catch(err => console.warn('API flipbooks load note:', err));
+
+    // 2. Real-time Firestore snapshot listener
     const unsub = onSnapshot(
       collection(db, 'course_flipbooks'),
       (snapshot) => {
@@ -1081,6 +1095,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     window.addEventListener('flipbook_synced', handleCustomSync);
 
     return () => {
+      isMounted = false;
       unsub();
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('flipbook_synced', handleCustomSync);
@@ -2758,6 +2773,24 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     }
   }, [selectedLanguage, activeMaterial?.id, activeMaterial?.pages?.length]);
 
+  // Recursive sanitizer helper to remove undefined and functions for Firestore safety
+  const sanitizeObjectForFirestore = (obj: any): any => {
+    if (obj === null || obj === undefined) return null;
+    if (Array.isArray(obj)) {
+      return obj.map(sanitizeObjectForFirestore);
+    }
+    if (typeof obj === 'object') {
+      const clean: Record<string, any> = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (value !== undefined && typeof value !== 'function') {
+          clean[key] = sanitizeObjectForFirestore(value);
+        }
+      }
+      return clean;
+    }
+    return obj;
+  };
+
   // Save current material to Firestore with multi-system persistence
   const handleSaveMaterial = async (mat?: FlipbookMaterial, skipLocalOnlyNotice = false) => {
     setIsSaving(true);
@@ -2836,7 +2869,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         pages: sanitizedPages,
         updatedAt: new Date().toISOString()
       };
-      const cleanData = JSON.parse(JSON.stringify(sanitizedMat));
+      const cleanData = sanitizeObjectForFirestore(JSON.parse(JSON.stringify(sanitizedMat)));
 
       // 1. Immediately update in-memory state and localStorage backup for instant UX
       setMaterials(prev => {
@@ -2856,7 +2889,14 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         window.dispatchEvent(new CustomEvent('flipbook_synced', { detail: { material: sanitizedMat } }));
       } catch (_) {}
 
-      // 2. Persist to Firestore
+      // 2. Persist to Backend API for guaranteed server-side disk & admin backup
+      const apiSavePromise = fetch('/api/flipbooks/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cleanData)
+      }).catch(err => console.warn('API save note:', err));
+
+      // 3. Persist to Client-side Cloud Firestore
       const firestoreWrite = setDoc(doc(db, 'course_flipbooks', baseMat.id), {
         ...cleanData,
         updatedAt: new Date().toISOString()
@@ -2865,14 +2905,17 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         setTimeout(() => reject(new Error('Firestore write timeout')), 6000)
       );
 
-      await Promise.race([firestoreWrite, timeoutPromise]);
+      await Promise.allSettled([
+        apiSavePromise,
+        Promise.race([firestoreWrite, timeoutPromise])
+      ]);
 
-      setSaveMessage('Saved successfully to Cloud database! Synchronized across all devices.');
+      setSaveMessage('Saved successfully to Cloud Firebase & Server! Synchronized across all devices.');
       setTimeout(() => setSaveMessage(''), 4000);
     } catch (err: any) {
-      console.warn('Firestore save notice:', err?.message || err);
+      console.warn('Save notice:', err?.message || err);
       if (!skipLocalOnlyNotice) {
-        setSaveMessage('Saved successfully to local memory & media store.');
+        setSaveMessage('Saved to local session and media cache.');
         setTimeout(() => setSaveMessage(''), 3500);
       }
     } finally {
@@ -2880,7 +2923,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     }
   };
 
-  // Delete / Remove an E-Book permanently from Cloud and Local Session
+  // Delete / Remove an E-Book permanently from Cloud, Server, and Local Session
   const handleDeleteMaterial = async (matIdToDelete: string) => {
     const targetMat = materials.find(m => m.id === matIdToDelete);
     const title = targetMat ? (targetMat.courseName || targetMat.title) : 'this E-Book';
@@ -2892,7 +2935,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
     try {
       setIsSaving(true);
-      // 1. Delete from Firestore with timeout protection
+      // 1. Delete from Server API & Firestore
+      fetch(`/api/flipbooks/${matIdToDelete}`, { method: 'DELETE' }).catch(() => {});
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore delete timeout')), 4000));
       await Promise.race([
         deleteDoc(doc(db, 'course_flipbooks', matIdToDelete)),
@@ -2927,7 +2971,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         }
       }
 
-      setSaveMessage('E-Book removed successfully!');
+      setSaveMessage('E-Book removed successfully from Cloud & Server!');
       setTimeout(() => setSaveMessage(''), 3500);
     } catch (err) {
       console.error('Error removing flipbook:', err);

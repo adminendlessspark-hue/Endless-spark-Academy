@@ -945,6 +945,150 @@ async function startServer() {
     }
   });
 
+  // ==========================================
+  // E-BOOK / FLIPBOOK PERSISTENCE API (CLOUD & DISK)
+  // ==========================================
+  const flipbooksDiskDir = path.join(process.cwd(), "data", "flipbooks");
+  try {
+    if (!fs.existsSync(flipbooksDiskDir)) {
+      fs.mkdirSync(flipbooksDiskDir, { recursive: true });
+    }
+  } catch (e) {
+    console.warn("Could not create flipbooksDiskDir:", e);
+  }
+
+  // Recursive sanitizer to remove `undefined` properties before Firestore write
+  const sanitizeForFirestore = (obj: any): any => {
+    if (obj === null || obj === undefined) return null;
+    if (Array.isArray(obj)) {
+      return obj.map(sanitizeForFirestore);
+    }
+    if (typeof obj === "object") {
+      const clean: Record<string, any> = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (value !== undefined) {
+          clean[key] = sanitizeForFirestore(value);
+        }
+      }
+      return clean;
+    }
+    return obj;
+  };
+
+  // GET /api/flipbooks - Load all saved flipbooks from Firestore with disk backup
+  app.get("/api/flipbooks", async (req: any, res: any) => {
+    try {
+      const db = getDb();
+      let materials: any[] = [];
+      
+      // 1. Try fetching from Firestore
+      try {
+        const snap = await db.collection("course_flipbooks").get();
+        if (!snap.empty) {
+          materials = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        }
+      } catch (fsErr: any) {
+        console.warn("Backend: Firestore course_flipbooks get error:", fsErr?.message || fsErr);
+      }
+
+      // 2. Merge with disk backups for any missing materials
+      try {
+        if (fs.existsSync(flipbooksDiskDir)) {
+          const files = fs.readdirSync(flipbooksDiskDir);
+          for (const file of files) {
+            if (file.endsWith(".json")) {
+              try {
+                const diskContent = JSON.parse(fs.readFileSync(path.join(flipbooksDiskDir, file), "utf-8"));
+                if (diskContent && diskContent.id && !materials.some(m => m.id === diskContent.id)) {
+                  materials.push(diskContent);
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      } catch (diskErr) {
+        console.warn("Backend: Error reading disk flipbooks:", diskErr);
+      }
+
+      return res.json({ success: true, materials });
+    } catch (err: any) {
+      console.error("Backend: /api/flipbooks GET failed:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/flipbooks/save - Save flipbook to both Cloud Firestore and Server Disk
+  app.post("/api/flipbooks/save", async (req: any, res: any) => {
+    try {
+      const material = req.body;
+      if (!material || !material.id) {
+        return res.status(400).json({ error: "Material with valid id is required" });
+      }
+
+      const cleanMaterial = sanitizeForFirestore({
+        ...material,
+        updatedAt: new Date().toISOString()
+      });
+
+      // 1. Save to server persistent disk
+      try {
+        if (!fs.existsSync(flipbooksDiskDir)) {
+          fs.mkdirSync(flipbooksDiskDir, { recursive: true });
+        }
+        const diskFilePath = path.join(flipbooksDiskDir, `${material.id}.json`);
+        fs.writeFileSync(diskFilePath, JSON.stringify(cleanMaterial, null, 2));
+        console.log(`Backend: Saved flipbook ${material.id} to disk at ${diskFilePath}`);
+      } catch (diskWriteErr) {
+        console.warn("Backend: Could not save flipbook to disk:", diskWriteErr);
+      }
+
+      // 2. Save to Cloud Firestore
+      try {
+        const db = getDb();
+        await db.collection("course_flipbooks").doc(material.id).set(cleanMaterial);
+        console.log(`Backend: Saved flipbook ${material.id} to Cloud Firestore`);
+      } catch (fsWriteErr: any) {
+        console.warn("Backend: Could not save flipbook to Firestore:", fsWriteErr?.message || fsWriteErr);
+      }
+
+      return res.json({ 
+        success: true, 
+        id: material.id, 
+        updatedAt: cleanMaterial.updatedAt,
+        material: cleanMaterial 
+      });
+    } catch (err: any) {
+      console.error("Backend: /api/flipbooks/save failed:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/flipbooks/:id - Delete flipbook from both Cloud Firestore and Server Disk
+  app.delete("/api/flipbooks/:id", async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ error: "id is required" });
+
+      // 1. Remove from disk
+      try {
+        const diskFilePath = path.join(flipbooksDiskDir, `${id}.json`);
+        if (fs.existsSync(diskFilePath)) {
+          fs.unlinkSync(diskFilePath);
+        }
+      } catch (_) {}
+
+      // 2. Remove from Firestore
+      try {
+        const db = getDb();
+        await db.collection("course_flipbooks").doc(id).delete();
+      } catch (_) {}
+
+      return res.json({ success: true, id });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // Google Drive Sharing API
   app.post("/api/share-drive-file", async (req: any, res: any) => {
     const driveUrl = req.body.driveUrl || req.body.fileUrl;

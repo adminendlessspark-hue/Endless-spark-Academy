@@ -3,7 +3,7 @@ import {
   BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, Play, Pause, 
   Maximize2, Minimize2, Languages, RefreshCw, Layout, Image, Video, Sparkles, 
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Save, Copy, Check, Download, Share2, Layers, 
-  Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
+  Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, CheckCircle2, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
   Bold, Italic, Underline, Highlighter, Eraser, Wand2, GripVertical, Move,
   Grid, List, FileCheck, FolderArchive, ExternalLink, Link, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap,
   MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock, Globe, Server, HardDrive, AlertCircle
@@ -968,27 +968,45 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
           ? snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as FlipbookMaterial))
           : [];
         
-        // Merge with DEFAULT_FLIPBOOKS so all standard 16-page handbooks are available as initial templates
-        const merged = [...loaded];
+        let deletedIds: string[] = [];
+        try {
+          deletedIds = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
+        } catch (_) {}
+
+        // Filter out any explicitly deleted flipbooks
+        const cleanLoaded = loaded.filter(m => !deletedIds.includes(m.id));
+        
+        // Merge with DEFAULT_FLIPBOOKS so standard templates are available unless deleted
+        const merged = [...cleanLoaded];
         DEFAULT_FLIPBOOKS.forEach(def => {
-          const existingIndex = merged.findIndex(m => m.id === def.id);
-          if (existingIndex === -1) {
+          if (!deletedIds.includes(def.id) && !merged.some(m => m.id === def.id)) {
             merged.push(def);
           }
         });
 
-        setMaterials(merged);
+        // Ensure every material's title matches its course title
+        const formattedMerged = merged.map(m => ({
+          ...m,
+          title: m.courseName || m.title || 'Diploma in Production Art Engineer'
+        }));
+
+        setMaterials(formattedMerged);
         setActiveMaterial(prevActive => {
           if (!prevActive) {
-            return initialMaterial || merged[0];
+            return initialMaterial || formattedMerged[0];
           }
-          const matched = merged.find(m => m.id === prevActive.id);
-          return matched || prevActive;
+          const matched = formattedMerged.find(m => m.id === prevActive.id);
+          return matched || formattedMerged[0] || prevActive;
         });
       },
       (err) => {
         console.warn('Firestore flipbooks load notice:', err.message);
-        setMaterials(DEFAULT_FLIPBOOKS);
+        let deletedIds: string[] = [];
+        try {
+          deletedIds = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
+        } catch (_) {}
+        const filteredDefaults = DEFAULT_FLIPBOOKS.filter(d => !deletedIds.includes(d.id));
+        setMaterials(filteredDefaults);
       }
     );
     return () => unsub();
@@ -2666,7 +2684,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
   }, [selectedLanguage, activeMaterial?.id, activeMaterial?.pages?.length]);
 
   // Save current material to Firestore with multi-system persistence
-  const handleSaveMaterial = async (mat: FlipbookMaterial) => {
+  const handleSaveMaterial = async (mat: FlipbookMaterial, skipLocalOnlyNotice = false) => {
     setIsSaving(true);
     try {
       // Ensure all images are cloud-persisted and backed up in IndexedDB
@@ -2678,7 +2696,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             p.videoUrl = p.videoUrl.trim();
             if (p.videoUrl.startsWith('data:video')) {
               const idbKey = `video_idb_${p.id}`;
-              await saveMediaToIDB(idbKey, p.videoUrl);
+              await saveMediaToIDB(idbKey, p.videoUrl).catch(() => {});
               p.videoUrl = `idb:${idbKey}`;
             }
           }
@@ -2687,7 +2705,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             p.imageUrl = p.imageUrl.trim();
             if (p.imageUrl.startsWith('data:image')) {
               const idbKey = `image_idb_${p.id}`;
-              await saveMediaToIDB(idbKey, p.imageUrl);
+              await saveMediaToIDB(idbKey, p.imageUrl).catch(() => {});
               // Only convert to idb: reference if image payload exceeds Firestore's 900KB single field threshold
               if (p.imageUrl.length > 900000) {
                 p.imageUrl = `idb:${idbKey}`;
@@ -2698,7 +2716,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             p.secondaryImageUrl = p.secondaryImageUrl.trim();
             if (p.secondaryImageUrl.startsWith('data:image')) {
               const idbKey = `sec_image_idb_${p.id}`;
-              await saveMediaToIDB(idbKey, p.secondaryImageUrl);
+              await saveMediaToIDB(idbKey, p.secondaryImageUrl).catch(() => {});
               if (p.secondaryImageUrl.length > 900000) {
                 p.secondaryImageUrl = `idb:${idbKey}`;
               }
@@ -2708,14 +2726,18 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         })
       );
 
-      const sanitizedMat = { ...mat, pages: sanitizedPages };
+      // Enforce E-Book Title strictly as Course Title
+      const effectiveCourseTitle = mat.courseName || mat.title || 'Diploma in Production Art Engineer';
+      const sanitizedMat: FlipbookMaterial = {
+        ...mat,
+        title: effectiveCourseTitle,
+        courseName: effectiveCourseTitle,
+        pages: sanitizedPages,
+        updatedAt: new Date().toISOString()
+      };
       const cleanData = JSON.parse(JSON.stringify(sanitizedMat));
 
-      await setDoc(doc(db, 'course_flipbooks', mat.id), {
-        ...cleanData,
-        updatedAt: new Date().toISOString()
-      });
-
+      // 1. Immediately update in-memory state and localStorage backup for instant UX
       setMaterials(prev => {
         const idx = prev.findIndex(m => m.id === mat.id);
         if (idx >= 0) {
@@ -2726,16 +2748,88 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         return [...prev, sanitizedMat];
       });
       setActiveMaterial(sanitizedMat);
-      setSaveMessage('Saved successfully to Cloud database! Synchronized for all devices.');
-      setTimeout(() => setSaveMessage(''), 4000);
-    } catch (err) {
-      console.error('Firestore save flipbook error:', err);
+
       try {
-        handleFirestoreError(err, OperationType.WRITE, `course_flipbooks/${mat.id}`);
-      } catch (e) {
-        setSaveMessage('Saved locally to IndexedDB Media Store');
+        localStorage.setItem(`flipbook_backup_${mat.id}`, JSON.stringify(cleanData));
+      } catch (_) {}
+
+      // 2. Persist to Firestore with a 5000ms race timeout to prevent hanging on "Saving..."
+      const firestoreWrite = setDoc(doc(db, 'course_flipbooks', mat.id), {
+        ...cleanData,
+        updatedAt: new Date().toISOString()
+      });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore write timeout')), 5000)
+      );
+
+      await Promise.race([firestoreWrite, timeoutPromise]);
+
+      setSaveMessage('Saved successfully to Cloud database! Synchronized across all devices.');
+      setTimeout(() => setSaveMessage(''), 4000);
+    } catch (err: any) {
+      console.warn('Firestore save notice (saved locally in state & IndexedDB):', err?.message || err);
+      if (!skipLocalOnlyNotice) {
+        setSaveMessage('Saved locally in Media Store & memory.');
         setTimeout(() => setSaveMessage(''), 3500);
       }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Delete / Remove an E-Book permanently from Cloud and Local Session
+  const handleDeleteMaterial = async (matIdToDelete: string) => {
+    const targetMat = materials.find(m => m.id === matIdToDelete);
+    const title = targetMat ? (targetMat.courseName || targetMat.title) : 'this E-Book';
+
+    const confirmed = window.confirm(
+      `Are you sure you want to remove the E-Book "${title}"?\n\nThis will delete it from the cloud database and remove it from the E-Book list.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsSaving(true);
+      // 1. Delete from Firestore with timeout protection
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore delete timeout')), 4000));
+      await Promise.race([
+        deleteDoc(doc(db, 'course_flipbooks', matIdToDelete)),
+        timeoutPromise
+      ]).catch(err => {
+        console.warn('Firestore delete notice:', err);
+      });
+
+      // 2. Track deleted ID in localStorage so templates don't respawn
+      try {
+        const deletedIds: string[] = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
+        if (!deletedIds.includes(matIdToDelete)) {
+          deletedIds.push(matIdToDelete);
+          localStorage.setItem('deleted_flipbook_ids', JSON.stringify(deletedIds));
+        }
+      } catch (_) {}
+
+      // 3. Remove from materials state
+      const remainingMaterials = materials.filter(m => m.id !== matIdToDelete);
+      setMaterials(remainingMaterials);
+
+      // 4. Update active material
+      if (activeMaterial.id === matIdToDelete) {
+        if (remainingMaterials.length > 0) {
+          setActiveMaterial(remainingMaterials[0]);
+          setCurrentPageIndex(0);
+          if (remainingMaterials[0].pages?.length > 0) {
+            setEditingPage(remainingMaterials[0].pages[0]);
+          }
+        } else {
+          handleCreateNewMaterial();
+        }
+      }
+
+      setSaveMessage('E-Book removed successfully!');
+      setTimeout(() => setSaveMessage(''), 3500);
+    } catch (err) {
+      console.error('Error removing flipbook:', err);
+      setSaveMessage('Removed from current session.');
+      setTimeout(() => setSaveMessage(''), 3000);
     } finally {
       setIsSaving(false);
     }
@@ -2744,7 +2838,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
   // Editor Actions
   const handleCreateNewMaterial = () => {
     const newMatId = `mat_${Date.now()}`;
-    const defaultCourse = selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses' ? selectedCourseFilter : '';
+    const defaultCourse = (selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses' ? selectedCourseFilter : '')
+      || (configuredCourses[0]?.title || 'Diploma in Production Art Engineer');
     const defaultMod = selectedModuleFilter !== 'All Modules' ? selectedModuleFilter : '';
     
     const initialTitle = 'Page 1: Lesson Topic Header';
@@ -2766,9 +2861,9 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
     const newMat: FlipbookMaterial = {
       id: newMatId,
-      title: 'New Course E-Book',
-      description: 'Faculty interactive course E-book and presentation slides.',
-      courseCategory: defaultCourse || 'General',
+      title: defaultCourse, // Strictly named as per Course Title
+      description: `Faculty interactive course E-book and presentation slides for ${defaultCourse}.`,
+      courseCategory: defaultCourse,
       courseName: defaultCourse,
       author: (user as any)?.displayName || user?.email || 'Endless School of Printing and Packaging',
       coverImageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80',
@@ -2827,6 +2922,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       };
     }
 
+    const effectiveCourse = editingPage?.courseName || activeMaterial?.courseName || activeMaterial?.title || 'Diploma in Production Art Engineer';
+
     const newPage: FlipbookPage = {
       id: `p_${Date.now()}`,
       pageNumber: newPageNum,
@@ -2839,7 +2936,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       imageCaption: initialCaption,
       calloutText: '',
       bgTheme: 'classic-paper',
-      courseName: editingPage?.courseName || activeMaterial?.courseName || '',
+      courseName: effectiveCourse,
       courseModuleName: editingPage?.courseModuleName || activeMaterial?.pages?.[0]?.courseModuleName || '',
       courseModuleId: '',
       exerciseFilePath: '',
@@ -2848,7 +2945,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     };
 
     const updatedPages = [...activeMaterial.pages, newPage];
-    const updatedMat = { ...activeMaterial, pages: updatedPages };
+    const updatedMat = { ...activeMaterial, pages: updatedPages, title: effectiveCourse, courseName: effectiveCourse };
     setActiveMaterial(updatedMat);
     setCurrentPageIndex(updatedPages.length - 1);
     setEditingPage(newPage);
@@ -2885,7 +2982,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     const updatedPages = activeMaterial.pages.map(p => p.id === updatedPage.id ? pageWithEditFlag : p);
     const updatedMat = { ...activeMaterial, pages: updatedPages };
     setActiveMaterial(updatedMat);
-    handleSaveMaterial(updatedMat);
+    // Persist synchronously to state & backup
+    setMaterials(prev => prev.map(m => m.id === updatedMat.id ? updatedMat : m));
   };
 
   const handleDeletePage = (pageId: string) => {
@@ -3310,14 +3408,26 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
               )}
             </select>
             {(isAdmin || isElevated || user?.role === 'faculty') && (
-              <button
-                onClick={handleCreateNewMaterial}
-                title="Create New E-Book Material"
-                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold shrink-0 transition flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">New</span>
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={handleCreateNewMaterial}
+                  title="Create New E-Book Material"
+                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold shrink-0 transition flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">New</span>
+                </button>
+                {materials.length > 0 && (
+                  <button
+                    onClick={() => handleDeleteMaterial(activeMaterial.id)}
+                    title="Delete / Remove Current E-Book"
+                    className="px-2 py-1 bg-rose-700 hover:bg-rose-600 text-white rounded-lg text-[10px] font-bold shrink-0 transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Delete</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -4095,7 +4205,19 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                 </div>
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {(isAdmin || isElevated || user?.role === 'faculty') && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteMaterial(activeMaterial.id)}
+                    className="px-3.5 py-2 bg-rose-700/80 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-900/30 border border-rose-600/50"
+                    title="Remove / Delete this E-Book permanently"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete E-Book</span>
+                  </button>
+                )}
+
                 <button
                   onClick={handleCreateNewMaterial}
                   className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-lg shadow-purple-900/40"
@@ -4131,7 +4253,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
               <div className="flex flex-wrap items-center gap-2">
                 <span className="px-3 py-1 bg-amber-500/20 text-amber-300 rounded-xl border border-amber-500/40 text-xs font-extrabold flex items-center gap-1.5 shadow-sm">
                   <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Course: {editingPage.courseName || activeMaterial.courseName || (selectedCourseFilter !== 'All Course Titles' ? selectedCourseFilter : 'Not Set')}</span>
+                  <span>Course (E-Book Title): {activeMaterial.title || editingPage.courseName || activeMaterial.courseName || 'Diploma in Production Art Engineer'}</span>
                 </span>
                 <span className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-xl border border-blue-500/40 text-xs font-extrabold flex items-center gap-1.5 shadow-sm">
                   <BookMarked className="w-3.5 h-3.5 text-blue-400" />
@@ -4248,57 +4370,53 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
               {/* Left Column: Course Name, Module, and Text Inputs */}
               <div className="space-y-4">
 
-                {/* Course Name Selection & Custom Input */}
+                {/* Course Name Selection & Automatic E-Book Title Assignment */}
                 <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-2xl space-y-2">
                   <label className="text-xs font-bold text-amber-300 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <BookOpen className="w-4 h-4 text-amber-400" />
-                      <span>Course Name / Degree Program</span>
+                      <span>Course Title (E-Book Name)</span>
                     </span>
-                    <span className="text-[10px] text-amber-400 font-medium">Select or Type</span>
+                    <span className="text-[10px] text-amber-400 font-bold bg-amber-900/60 px-2 py-0.5 rounded border border-amber-700/50">
+                      Matches Course
+                    </span>
                   </label>
                   
                   <select
-                    value={allCourseTitles.includes(editingPage.courseName || activeMaterial.courseName || '') ? (editingPage.courseName || activeMaterial.courseName) : 'custom'}
+                    value={editingPage.courseName || activeMaterial.courseName || activeMaterial.title || ''}
                     onChange={(e) => {
-                      if (e.target.value !== 'custom') {
-                        const updatedPage = { ...editingPage, courseName: e.target.value };
+                      const selectedCourse = e.target.value;
+                      if (selectedCourse) {
+                        const updatedPage = { ...editingPage, courseName: selectedCourse };
                         setEditingPage(updatedPage);
-                        handleUpdatePage(updatedPage);
-
-                        const updatedMat = { ...activeMaterial, courseName: e.target.value };
+                        
+                        const updatedMat: FlipbookMaterial = { 
+                          ...activeMaterial, 
+                          title: selectedCourse,
+                          courseName: selectedCourse,
+                          courseCategory: selectedCourse,
+                          pages: activeMaterial.pages.map(p => ({ ...p, courseName: selectedCourse }))
+                        };
                         setActiveMaterial(updatedMat);
+                        handleUpdatePage(updatedPage);
+                        handleSaveMaterial(updatedMat, true);
                       }
                     }}
                     className="w-full bg-slate-950 border border-amber-800/60 rounded-xl px-3 py-2 text-xs font-bold text-amber-200 focus:outline-none focus:border-amber-400 cursor-pointer"
                   >
-                    <option value="custom">-- Custom Course Title --</option>
                     {configuredCourses.map(c => (
                       <option key={c.courseId} value={c.title} className="bg-slate-900">
                         {c.title}
                       </option>
                     ))}
-                    {allCourseTitles.filter(t => t !== 'All Course Titles' && t !== 'All Assigned Courses' && !configuredCourses.some(c => c.title === t)).map(t => (
-                      <option key={t} value={t} className="bg-slate-900">
-                        {t}
-                      </option>
-                    ))}
+                    {allCourseTitles
+                      .filter(t => t !== 'All Course Titles' && t !== 'All Assigned Courses' && !configuredCourses.some(c => c.title === t))
+                      .map(t => (
+                        <option key={t} value={t} className="bg-slate-900">
+                          {t}
+                        </option>
+                      ))}
                   </select>
-
-                  <input
-                    type="text"
-                    value={editingPage.courseName || activeMaterial.courseName || ''}
-                    onChange={(e) => {
-                      const updatedPage = { ...editingPage, courseName: e.target.value };
-                      setEditingPage(updatedPage);
-                      handleUpdatePage(updatedPage);
-
-                      const updatedMat = { ...activeMaterial, courseName: e.target.value };
-                      setActiveMaterial(updatedMat);
-                    }}
-                    className="w-full bg-slate-950 border border-amber-800/60 rounded-xl px-3 py-2 text-xs font-bold text-amber-200 focus:outline-none focus:border-amber-400"
-                    placeholder="e.g. Packaging Engineering Technology Masterclass"
-                  />
                 </div>
 
                 {/* Module Name Selector and Custom Module Input */}

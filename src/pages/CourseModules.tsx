@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { CourseModule, TopicScore, CourseType, TrainingRecord, TrainingPlanRow } from '../types';

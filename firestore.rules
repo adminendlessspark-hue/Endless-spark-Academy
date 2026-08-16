@@ -168,6 +168,11 @@ service cloud.firestore {
       allow write: if isStaff() || isAdmin() || isFaculty();
     }
 
+    match /course_flipbook_media/{mediaId} {
+      allow read: if true;
+      allow write: if isSignedIn() || isStaff() || isAdmin() || isFaculty();
+    }
+
     match /quiz_questions/{questionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();

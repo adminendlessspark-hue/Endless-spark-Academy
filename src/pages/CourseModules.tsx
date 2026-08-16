@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { CourseModule, TopicScore, CourseType, TrainingRecord, TrainingPlanRow } from '../types';
@@ -125,21 +125,73 @@ export default function CourseModules() {
   }, [user]);
 
   // Derived filtered modules and available categories
-  const filteredModules = modules.filter(m => m.category === category).sort((a, b) => {
-    const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
-    const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
-    if (orderA !== orderB) return orderA - orderB;
-    return (a.title || '').localeCompare(b.title || '');
-  });
+  // For students: ONLY show completed modules and the active (first uncompleted) module
+  const filteredModules = useMemo(() => {
+    const rawForCat = modules.filter(m => m.category === category).sort((a, b) => {
+      const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
+      const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.title || '').localeCompare(b.title || '');
+    });
+
+    if (user?.role === 'student') {
+      const completedSet = new Set(user?.completedModules || []);
+      const visibleList: typeof rawForCat = [];
+      let foundActive = false;
+
+      for (const m of rawForCat) {
+        if (completedSet.has(m.id)) {
+          visibleList.push(m);
+        } else if (!foundActive) {
+          // This is the single active (unlocked) module
+          visibleList.push(m);
+          foundActive = true;
+        }
+      }
+
+      return visibleList.length > 0 ? visibleList : (rawForCat.length > 0 ? [rawForCat[0]] : []);
+    }
+
+    return rawForCat;
+  }, [modules, category, user?.role, user?.completedModules]);
   
   // Available course categories from financial settings or modules
   const availableCategories = financialSettings?.coursesConfig?.map((c: any) => c.courseId) || Array.from(new Set(modules.map(m => m.category)));
 
+  // Student assigned native language resolution
+  const studentAssignedLanguageName = useMemo(() => {
+    if (user?.role !== 'student') return null;
+    const raw = (user as any)?.nativeLanguage || (user as any)?.preferredLanguage || '';
+    if (!raw || !raw.trim()) return null;
+    const lower = raw.trim().toLowerCase();
+    if (lower.includes('tamil') || lower.includes('தமிழ்')) return 'Tamil';
+    if (lower.includes('malay') || lower.includes('melayu') || lower.includes('bahasa')) return 'Bahasa Melayu';
+    if (lower.includes('hindi') || lower.includes('हिंदी')) return 'Hindi';
+    if (lower.includes('chinese') || lower.includes('mandarin') || lower.includes('中文')) return 'Chinese';
+    if (lower.includes('spanish') || lower.includes('español')) return 'Spanish';
+    if (lower.includes('french') || lower.includes('français')) return 'French';
+    if (lower.includes('german') || lower.includes('deutsch')) return 'German';
+    if (lower.includes('japanese') || lower.includes('日本語')) return 'Japanese';
+    if (lower.includes('english')) return 'English';
+    return raw;
+  }, [user]);
+
+  // Set active module initially to the student's active module or first module
   useEffect(() => {
-    if (filteredModules.length > 0 && (!activeModule || activeModule.category !== category)) {
-      setActiveModule(filteredModules[0]);
+    if (filteredModules.length > 0) {
+      if (!activeModule || activeModule.category !== category || !filteredModules.some(m => m.id === activeModule.id)) {
+        // For students, select the active (uncompleted) module, or the first available
+        if (user?.role === 'student') {
+          const completedSet = new Set(user?.completedModules || []);
+          const activeMod = filteredModules.find(m => !completedSet.has(m.id)) || filteredModules[0];
+          setActiveModule(activeMod);
+        } else {
+          setActiveModule(filteredModules[0]);
+        }
+      }
     }
-  }, [category, filteredModules, activeModule]);
+  }, [category, filteredModules, activeModule, user]);
+
   const [uploading, setUploading] = useState(false);
   const [urlModal, setUrlModal] = useState<{ isOpen: boolean, type: 'assignment' | 'worksheet' | 'project' | 'mindMap' | 'video' | null, url: string }>({ isOpen: false, type: null, url: '' });
   const [showQuiz, setShowQuiz] = useState(false);
@@ -157,7 +209,31 @@ export default function CourseModules() {
   const [trainingPlans, setTrainingPlans] = useState<TrainingPlanRow[]>([]);
 
   // Module Video Script Auto-Translation State
-  const [moduleScriptTargetLang, setModuleScriptTargetLang] = useState<string>('Tamil');
+  const [moduleScriptTargetLang, setModuleScriptTargetLang] = useState<string>(() => {
+    if (user?.role === 'student') {
+      const raw = (user as any)?.nativeLanguage || (user as any)?.preferredLanguage || '';
+      if (raw) {
+        const lower = raw.trim().toLowerCase();
+        if (lower.includes('tamil') || lower.includes('தமிழ்')) return 'Tamil';
+        if (lower.includes('malay') || lower.includes('melayu') || lower.includes('bahasa')) return 'Bahasa Melayu';
+        if (lower.includes('hindi') || lower.includes('हिंदी')) return 'Hindi';
+        if (lower.includes('chinese') || lower.includes('mandarin') || lower.includes('中文')) return 'Chinese';
+        if (lower.includes('spanish') || lower.includes('español')) return 'Spanish';
+        if (lower.includes('french') || lower.includes('français')) return 'French';
+        if (lower.includes('german') || lower.includes('deutsch')) return 'German';
+        if (lower.includes('japanese') || lower.includes('日本語')) return 'Japanese';
+        return raw;
+      }
+    }
+    return 'Tamil';
+  });
+
+  useEffect(() => {
+    if (studentAssignedLanguageName) {
+      setModuleScriptTargetLang(studentAssignedLanguageName);
+    }
+  }, [studentAssignedLanguageName]);
+
   const [moduleScriptTranslating, setModuleScriptTranslating] = useState<boolean>(false);
   const [moduleScriptTranslation, setModuleScriptTranslation] = useState<string>('');
   const [copiedModuleScript, setCopiedModuleScript] = useState<boolean>(false);
@@ -785,6 +861,8 @@ Thank you for watching my presentation video!`;
                       onTranslate={(lang) => handleTranslateActiveModuleScript(effectiveScriptText)}
                       onTargetLangChange={(lang) => setModuleScriptTargetLang(lang)}
                       onPracticeInCoach={() => navigate('/self-recording-studio')}
+                      allowedLanguages={studentAssignedLanguageName ? [studentAssignedLanguageName] : undefined}
+                      lockToAssignedLanguage={user?.role === 'student' && Boolean(studentAssignedLanguageName)}
                     />
                   );
                 })()}

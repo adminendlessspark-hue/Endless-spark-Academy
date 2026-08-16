@@ -1,4 +1,5 @@
 import { FlipbookMaterial } from '../components/InteractiveFlipbookStudio';
+import { SVG_DIAGRAMS } from '../utils/mediaStore';
 
 export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
   {
@@ -8,7 +9,7 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
     courseName: 'Diploma in Production Art Engineer',
     courseCategory: 'production-art-engineer',
     author: 'Endless School of Printing and Packaging',
-    coverImageUrl: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&w=1200&q=80',
+    coverImageUrl: SVG_DIAGRAMS.colorWheel,
     updatedAt: new Date().toISOString(),
     pages: [
       {
@@ -74,11 +75,11 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 <strong>Kekuatan Warna (Brightness):</strong> Berapa pekat atau pucat rupa sesuatu warna.</p>`
           }
         },
-        mediaType: 'both',
-        layoutStyle: 'grid-2x2',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        videoCaption: 'Fundamental of colour',
-        imageUrl: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&w=800&q=80',
+        mediaType: 'image',
+        layoutStyle: 'split-left',
+        videoUrl: '',
+        videoCaption: '',
+        imageUrl: SVG_DIAGRAMS.spectrum,
         imageCaption: 'WHAT IS COLOUR? - Electromagnetic Light Spectrum',
         calloutText: 'Key Takeaway: Color does not exist on surfaces; it is a neurological sensation decoded by the human brain from reflected photons.',
         bgTheme: 'classic-paper'
@@ -391,10 +392,10 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
   <li><strong>Overprint Black Check:</strong> Verify black body text shows 0% knockout on underlying color plates.</li>
   <li><strong>RGB Object Audit:</strong> Search for unseparated RGB images or vector fills using the Object Inspector.</li>
 </ul>`,
-        mediaType: 'video',
-        layoutStyle: 'media-top',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        videoCaption: 'Step-by-Step Walkthrough: Adobe Acrobat Pro Output Preview Plate Inspector',
+        mediaType: 'image',
+        layoutStyle: 'split-left',
+        videoUrl: '',
+        videoCaption: '',
         calloutText: 'Always certify PDF/X-4:2010 compliance to preserve transparency integrity and device-independent color definitions.',
         bgTheme: 'dark-studio'
       },
@@ -662,9 +663,9 @@ Langkah Semakan:
             videoCaption: 'வீடியோ விரிவுரை: ஆசிரியரின் பின்னணி குரலுடன் பிரீஃப்ளைட்டிங் மாஸ்டர்கிளாஸ்'
           }
         },
-        mediaType: 'video',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        videoCaption: 'Video Lecture: Preflighting Masterclass with Faculty Voiceover',
+        mediaType: 'none',
+        videoUrl: '',
+        videoCaption: '',
         layoutStyle: 'media-top',
         calloutText: '',
         bgTheme: 'dark-studio',

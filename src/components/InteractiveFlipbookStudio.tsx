@@ -6,7 +6,8 @@ import {
   Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
   Bold, Italic, Underline, Highlighter, Eraser, Wand2, GripVertical, Move,
   Grid, List, FileCheck, FolderArchive, ExternalLink, Link, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap,
-  MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock
+  MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock,
+  Shield, ShieldAlert, Lock, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -15,7 +16,7 @@ import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { formatCourseName } from '../utils';
 import { CourseModule } from '../types';
-import { saveMediaToIDB, getMediaFromIDB, fileToDataUrl } from '../utils/mediaStore';
+import { saveMediaToIDB, getMediaFromIDB, fileToDataUrl, uploadMediaToFirebase } from '../utils/mediaStore';
 import { generateGeminiContent } from '../services/gemini';
 
 export interface FlipbookPage {
@@ -139,19 +140,41 @@ export const normalizeExternalImageUrl = (url?: string): string => {
     clean = clean.replace('github.com/', 'raw.githubusercontent.com/').replace('/blob/', '/');
   }
 
+  // Custom Domain Endless Spark Creative Hub CDN & Asset normalization
+  if (clean.includes('endlesssparkcreativehub.in')) {
+    // Ensure https is always used
+    clean = clean.replace('http://', 'https://');
+  }
+
   return clean;
 };
 
-// Safe Image component with fallback, IndexedDB resolution, external domain normalization, and clean diagram placeholder
-export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string; className?: string }) => {
+// Safe Image component with IndexedDB resolution, Base64 support, and external domain normalization
+export const SafeImage = ({ 
+  src, 
+  alt, 
+  title,
+  subtitle,
+  caption,
+  className,
+  onEnlarge,
+  enableZoom = true,
+}: { 
+  src?: string; 
+  alt?: string; 
+  title?: string;
+  subtitle?: string;
+  caption?: string;
+  className?: string; 
+  onEnlarge?: (src: string, alt: string) => void;
+  enableZoom?: boolean;
+}) => {
   const [hasError, setHasError] = useState(false);
-  const [useSecondaryFallback, setUseSecondaryFallback] = useState(false);
   const [resolvedSrc, setResolvedSrc] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     setHasError(false);
-    setUseSecondaryFallback(false);
     if (!src || src.trim() === '') {
       setResolvedSrc('');
       setIsLoading(false);
@@ -169,10 +192,14 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
             setResolvedSrc(resolved);
             setHasError(false);
           } else {
+            setResolvedSrc('');
             setHasError(true);
           }
         })
-        .catch(() => setHasError(true))
+        .catch(() => {
+          setResolvedSrc('');
+          setHasError(true);
+        })
         .finally(() => setIsLoading(false));
     } else {
       setResolvedSrc(normalized);
@@ -180,46 +207,46 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
     }
   }, [src]);
 
-  if (!src || src.trim() === '') return null;
-
   if (isLoading) {
     return (
-      <div className={`flex items-center justify-center p-4 bg-slate-900/80 rounded-xl border border-amber-500/20 ${className || 'min-h-[140px]'}`}>
+      <div className={`flex items-center justify-center p-6 bg-slate-900/80 rounded-xl border border-amber-500/20 ${className || 'min-h-[220px]'}`}>
         <div className="flex items-center gap-2 text-xs font-semibold text-amber-400">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
-          <span>Loading visual media...</span>
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-amber-400"></div>
+          <span>Loading image...</span>
         </div>
       </div>
     );
   }
 
+  // If no source at all, return null
+  if (!src || src.trim() === '') {
+    return null;
+  }
+
   // Handle secondary fallback for Google Drive thumbnails or alternative direct URLs
   const handleImageError = () => {
-    if (!useSecondaryFallback) {
-      if (resolvedSrc.includes('googleusercontent.com') || (src && src.includes('drive.google.com'))) {
-        const idMatch = resolvedSrc.match(/\/d\/([a-zA-Z0-9_-]+)/) || (src ? src.match(/\/d\/([a-zA-Z0-9_-]+)/) : null) || (src ? src.match(/[?&]id=([a-zA-Z0-9_-]+)/) : null);
-        if (idMatch && idMatch[1]) {
-          setUseSecondaryFallback(true);
-          setResolvedSrc(`https://lh3.googleusercontent.com/d/${idMatch[1]}`);
-          return;
-        }
+    if (resolvedSrc.includes('googleusercontent.com') || (src && src.includes('drive.google.com'))) {
+      const idMatch = resolvedSrc.match(/\/d\/([a-zA-Z0-9_-]+)/) || (src ? src.match(/\/d\/([a-zA-Z0-9_-]+)/) : null) || (src ? src.match(/[?&]id=([a-zA-Z0-9_-]+)/) : null);
+      if (idMatch && idMatch[1] && !resolvedSrc.includes('thumbnail?id=')) {
+        setResolvedSrc(`https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`);
+        return;
       }
     }
     setHasError(true);
   };
 
   if (hasError || !resolvedSrc) {
-    const rawExternalUrl = src && !src.startsWith('idb:') ? normalizeExternalImageUrl(src) : resolvedSrc;
+    const rawExternalUrl = src && !src.startsWith('idb:') ? normalizeExternalImageUrl(src) : '';
     return (
-      <div className={`flex flex-col items-center justify-center p-4 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-2 ${className || 'min-h-[140px]'}`}>
-        <div className="w-9 h-9 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/30">
+      <div className={`flex flex-col items-center justify-center p-6 bg-slate-900/90 border border-slate-800 rounded-xl text-center space-y-2.5 ${className || 'min-h-[220px]'}`}>
+        <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/30">
           <Image className="w-5 h-5 text-amber-400" />
         </div>
         <div>
-          <span className="text-xs font-bold text-amber-200 block">{alt || 'Diagram / Image Attachment'}</span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">Embedded Diagram View</span>
+          <span className="text-xs font-bold text-amber-200 block">{caption || alt || title || 'Attached Diagram / Image'}</span>
+          <span className="text-[10px] text-slate-400 block mt-0.5">Uploaded Visual Material</span>
         </div>
-        {rawExternalUrl && !rawExternalUrl.startsWith('idb:') && !rawExternalUrl.startsWith('data:') && (
+        {rawExternalUrl && !rawExternalUrl.startsWith('data:') && (
           <div className="flex items-center gap-2 pt-1">
             <a
               href={rawExternalUrl}
@@ -228,18 +255,17 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
               className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg text-[11px] text-amber-300 font-bold flex items-center gap-1.5 transition"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>View Full Image</span>
+              <span>Open Image Link</span>
             </a>
             <button
               type="button"
               onClick={() => {
                 setHasError(false);
-                setUseSecondaryFallback(false);
                 setResolvedSrc(normalizeExternalImageUrl(src));
               }}
               className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-semibold transition cursor-pointer"
             >
-              Reload
+              Retry
             </button>
           </div>
         )}
@@ -248,14 +274,51 @@ export const SafeImage = ({ src, alt, className }: { src?: string; alt?: string;
   }
 
   return (
-    <img
-      src={resolvedSrc}
-      alt={alt || 'Page Attachment'}
-      className={className}
-      referrerPolicy="no-referrer"
-      loading="lazy"
-      onError={handleImageError}
-    />
+    <div 
+      className="relative group/img w-full h-full flex items-center justify-center select-none"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        return false;
+      }}
+    >
+      <img
+        src={resolvedSrc}
+        alt={alt || caption || title || 'Visual Diagram'}
+        title={title || caption}
+        className={`${className || 'max-h-[500px] w-full object-contain'} pointer-events-auto select-none`}
+        referrerPolicy="no-referrer"
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          return false;
+        }}
+        onDragStart={(e) => {
+          e.preventDefault();
+          return false;
+        }}
+        onError={handleImageError}
+        onClick={() => {
+          if (enableZoom && onEnlarge && resolvedSrc) {
+            onEnlarge(resolvedSrc, alt || caption || title || 'Visual Diagram');
+          }
+        }}
+      />
+      {enableZoom && onEnlarge && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEnlarge(resolvedSrc, alt || caption || title || 'Visual Diagram');
+          }}
+          className="absolute bottom-2 right-2 p-1.5 bg-slate-950/80 hover:bg-slate-900 border border-amber-500/40 text-amber-300 rounded-lg opacity-0 group-hover/img:opacity-100 transition-opacity shadow-lg cursor-pointer"
+          title="Click to Enlarge Diagram in High-Resolution"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
   );
 };
 
@@ -633,7 +696,41 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [materials, setMaterials] = useState<FlipbookMaterial[]>(DEFAULT_FLIPBOOKS);
   const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(initialMaterial || DEFAULT_FLIPBOOKS[0]);
 
+  // Resolve student assigned native language
+  const studentAssignedNativeLang = React.useMemo(() => {
+    if (!user || user.role !== 'student') return null;
+    const raw = (user as any).nativeLanguage || (user as any).preferredLanguage || '';
+    if (!raw || !raw.trim()) return null;
+    const lower = raw.trim().toLowerCase();
+    
+    // Direct code matching
+    const byCode = SUPPORTED_LANGUAGES.find(l => l.code.toLowerCase() === lower);
+    if (byCode) return byCode;
+
+    // Name matching
+    if (lower.includes('tamil') || lower.includes('தமிழ்')) return SUPPORTED_LANGUAGES.find(l => l.code === 'ta');
+    if (lower.includes('malay') || lower.includes('melayu') || lower.includes('bahasa')) return SUPPORTED_LANGUAGES.find(l => l.code === 'ms');
+    if (lower.includes('hindi') || lower.includes('हिंदी')) return SUPPORTED_LANGUAGES.find(l => l.code === 'hi');
+    if (lower.includes('chinese') || lower.includes('mandarin') || lower.includes('中文')) return SUPPORTED_LANGUAGES.find(l => l.code === 'zh');
+    if (lower.includes('spanish') || lower.includes('español')) return SUPPORTED_LANGUAGES.find(l => l.code === 'es');
+    if (lower.includes('french') || lower.includes('français')) return SUPPORTED_LANGUAGES.find(l => l.code === 'fr');
+    if (lower.includes('german') || lower.includes('deutsch')) return SUPPORTED_LANGUAGES.find(l => l.code === 'de');
+    if (lower.includes('japanese') || lower.includes('日本語')) return SUPPORTED_LANGUAGES.find(l => l.code === 'ja');
+    if (lower.includes('english')) return SUPPORTED_LANGUAGES.find(l => l.code === 'en');
+
+    return { code: lower.slice(0, 2), name: raw, flag: '🌐' };
+  }, [user]);
+
+  // For students, ONLY show assigned native language in the language selector
+  const availableLanguages = React.useMemo(() => {
+    if (isStudent && studentAssignedNativeLang) {
+      return [studentAssignedNativeLang];
+    }
+    return SUPPORTED_LANGUAGES;
+  }, [isStudent, studentAssignedNativeLang]);
+
   // Available Modules list based on selected course filter
+  // For students: ONLY include completed modules and the single active uncompleted module
   const availableModuleOptions = React.useMemo(() => {
     const set = new Set<string>();
     set.add('All Modules');
@@ -646,7 +743,25 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       return (a.title || '').localeCompare(b.title || '');
     });
 
-    sortedDbModules.forEach(mod => {
+    const completedModuleIds = new Set(user?.completedModules || []);
+
+    // Filter modules for student: only completed + active module
+    let eligibleDbModules = sortedDbModules;
+    if (isStudent) {
+      const studentVisibleMods: typeof sortedDbModules = [];
+      let foundActive = false;
+      for (const mod of sortedDbModules) {
+        if (completedModuleIds.has(mod.id)) {
+          studentVisibleMods.push(mod);
+        } else if (!foundActive) {
+          studentVisibleMods.push(mod);
+          foundActive = true;
+        }
+      }
+      eligibleDbModules = studentVisibleMods.length > 0 ? studentVisibleMods : (sortedDbModules.length > 0 ? [sortedDbModules[0]] : []);
+    }
+
+    eligibleDbModules.forEach(mod => {
       const matchedConfig = configuredCourses.find(c => c.courseId === mod.category);
       const courseTitle = matchedConfig ? matchedConfig.title : formatCourseName(mod.category);
 
@@ -669,7 +784,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     });
 
     return Array.from(set);
-  }, [dbModules, configuredCourses, selectedCourseFilter, materials]);
+  }, [dbModules, configuredCourses, selectedCourseFilter, materials, isStudent, user?.completedModules]);
 
   // Filtered materials matching Course and Module filters
   const filteredMaterials = React.useMemo(() => {
@@ -702,9 +817,49 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
 
   // Multi-language Translation State
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('en');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
+    if (user?.role === 'student') {
+      const raw = (user as any).nativeLanguage || (user as any).preferredLanguage || '';
+      if (raw) {
+        const lower = raw.trim().toLowerCase();
+        if (lower.includes('tamil') || lower.includes('தமிழ்')) return 'ta';
+        if (lower.includes('malay') || lower.includes('melayu') || lower.includes('bahasa')) return 'ms';
+        if (lower.includes('hindi') || lower.includes('हिंदी')) return 'hi';
+        if (lower.includes('chinese') || lower.includes('mandarin') || lower.includes('中文')) return 'zh';
+        if (lower.includes('spanish') || lower.includes('español')) return 'es';
+        if (lower.includes('french') || lower.includes('français')) return 'fr';
+        if (lower.includes('german') || lower.includes('deutsch')) return 'de';
+        if (lower.includes('japanese') || lower.includes('日本語')) return 'ja';
+        const match = SUPPORTED_LANGUAGES.find(l => l.code.toLowerCase() === lower);
+        if (match) return match.code;
+      }
+    }
+    return 'en';
+  });
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
   const [translationStatus, setTranslationStatus] = useState<string>('');
+
+  // Auto-enforce assigned native language for student when user loads or updates
+  useEffect(() => {
+    if (isStudent && studentAssignedNativeLang) {
+      setSelectedLanguage(studentAssignedNativeLang.code);
+    }
+  }, [isStudent, studentAssignedNativeLang]);
+
+  // Lightbox modal for high-resolution image / diagram zoom
+  const [lightboxMedia, setLightboxMedia] = useState<{ src: string; alt: string; type?: 'image' | 'video' } | null>(null);
+
+  // Security: Screenshot & Copy Prevention Warning Notification State
+  const [securityWarning, setSecurityWarning] = useState<string | null>(null);
+  const securityWarningTimerRef = useRef<any>(null);
+
+  const triggerSecurityWarning = (msg: string) => {
+    if (securityWarningTimerRef.current) clearTimeout(securityWarningTimerRef.current);
+    setSecurityWarning(msg);
+    securityWarningTimerRef.current = setTimeout(() => {
+      setSecurityWarning(null);
+    }, 4000);
+  };
 
   // Presentation Mode Drawing / Laser Pointer Tool
   const [laserPointerActive, setLaserPointerActive] = useState<boolean>(false);
@@ -1535,6 +1690,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       lower.includes('blob.core.windows.net') ||
       lower.includes('raw.githubusercontent.com') ||
       lower.includes('dl.dropboxusercontent.com') ||
+      lower.includes('endlesssparkcreativehub.in') ||
       lower.includes('w3schools.com/html/mov')
     );
   };
@@ -1560,7 +1716,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     useEffect(() => {
       setHasPlaybackError(false);
       setDirectPlaybackFailed(false);
-      if (!url) {
+      if (!url || url.trim() === '') {
         setResolvedUrl('');
         return;
       }
@@ -1575,10 +1731,14 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                 setResolvedUrl(resolved);
                 setMediaCache(prev => ({ ...prev, [key]: resolved }));
               } else {
+                setResolvedUrl('');
                 setHasPlaybackError(true);
               }
             })
-            .catch(() => setHasPlaybackError(true));
+            .catch(() => {
+              setResolvedUrl('');
+              setHasPlaybackError(true);
+            });
         }
       } else {
         setResolvedUrl(url);
@@ -1749,16 +1909,6 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
       );
     }
 
-    if (url.startsWith('idb:') && !activeUrl && hasPlaybackError) {
-      return (
-        <div className="relative w-full h-full min-h-[160px] bg-slate-950 rounded-xl border border-pink-500/30 p-4 flex flex-col items-center justify-center text-center space-y-2">
-          <Film className="w-8 h-8 text-pink-400" />
-          <div className="text-xs font-bold text-pink-200">{cleanCap || 'Video Demonstration Attached'}</div>
-          <div className="text-[11px] text-slate-400">Uploaded video is stored in local editor cache</div>
-        </div>
-      );
-    }
-
     const shouldRenderDirectVideo =
       manualPlayerMode === 'video' ||
       (manualPlayerMode !== 'iframe' &&
@@ -1781,14 +1931,20 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
             ref={videoRef}
             src={activeUrl}
             controls
+            controlsList="nodownload noplaybackrate"
+            disablePictureInPicture
             playsInline
+            onContextMenu={(e) => {
+              e.preventDefault();
+              return false;
+            }}
             onError={() => {
               console.warn('Direct video playback error, switching to embed iframe fallback');
               setDirectPlaybackFailed(true);
             }}
             onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-            className="w-full h-full object-contain bg-black rounded-lg"
+            className="w-full h-full object-contain bg-black rounded-lg select-none"
           >
             {vttTrackUrl && (
               <track
@@ -1886,54 +2042,85 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
     );
   };
 
-  // Image File Upload Handler with instant Base64 data URL & IndexedDB Persistent Storage
+  // Image File Upload Handler with Firebase Storage and Cloud persistence
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
       const dataUrl = await fileToDataUrl(file);
       const idbKey = `image_idb_${editingPage.id}`;
-      await saveMediaToIDB(idbKey, file);
       
-      const finalImageUrl = dataUrl || `idb:${idbKey}`;
-      setMediaCache(prev => ({ ...prev, [idbKey]: finalImageUrl }));
+      // Optimistically update UI immediately
+      const initialPreviewUrl = dataUrl || `idb:${idbKey}`;
+      setMediaCache(prev => ({ ...prev, [idbKey]: initialPreviewUrl }));
 
       const updated: FlipbookPage = {
         ...editingPage,
-        imageUrl: finalImageUrl,
+        imageUrl: initialPreviewUrl,
         imageCaption: editingPage.imageCaption || file.name.replace(/\.[^/.]+$/, ""),
       };
       setEditingPage(updated);
       handleUpdatePage(updated);
+
+      // Upload to Firebase in the background and update URL once uploaded
+      try {
+        const cloudUrl = await uploadMediaToFirebase(file, idbKey);
+        if (cloudUrl && cloudUrl !== initialPreviewUrl) {
+          setMediaCache(prev => ({ ...prev, [idbKey]: cloudUrl }));
+          const finalizedPage: FlipbookPage = {
+            ...updated,
+            imageUrl: cloudUrl,
+          };
+          setEditingPage(finalizedPage);
+          handleUpdatePage(finalizedPage);
+        }
+      } catch (uploadErr) {
+        console.warn('Background Firebase image upload notice:', uploadErr);
+      }
     }
   };
 
-  // Secondary Image File Upload Handler with instant Base64 data URL & IndexedDB Persistent Storage
+  // Secondary Image File Upload Handler with Firebase Storage and Cloud persistence
   const handleSecondaryImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
       const dataUrl = await fileToDataUrl(file);
       const idbKey = `sec_image_idb_${editingPage.id}`;
-      await saveMediaToIDB(idbKey, file);
 
-      const finalImageUrl = dataUrl || `idb:${idbKey}`;
-      setMediaCache(prev => ({ ...prev, [idbKey]: finalImageUrl }));
+      // Optimistically update UI immediately
+      const initialPreviewUrl = dataUrl || `idb:${idbKey}`;
+      setMediaCache(prev => ({ ...prev, [idbKey]: initialPreviewUrl }));
 
       const updated: FlipbookPage = {
         ...editingPage,
-        secondaryImageUrl: finalImageUrl,
+        secondaryImageUrl: initialPreviewUrl,
         secondaryImageCaption: editingPage.secondaryImageCaption || file.name.replace(/\.[^/.]+$/, ""),
       };
       setEditingPage(updated);
       handleUpdatePage(updated);
+
+      // Upload to Firebase in the background and update URL once uploaded
+      try {
+        const cloudUrl = await uploadMediaToFirebase(file, idbKey);
+        if (cloudUrl && cloudUrl !== initialPreviewUrl) {
+          setMediaCache(prev => ({ ...prev, [idbKey]: cloudUrl }));
+          const finalizedPage: FlipbookPage = {
+            ...updated,
+            secondaryImageUrl: cloudUrl,
+          };
+          setEditingPage(finalizedPage);
+          handleUpdatePage(finalizedPage);
+        }
+      } catch (uploadErr) {
+        console.warn('Background Firebase secondary image upload notice:', uploadErr);
+      }
     }
   };
 
-  // Video File Upload Handler with IndexedDB Persistent Storage
+  // Video File Upload Handler with Firebase Storage and Cloud persistence
   const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
       const idbKey = `video_idb_${editingPage.id}`;
-      await saveMediaToIDB(idbKey, file);
       const objectUrl = URL.createObjectURL(file);
       setMediaCache(prev => ({ ...prev, [idbKey]: objectUrl }));
 
@@ -1949,6 +2136,22 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
 
       // Auto-transcribe spoken video audio using Gemini Multimodal AI
       handleAutoGenerateTranscription(updated);
+
+      // Upload video file directly to Firebase Storage / Cloud Media Store in background
+      try {
+        const cloudUrl = await uploadMediaToFirebase(file, idbKey);
+        if (cloudUrl && !cloudUrl.startsWith('idb:')) {
+          setMediaCache(prev => ({ ...prev, [idbKey]: cloudUrl }));
+          const finalizedPage: FlipbookPage = {
+            ...updated,
+            videoUrl: cloudUrl,
+          };
+          setEditingPage(finalizedPage);
+          handleUpdatePage(finalizedPage);
+        }
+      } catch (uploadErr) {
+        console.warn('Background Firebase video upload notice:', uploadErr);
+      }
     }
   };
 
@@ -2524,7 +2727,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
   const handleSaveMaterial = async (mat: FlipbookMaterial) => {
     setIsSaving(true);
     try {
-      // Clean object and ensure media backups in IndexedDB without prematurely stripping data URLs
+      // Clean object and ensure media backups in IndexedDB while preserving data URLs in Firestore for cloud synchronization
       const sanitizedPages = await Promise.all(
         mat.pages.map(async (page) => {
           const p = { ...page };
@@ -2536,17 +2739,10 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
           if (p.imageUrl && p.imageUrl.startsWith('data:image')) {
             const idbKey = `image_idb_${p.id}`;
             await saveMediaToIDB(idbKey, p.imageUrl);
-            // Only convert to idb: reference if image payload exceeds Firestore's 800KB single field threshold
-            if (p.imageUrl.length > 800000) {
-              p.imageUrl = `idb:${idbKey}`;
-            }
           }
           if (p.secondaryImageUrl && p.secondaryImageUrl.startsWith('data:image')) {
             const idbKey = `sec_image_idb_${p.id}`;
             await saveMediaToIDB(idbKey, p.secondaryImageUrl);
-            if (p.secondaryImageUrl.length > 800000) {
-              p.secondaryImageUrl = `idb:${idbKey}`;
-            }
           }
           return p;
         })
@@ -2615,7 +2811,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       courseCategory: defaultCourse || 'General',
       courseName: defaultCourse,
       author: (user as any)?.displayName || user?.email || 'Endless School of Printing and Packaging',
-      coverImageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80',
+      coverImageUrl: '',
       updatedAt: new Date().toISOString(),
       pages: [
         {
@@ -2624,10 +2820,14 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
           title: initialTitle,
           subtitle: '',
           content: initialContent,
-          layoutStyle: 'grid-2x2',
-          mediaType: 'image',
-          imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
-          imageCaption: initialCaption,
+          layoutStyle: 'split-left',
+          mediaType: 'none',
+          imageUrl: '',
+          imageCaption: '',
+          secondaryImageUrl: '',
+          secondaryImageCaption: '',
+          videoUrl: '',
+          videoCaption: '',
           calloutText: '',
           bgTheme: 'classic-paper',
           courseName: defaultCourse,
@@ -2656,7 +2856,6 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     const newPageNum = activeMaterial.pages.length + 1;
     const initialTitle = `Page ${newPageNum}: New Topic Header`;
     const initialContent = 'Paste your course material text, lecture notes, or key summaries here...';
-    const initialCaption = 'Illustration Caption';
 
     const initialTranslations: Record<string, any> = {};
     if (selectedLanguage !== 'en') {
@@ -2665,7 +2864,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         subtitle: '',
         content: autoTranslateText(initialContent, selectedLanguage),
         calloutText: '',
-        imageCaption: autoTranslateText(initialCaption, selectedLanguage),
+        imageCaption: '',
         secondaryImageCaption: '',
         videoCaption: ''
       };
@@ -2677,10 +2876,14 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       title: initialTitle,
       subtitle: '',
       content: initialContent,
-      layoutStyle: 'grid-2x2',
-      mediaType: 'image',
-      imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
-      imageCaption: initialCaption,
+      layoutStyle: 'split-left',
+      mediaType: 'none',
+      imageUrl: '',
+      imageCaption: '',
+      secondaryImageUrl: '',
+      secondaryImageCaption: '',
+      videoUrl: '',
+      videoCaption: '',
       calloutText: '',
       bgTheme: 'classic-paper',
       courseName: editingPage?.courseName || activeMaterial?.courseName || '',
@@ -2771,22 +2974,117 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     handleSaveMaterial(updatedMat);
   };
 
-  // Keyboard navigation
+  // Keyboard navigation & Security Protection (Anti-Copy, Anti-Screenshot, Anti-Print)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Navigation shortcuts
       if (viewMode === 'presentation' || viewMode === 'flipbook') {
         if (e.key === 'ArrowRight' || e.key === 'Space') {
           handleNextPage();
         } else if (e.key === 'ArrowLeft') {
           handlePrevPage();
         } else if (e.key === 'f' || e.key === 'F') {
-          toggleFullscreen();
+          // If not typing in an input
+          const target = e.target as HTMLElement;
+          if (!target || (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable)) {
+            toggleFullscreen();
+          }
         }
       }
+
+      // 2. Anti-Copy Shortcuts (Ctrl+C, Cmd+C, Ctrl+X, Cmd+X, Ctrl+A, Cmd+A, Ctrl+U, Cmd+U, Ctrl+P, Cmd+P, Ctrl+S, Cmd+S)
+      // Faculty/Admin in Editor mode are allowed to copy/paste within editor inputs
+      const isInputFocused = (e.target as HTMLElement)?.tagName === 'INPUT' || 
+                             (e.target as HTMLElement)?.tagName === 'TEXTAREA' || 
+                             (e.target as HTMLElement)?.isContentEditable;
+
+      const isModifier = e.ctrlKey || e.metaKey;
+      const keyLower = e.key.toLowerCase();
+
+      // Block print dialog (Ctrl+P / Cmd+P)
+      if (isModifier && keyLower === 'p') {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerSecurityWarning('⚠️ Printing is disabled for copyrighted course e-books. Student Watermark logged.');
+        return;
+      }
+
+      // Block Save Page (Ctrl+S / Cmd+S)
+      if (isModifier && keyLower === 's' && viewMode !== 'editor') {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerSecurityWarning('⚠️ Saving offline copies of e-book materials is restricted.');
+        return;
+      }
+
+      // Block View Source / Inspect (Ctrl+U / Cmd+U)
+      if (isModifier && keyLower === 'u') {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerSecurityWarning('⚠️ Source inspection is restricted for protected e-book materials.');
+        return;
+      }
+
+      // Block Copy / Cut / Select All outside of active editor inputs
+      if (isModifier && (keyLower === 'c' || keyLower === 'x' || keyLower === 'a') && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerSecurityWarning('🔒 Content copying is prohibited. Student ID and Watermark are actively stamped.');
+        return;
+      }
+
+      // Block PrintScreen / Snipping Tool shortcut detection (PrintScreen key, Cmd+Shift+3/4/5 on Mac, Win+Shift+S)
+      if (
+        e.key === 'PrintScreen' ||
+        (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === '5')) ||
+        (e.key === 'F12')
+      ) {
+        triggerSecurityWarning('📸 Screenshot Captured: Student Name & ID Watermark embedded permanently in frame.');
+      }
     };
+
+    const handleCopy = (e: ClipboardEvent) => {
+      const isInputFocused = (e.target as HTMLElement)?.tagName === 'INPUT' || 
+                             (e.target as HTMLElement)?.tagName === 'TEXTAREA' || 
+                             (e.target as HTMLElement)?.isContentEditable;
+      if (!isInputFocused) {
+        e.preventDefault();
+        triggerSecurityWarning('🔒 Copying text, diagrams, or media from this E-Book is restricted.');
+      }
+    };
+
+    const handleCut = (e: ClipboardEvent) => {
+      const isInputFocused = (e.target as HTMLElement)?.tagName === 'INPUT' || 
+                             (e.target as HTMLElement)?.tagName === 'TEXTAREA' || 
+                             (e.target as HTMLElement)?.isContentEditable;
+      if (!isInputFocused) {
+        e.preventDefault();
+        triggerSecurityWarning('🔒 Cutting content from this E-Book is restricted.');
+      }
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      const isInputFocused = (e.target as HTMLElement)?.tagName === 'INPUT' || 
+                             (e.target as HTMLElement)?.tagName === 'TEXTAREA' || 
+                             (e.target as HTMLElement)?.isContentEditable;
+      if (!isInputFocused && viewMode !== 'editor') {
+        e.preventDefault();
+        triggerSecurityWarning('🔒 Right-click context menu is disabled to protect media & diagrams.');
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [viewMode, currentPageIndex, activeMaterial]);
+    window.addEventListener('copy', handleCopy);
+    window.addEventListener('cut', handleCut);
+    window.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('copy', handleCopy);
+      window.removeEventListener('cut', handleCut);
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [viewMode, currentPageIndex, activeMaterial, user]);
 
   // Canvas drawing for Laser Pointer
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -2832,8 +3130,89 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
   const currentCourseName = displayPage.courseName || activeMaterial.courseName || (selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses' ? selectedCourseFilter : 'Course Title');
   const currentModuleName = displayPage.courseModuleName || (selectedModuleFilter !== 'All Modules' ? selectedModuleFilter : 'Module Content');
 
+  // Student details for dynamic security watermarking overlay
+  const studentNameDisplay = user?.name || user?.email || 'Authorized Student';
+  const studentIdDisplay = user?.studentId || (user as any)?.regNo || (user as any)?.admissionNo || user?.id?.slice(0, 8)?.toUpperCase() || 'STU-AUTH';
+  const watermarkTimestamp = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
   return (
-    <div ref={containerRef} className="w-full min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col overflow-x-hidden">
+    <div 
+      ref={containerRef} 
+      className={`w-full min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col overflow-x-hidden relative ${
+        viewMode !== 'editor' ? 'secure-content-protected select-none' : ''
+      }`}
+      onContextMenu={(e) => {
+        const target = e.target as HTMLElement;
+        if (viewMode !== 'editor' && target?.tagName !== 'INPUT' && target?.tagName !== 'TEXTAREA' && !target?.isContentEditable) {
+          e.preventDefault();
+          triggerSecurityWarning('🔒 Content protection active: Right-click context menu is restricted.');
+          return false;
+        }
+      }}
+      onCopy={(e) => {
+        const target = e.target as HTMLElement;
+        if (target?.tagName !== 'INPUT' && target?.tagName !== 'TEXTAREA' && !target?.isContentEditable) {
+          e.preventDefault();
+          triggerSecurityWarning('🔒 Copying text or media from this E-Book is restricted.');
+          return false;
+        }
+      }}
+      onCut={(e) => {
+        const target = e.target as HTMLElement;
+        if (target?.tagName !== 'INPUT' && target?.tagName !== 'TEXTAREA' && !target?.isContentEditable) {
+          e.preventDefault();
+          triggerSecurityWarning('🔒 Cutting content from this E-Book is restricted.');
+          return false;
+        }
+      }}
+    >
+      {/* Dynamic Security & Screenshot Tracking Watermark Layer */}
+      {viewMode !== 'editor' && (
+        <div 
+          aria-hidden="true"
+          className="fixed inset-0 pointer-events-none z-30 select-none overflow-hidden flex flex-col justify-around opacity-[0.07] dark:opacity-[0.09] transform -rotate-12 scale-125"
+        >
+          {Array.from({ length: 8 }).map((_, rowIdx) => (
+            <div key={rowIdx} className="flex justify-around whitespace-nowrap text-xs md:text-sm font-mono font-black text-slate-900 dark:text-slate-100 tracking-wider">
+              {Array.from({ length: 5 }).map((_, colIdx) => (
+                <span key={colIdx} className="px-4">
+                  {studentNameDisplay} • ID: {studentIdDisplay} • {watermarkTimestamp} • CONFIDENTIAL
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Floating Active Security Badge Indicator (Visible & Non-Intrusive) */}
+      {viewMode !== 'editor' && (
+        <div className="fixed bottom-3 right-3 z-40 pointer-events-none select-none flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-lg text-[10px] font-mono text-slate-400 shadow-xl opacity-75 hover:opacity-100 transition-opacity">
+          <Shield className="w-3 h-3 text-amber-400 shrink-0" />
+          <span className="truncate max-w-[140px] text-amber-300 font-semibold">{studentNameDisplay}</span>
+          <span className="text-slate-500">•</span>
+          <span className="text-slate-300 font-bold">{studentIdDisplay}</span>
+        </div>
+      )}
+
+      {/* Security Warning Toast Notification */}
+      <AnimatePresence>
+        {securityWarning && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-slate-950 px-5 py-3 rounded-2xl shadow-2xl border-2 border-slate-950 font-bold text-xs flex items-center gap-2.5 max-w-md text-center"
+          >
+            <ShieldAlert className="w-5 h-5 text-slate-950 shrink-0" />
+            <div className="text-left leading-tight">
+              <p className="font-black text-[13px]">{securityWarning}</p>
+              <p className="text-[10px] font-semibold text-slate-900 opacity-90 mt-0.5">
+                Logged to Student Session: {studentNameDisplay} (ID: {studentIdDisplay})
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Top Header Control Bar */}
       <div className="bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 shadow-xl">
@@ -2858,6 +3237,9 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-700/50">
                   Interactive E-Book & PPT Studio
+                </span>
+                <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/50 flex items-center gap-1">
+                  <Shield className="w-3 h-3 text-emerald-400" /> Anti-Copy & Watermark Protected
                 </span>
                 {saveMessage && (
                   <span className="text-[11px] text-emerald-400 font-semibold animate-pulse flex items-center gap-1">
@@ -2981,7 +3363,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                 }}
                 className="bg-transparent text-xs font-bold text-amber-300 focus:outline-none cursor-pointer"
               >
-                {SUPPORTED_LANGUAGES.map(lang => (
+                {availableLanguages.map(lang => (
                   <option key={lang.code} value={lang.code} className="bg-slate-900 text-slate-200">
                     {lang.flag} {lang.name}
                   </option>
@@ -3325,17 +3707,25 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                       {/* IF LAYOUT IS 2-IMAGES GRID (Stacked Top & Bottom) */}
                       {(displayPage.layoutStyle === 'grid-right-2-images' || displayPage.layoutStyle === 'grid-2-images') ? (
                         <div className="space-y-4">
-                          <div className="flex flex-col gap-3.5">
+                          <div className="flex flex-col gap-4">
                             {/* Image #1 (Top) */}
-                            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-amber-500/40 shadow-md flex flex-col justify-between">
-                              <span className="text-[10px] font-extrabold uppercase text-amber-300 mb-1 flex items-center gap-1">
-                                <Image className="w-3 h-3 text-amber-400" /> Image 1 (Top): {displayPage.imageCaption || 'Primary Diagram'}
+                            <div className="p-3 rounded-xl bg-slate-900/90 border border-amber-500/40 shadow-md flex flex-col justify-between">
+                              <span className="text-[11px] font-extrabold uppercase text-amber-300 mb-1.5 flex items-center gap-1.5">
+                                <Image className="w-3.5 h-3.5 text-amber-400" /> Image 1 (Top): {displayPage.imageCaption || displayPage.title || 'Primary Diagram'}
                               </span>
-                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center">
-                                <SafeImage src={displayPage.imageUrl} alt="Image 1" className="max-h-40 object-contain" />
+                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 min-h-[220px] max-h-[360px] flex items-center justify-center p-2">
+                                <SafeImage 
+                                  src={displayPage.imageUrl} 
+                                  alt={displayPage.imageCaption || displayPage.title || 'Image 1'} 
+                                  title={displayPage.title}
+                                  subtitle={displayPage.subtitle}
+                                  caption={displayPage.imageCaption}
+                                  className="max-h-[340px] w-full object-contain cursor-pointer" 
+                                  onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                                />
                               </div>
                               {displayPage.imageCaption && (
-                                <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-amber-200 dark:text-amber-300 pt-1">
+                                <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-amber-200 dark:text-amber-300 pt-1.5">
                                   <Link className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                                   <ExternalLink className="w-3 h-3 text-amber-400/80 shrink-0" />
                                   <span>{displayPage.imageCaption}</span>
@@ -3344,15 +3734,23 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                             </div>
 
                             {/* Image #2 (Bottom) */}
-                            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-blue-500/40 shadow-md flex flex-col justify-between">
-                              <span className="text-[10px] font-extrabold uppercase text-blue-300 mb-1 flex items-center gap-1">
-                                <Image className="w-3 h-3 text-blue-400" /> Image 2 (Bottom): {displayPage.secondaryImageCaption || 'Secondary Diagram'}
+                            <div className="p-3 rounded-xl bg-slate-900/90 border border-blue-500/40 shadow-md flex flex-col justify-between">
+                              <span className="text-[11px] font-extrabold uppercase text-blue-300 mb-1.5 flex items-center gap-1.5">
+                                <Image className="w-3.5 h-3.5 text-blue-400" /> Image 2 (Bottom): {displayPage.secondaryImageCaption || 'Secondary Diagram'}
                               </span>
-                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center">
-                                <SafeImage src={displayPage.secondaryImageUrl || displayPage.imageUrl} alt="Image 2" className="max-h-40 object-contain" />
+                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 min-h-[220px] max-h-[360px] flex items-center justify-center p-2">
+                                <SafeImage 
+                                  src={displayPage.secondaryImageUrl || displayPage.imageUrl} 
+                                  alt={displayPage.secondaryImageCaption || displayPage.title || 'Image 2'} 
+                                  title={displayPage.title}
+                                  subtitle={displayPage.subtitle}
+                                  caption={displayPage.secondaryImageCaption}
+                                  className="max-h-[340px] w-full object-contain cursor-pointer" 
+                                  onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                                />
                               </div>
                               {displayPage.secondaryImageCaption && (
-                                <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-blue-200 dark:text-blue-300 pt-1">
+                                <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-blue-200 dark:text-blue-300 pt-1.5">
                                   <Link className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                                   <ExternalLink className="w-3 h-3 text-blue-400/80 shrink-0" />
                                   <span>{displayPage.secondaryImageCaption}</span>
@@ -3362,15 +3760,15 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                           </div>
                         </div>
                       ) : (displayPage.layoutStyle === 'grid-2x2' || displayPage.layoutStyle === 'grid-bento') ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                           
                           {/* Grid Tile 1: Video */}
                           {displayPage.videoUrl && (
-                            <div className="p-2 rounded-xl bg-slate-900 border border-purple-500/40 shadow-sm flex flex-col justify-between">
-                              <span className="text-[10px] font-bold uppercase text-purple-300 mb-1 flex items-center gap-1">
-                                <Video className="w-3 h-3 text-pink-400" /> Video Lesson
+                            <div className="p-2.5 rounded-xl bg-slate-900 border border-purple-500/40 shadow-sm flex flex-col justify-between">
+                              <span className="text-[11px] font-bold uppercase text-purple-300 mb-1.5 flex items-center gap-1.5">
+                                <Video className="w-3.5 h-3.5 text-pink-400" /> Video Lesson
                               </span>
-                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-black aspect-video">
+                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-black aspect-video min-h-[240px]">
                                 {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                               </div>
                             </div>
@@ -3378,12 +3776,20 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
                           {/* Grid Tile 2: Image Diagram */}
                           {displayPage.imageUrl && (
-                            <div className="p-2 rounded-xl bg-slate-900 border border-slate-800 shadow-sm flex flex-col justify-between">
-                              <span className="text-[10px] font-bold uppercase text-amber-300 mb-1 flex items-center gap-1">
-                                <Image className="w-3 h-3 text-amber-400" /> Diagram
+                            <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm flex flex-col justify-between">
+                              <span className="text-[11px] font-bold uppercase text-amber-300 mb-1.5 flex items-center gap-1.5">
+                                <Image className="w-3.5 h-3.5 text-amber-400" /> High-Res Technical Diagram
                               </span>
-                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center">
-                                <SafeImage src={displayPage.imageUrl} alt="Diagram" className="max-h-32 object-contain" />
+                              <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 min-h-[240px] flex items-center justify-center p-2">
+                                <SafeImage 
+                                  src={displayPage.imageUrl} 
+                                  alt={displayPage.imageCaption || displayPage.title || 'Diagram'} 
+                                  title={displayPage.title}
+                                  subtitle={displayPage.subtitle}
+                                  caption={displayPage.imageCaption}
+                                  className="max-h-[260px] w-full object-contain cursor-pointer" 
+                                  onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                                />
                               </div>
                             </div>
                           )}
@@ -3413,68 +3819,15 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         /* Standard Split Media View */
                         <div className="space-y-4">
                           
-                          {/* Video Embed & Native Language Subtitles / Transcription */}
+                          {/* Video Embed */}
                           {displayPage.videoUrl && (
                             <div className="space-y-2.5">
-                              <div className="relative rounded-xl overflow-hidden border border-slate-700 bg-black aspect-video shadow-lg group">
+                              <div className="relative rounded-2xl overflow-hidden border-2 border-slate-700 bg-black aspect-video min-h-[280px] md:min-h-[340px] shadow-2xl group">
                                 {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                               </div>
 
-                              {/* Native Subtitles & Caption Control Bar */}
-                              <div className="p-3 bg-slate-900/90 dark:bg-slate-900 border border-slate-800 rounded-xl space-y-2 shadow-sm text-white">
-                                <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <div className="flex items-center gap-2">
-                                    <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-1 border border-amber-500/30">
-                                      <Captions className="w-3 h-3 text-amber-400" />
-                                      <span>Native Subtitles ({selectedLanguage.toUpperCase()})</span>
-                                    </span>
-                                  </div>
-
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      onClick={() => setShowCcSubtitles(prev => !prev)}
-                                      className={`px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                                        showCcSubtitles ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                                      }`}
-                                    >
-                                      <Subtitles className="w-3 h-3" />
-                                      <span>{showCcSubtitles ? 'CC ON' : 'CC OFF'}</span>
-                                    </button>
-
-                                    <button
-                                      onClick={() => setShowTranscriptionDrawer(prev => !prev)}
-                                      className="px-2 py-1 rounded-lg bg-indigo-950 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-200 font-bold text-[10px] transition flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <FileAudio className="w-3 h-3 text-indigo-400" />
-                                      <span>{showTranscriptionDrawer ? 'Hide Transcript' : 'Full Transcript'}</span>
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {/* Expandable Native Language Video Transcript Drawer */}
-                                {showTranscriptionDrawer && (
-                                  <div className="mt-2 p-3 bg-slate-950 rounded-lg border border-indigo-500/40 space-y-2 text-xs font-mono text-slate-300 max-h-48 overflow-y-auto">
-                                    <div className="flex items-center justify-between pb-1 border-b border-slate-800 text-[11px] font-sans font-bold text-indigo-300">
-                                      <span className="flex items-center gap-1">
-                                        <Languages className="w-3.5 h-3.5 text-indigo-400" />
-                                        <span>Native Video Transcript ({SUPPORTED_LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage})</span>
-                                      </span>
-                                      <button
-                                        onClick={() => handleAutoGenerateTranscription(displayPage)}
-                                        className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 cursor-pointer font-sans"
-                                      >
-                                        <Sparkles className="w-3 h-3" /> Regenerate
-                                      </button>
-                                    </div>
-
-                                    <div className="whitespace-pre-wrap leading-relaxed text-slate-300 text-[11px]">
-                                      {autoTranslateText(cleanSubtitleCueText(displayPage.videoTranscription || `[00:00] ${displayPage.title}\n[00:02] ${stripHtml(displayPage.content).slice(0, 120)}`), selectedLanguage)}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
                               {displayPage.videoCaption && (
-                                <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-slate-700 dark:text-slate-300 pt-1">
+                                <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 pt-1">
                                   <Link className="w-3.5 h-3.5 text-pink-500 shrink-0" />
                                   <ExternalLink className="w-3 h-3 text-pink-400 shrink-0" />
                                   <span>{displayPage.videoCaption}</span>
@@ -3483,21 +3836,33 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                             </div>
                           )}
 
-                          {/* Image Preview */}
+                          {/* Image Preview - Big Size */}
                           {displayPage.imageUrl && (
-                            <div className="space-y-2">
-                              <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 max-h-64 flex items-center justify-center shadow-md">
+                            <div className="space-y-2.5">
+                              <div className="rounded-2xl overflow-hidden border-2 border-slate-700/80 bg-slate-900 min-h-[300px] md:min-h-[420px] max-h-[600px] flex items-center justify-center shadow-2xl p-2.5 relative group/imgcontainer">
                                 <SafeImage
                                   src={displayPage.imageUrl}
-                                  alt={displayPage.imageCaption || 'Page Image'}
-                                  className="max-h-64 w-full object-contain hover:scale-105 transition-transform duration-300"
+                                  alt={displayPage.imageCaption || displayPage.title || 'Page Diagram'}
+                                  title={displayPage.title}
+                                  subtitle={displayPage.subtitle}
+                                  caption={displayPage.imageCaption}
+                                  className="max-h-[560px] w-full object-contain rounded-xl hover:scale-[1.02] transition-transform duration-300 cursor-pointer"
+                                  onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
                                 />
                               </div>
                               {displayPage.imageCaption && (
-                                <div className="flex items-center gap-1.5 text-left text-[11px] font-semibold text-slate-700 dark:text-slate-300 pt-0.5">
-                                  <Link className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                                  <ExternalLink className="w-3 h-3 text-amber-400 shrink-0" />
-                                  <span>{displayPage.imageCaption}</span>
+                                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 pt-1 px-1">
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <Link className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                    <span className="truncate">{displayPage.imageCaption}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setLightboxMedia({ src: displayPage.imageUrl!, alt: displayPage.imageCaption || displayPage.title || 'Diagram', type: 'image' })}
+                                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded text-[11px] font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+                                  >
+                                    <Maximize2 className="w-3 h-3" /> Enlarge
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -3652,12 +4017,20 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                 {/* Right Media Column */}
                 <div className="md:col-span-5 space-y-3">
                   {displayPage.videoUrl ? (
-                    <div className="rounded-xl overflow-hidden border border-purple-500/50 bg-black aspect-video shadow-xl">
+                    <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[280px] shadow-xl">
                       {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                     </div>
                   ) : displayPage.imageUrl ? (
-                    <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 max-h-64 flex items-center justify-center p-2">
-                      <SafeImage src={displayPage.imageUrl} alt="Slide Visual" className="max-h-56 object-contain rounded-lg" />
+                    <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[280px] max-h-[460px] flex items-center justify-center p-3">
+                      <SafeImage 
+                        src={displayPage.imageUrl} 
+                        alt={displayPage.title || 'Slide Visual'} 
+                        title={displayPage.title}
+                        subtitle={displayPage.subtitle}
+                        caption={displayPage.imageCaption}
+                        className="max-h-[420px] w-full object-contain rounded-lg cursor-pointer" 
+                        onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                      />
                     </div>
                   ) : (
                     <div className="p-6 rounded-xl bg-purple-950/30 border border-purple-800/40 text-center text-purple-200 text-xs font-semibold">
@@ -4944,14 +5317,14 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         handleUpdatePage(updated);
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500"
-                      placeholder="Paste YouTube, Vimeo, Google Drive Video, Loom, or MP4 URL..."
+                      placeholder="Paste YouTube, Vimeo, Google Drive Video, Loom, endlesssparkcreativehub.in, or MP4 URL..."
                     />
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
                       <span className="font-semibold text-pink-300">Supported:</span>
+                      <span className="px-1.5 py-0.5 bg-pink-950/70 border border-pink-700/50 rounded text-pink-300 font-mono font-bold">endlesssparkcreativehub.in</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">YouTube</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Vimeo</span>
-                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Loom</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct MP4 / WebM</span>
                     </div>
                   </div>
@@ -5086,10 +5459,11 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         handleUpdatePage(updated);
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                      placeholder="Paste Google Drive image link, Dropbox, Imgur, or direct image URL..."
+                      placeholder="Paste endlesssparkcreativehub.in image link, Google Drive, Dropbox, Imgur, or direct image URL..."
                     />
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
                       <span className="font-semibold text-amber-300">Supported:</span>
+                      <span className="px-1.5 py-0.5 bg-amber-950/70 border border-amber-700/50 rounded text-amber-300 font-mono font-bold">endlesssparkcreativehub.in</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Dropbox</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Imgur</span>
@@ -5162,10 +5536,11 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         handleUpdatePage(updated);
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Paste secondary image link (Google Drive, Dropbox, Imgur, or direct URL)..."
+                      placeholder="Paste endlesssparkcreativehub.in image link, Google Drive, Dropbox, Imgur, or direct URL..."
                     />
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
                       <span className="font-semibold text-blue-300">Supported:</span>
+                      <span className="px-1.5 py-0.5 bg-blue-950/70 border border-blue-700/50 rounded text-blue-300 font-mono font-bold">endlesssparkcreativehub.in</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Dropbox</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Imgur</span>
@@ -5445,6 +5820,48 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     <option value="vi">Tiếng Việt (Vietnamese)</option>
                     <option value="th">ไทย (Thai)</option>
                   </select>
+                </div>
+              </div>
+
+              {/* CARD 6: ANTI-PIRACY, ANTI-COPY & SCREENSHOT WATERMARK PROTECTION */}
+              <div className="p-5 bg-slate-950/80 border border-emerald-800/40 rounded-2xl space-y-4 md:col-span-2">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                  <div className="flex items-center gap-2.5">
+                    <Shield className="w-5 h-5 text-emerald-400" />
+                    <h3 className="text-sm font-extrabold text-white">Anti-Copy & Dynamic Screenshot Watermarking</h3>
+                  </div>
+                  <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/40 text-[10px] font-mono font-bold">
+                    Active DRM Protected
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                    <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" /> Anti-Copy & No Context Menu
+                    </span>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Text selection, copying, cutting, dragging, and right-click downloading of videos and diagrams are strictly blocked.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                    <span className="font-bold text-purple-300 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 text-purple-400" /> Dynamic Student Watermark
+                    </span>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Student Name ({studentNameDisplay}) & ID ({studentIdDisplay}) are dynamically stamped across all pages and lightbox zoom layers.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                    <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-cyan-400" /> Screenshot Capture Deterrent
+                    </span>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Any external screenshot or screen capture taken permanently displays the student credentials for traceability.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -5774,6 +6191,89 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                 )}
               </div>
 
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* High-Resolution Media Lightbox / Zoom Overlay */}
+      <AnimatePresence>
+        {lightboxMedia && (
+          <div
+            id="ebook-media-lightbox"
+            className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 md:p-8"
+            onClick={() => setLightboxMedia(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-slate-900 border-2 border-amber-500/50 rounded-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/80">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 bg-amber-500/20 text-amber-300 rounded-lg">
+                    <Maximize2 className="w-4 h-4" />
+                  </span>
+                  <span className="font-bold text-sm text-white">{lightboxMedia.alt || 'High-Resolution Diagram'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLightboxMedia(null)}
+                  className="p-1.5 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div 
+                className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950 min-h-[400px] select-none relative"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  return false;
+                }}
+              >
+                <img
+                  src={lightboxMedia.src}
+                  alt={lightboxMedia.alt}
+                  className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl select-none"
+                  referrerPolicy="no-referrer"
+                  draggable={false}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    return false;
+                  }}
+                  onDragStart={(e) => {
+                    e.preventDefault();
+                    return false;
+                  }}
+                />
+                
+                {/* Embedded Watermark Stamp inside Lightbox */}
+                <div className="absolute bottom-6 right-6 pointer-events-none z-30 select-none bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700/60 shadow-lg text-[11px] font-mono text-slate-300 flex items-center gap-2">
+                  <Shield className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="font-bold text-amber-300 truncate max-w-[200px]">
+                    {user?.name || user?.email || 'Authorized User'}
+                  </span>
+                  {user?.studentId && (
+                    <span className="bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30 text-[10px]">
+                      ID: {user.studentId}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span>Vector High-Definition Technical Visual</span>
+                <button
+                  type="button"
+                  onClick={() => setLightboxMedia(null)}
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl cursor-pointer"
+                >
+                  Close Zoom
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

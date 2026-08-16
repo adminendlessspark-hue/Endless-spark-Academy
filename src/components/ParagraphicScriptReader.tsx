@@ -26,6 +26,8 @@ interface ParagraphicScriptReaderProps {
   onTranslate?: (lang: string) => void;
   onTargetLangChange?: (lang: string) => void;
   onPracticeInCoach?: () => void;
+  allowedLanguages?: string[];
+  lockToAssignedLanguage?: boolean;
 }
 
 /**
@@ -128,7 +130,9 @@ export const ParagraphicScriptReader: React.FC<ParagraphicScriptReaderProps> = (
   isTranslating = false,
   onTranslate,
   onTargetLangChange,
-  onPracticeInCoach
+  onPracticeInCoach,
+  allowedLanguages,
+  lockToAssignedLanguage = false
 }) => {
   const [isFullscreenModalOpen, setIsFullscreenModalOpen] = useState(false);
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>('base');
@@ -594,23 +598,40 @@ ${scriptText}`;
           <div className="flex items-center gap-2 text-xs font-bold text-indigo-200">
             <Languages className="w-4.5 h-4.5 text-purple-300 shrink-0" />
             <span>Auto-Translate into Native Language:</span>
-            <select
-              value={activeTargetLang}
-              onChange={(e) => handleLangSelect(e.target.value)}
-              className="px-3 py-1.5 bg-slate-900 border border-indigo-600 rounded-xl text-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
-            >
-              <option value="Tamil">🇮🇳 Tamil (தமிழ்)</option>
-              <option value="Hindi">🇮🇳 Hindi (हिंदी)</option>
-              <option value="Kannada">🇮🇳 Kannada (ಕನ್ನಡ)</option>
-              <option value="Malayalam">🇮🇳 Malayalam (മലയാളം)</option>
-              <option value="Telugu">🇮🇳 Telugu (తెలుగు)</option>
-              <option value="Marathi">🇮🇳 Marathi (मराठी)</option>
-              <option value="Bengali">🇮🇳 Bengali (বাংলা)</option>
-              <option value="Gujarati">🇮🇳 Gujarati (ગુજરાતી)</option>
-              <option value="Spanish">🇲🇽 Spanish</option>
-              <option value="French">🇫🇷 French</option>
-              <option value="German">🇩🇪 German</option>
-            </select>
+            {lockToAssignedLanguage ? (
+              <span className="px-3 py-1.5 bg-slate-900 border border-purple-500/60 rounded-xl text-amber-300 font-extrabold text-xs">
+                {activeTargetLang}
+              </span>
+            ) : (
+              <select
+                value={activeTargetLang}
+                onChange={(e) => handleLangSelect(e.target.value)}
+                className="px-3 py-1.5 bg-slate-900 border border-indigo-600 rounded-xl text-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+              >
+                {allowedLanguages && allowedLanguages.length > 0 ? (
+                  allowedLanguages.map(lang => (
+                    <option key={lang} value={lang}>{lang}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="Tamil">🇮🇳 Tamil (தமிழ்)</option>
+                    <option value="Bahasa Melayu">🇲🇾 Bahasa Melayu</option>
+                    <option value="Hindi">🇮🇳 Hindi (हिंदी)</option>
+                    <option value="Kannada">🇮🇳 Kannada (ಕನ್ನಡ)</option>
+                    <option value="Malayalam">🇮🇳 Malayalam (മലയാളം)</option>
+                    <option value="Telugu">🇮🇳 Telugu (తెలుగు)</option>
+                    <option value="Marathi">🇮🇳 Marathi (मराठी)</option>
+                    <option value="Bengali">🇮🇳 Bengali (বাংলা)</option>
+                    <option value="Gujarati">🇮🇳 Gujarati (ગુજરાતી)</option>
+                    <option value="Chinese">🇨🇳 Chinese (中文)</option>
+                    <option value="Spanish">🇲🇽 Spanish</option>
+                    <option value="French">🇫🇷 French</option>
+                    <option value="German">🇩🇪 German</option>
+                    <option value="Japanese">🇯🇵 Japanese (日本語)</option>
+                  </>
+                )}
+              </select>
+            )}
           </div>
 
           <button

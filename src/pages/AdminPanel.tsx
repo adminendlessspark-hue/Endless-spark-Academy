@@ -1909,43 +1909,71 @@ export default function AdminPanel() {
   const handleSubmissionStatus = async (studentId: string, course: string, topic: string, type: 'assignment' | 'video' | 'worksheet' | 'project' | 'mindMap', status: 'approved' | 'rejected', mark?: number) => {
     try {
       const student = students.find(s => s.id === studentId);
-      if (!student) return;
+      if (!student) {
+        alert('Student not found. Please refresh the page.');
+        return;
+      }
 
       const newScores = JSON.parse(JSON.stringify(student.scores || {}));
-      let targetKey = getScoreKey(course);
+      const canonicalKey = getScoreKey(course);
+      const scoreKey = type as keyof TopicScore;
+      const statusKey = `${type}Status` as keyof TopicScore;
+      const maxScore = type === 'video' ? 20 : (type === 'assignment' ? 10 : (type === 'mindMap' ? 10 : 20));
+      const assignedMark = status === 'approved' ? (mark !== undefined ? mark : maxScore) : 0;
 
-      // Look if student has scores under legacy key matching course
-      for (const k of Object.keys(newScores)) {
-        if (getCourseFromScoreKey(k) === getCourseFromScoreKey(course)) {
-          targetKey = k;
-          break;
+      // Ensure canonical category key exists
+      if (!newScores[canonicalKey]) {
+        newScores[canonicalKey] = {};
+      }
+      if (!newScores[canonicalKey][topic]) {
+        newScores[canonicalKey][topic] = { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
+      }
+
+      // Update in all categories where this topic or score exists to prevent stale pending status
+      let updatedCount = 0;
+      const normTopic = topic.trim().toLowerCase();
+
+      for (const catKey of Object.keys(newScores)) {
+        if (!newScores[catKey] || typeof newScores[catKey] !== 'object') continue;
+        for (const tKey of Object.keys(newScores[catKey])) {
+          const normTKey = tKey.trim().toLowerCase();
+          if (tKey === topic || normTKey === normTopic || normTKey.includes(normTopic) || normTopic.includes(normTKey)) {
+            newScores[catKey][tKey] = {
+              ...(newScores[catKey][tKey] || {}),
+              [statusKey]: status,
+              [scoreKey]: assignedMark,
+              updatedAt: new Date().toISOString()
+            };
+            updatedCount++;
+          }
         }
       }
-      
-      if (!newScores[targetKey]) {
-        newScores[targetKey] = {};
-      }
-      if (!newScores[targetKey][topic]) {
-        newScores[targetKey][topic] = { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 } as TopicScore;
+
+      // If not updated in loop, ensure it is set on the canonical category
+      if (updatedCount === 0) {
+        newScores[canonicalKey][topic] = {
+          ...(newScores[canonicalKey][topic] || {}),
+          [statusKey]: status,
+          [scoreKey]: assignedMark,
+          updatedAt: new Date().toISOString()
+        };
       }
 
-      const statusKey = `${type}Status` as keyof TopicScore;
-      (newScores[targetKey][topic] as any)[statusKey] = status;
-
-      if (status === 'approved') {
-        const scoreKey = type as keyof TopicScore;
-        const maxScore = type === 'video' ? 20 : (type === 'assignment' ? 10 : (type === 'mindMap' ? 10 : 20)); // Adjust max scores as needed
-        (newScores[targetKey][topic] as any)[scoreKey] = mark !== undefined ? mark : maxScore;
-      }
+      // Optimistically update local state immediately
+      setStudents(prev => prev.map(s => s.id === studentId ? { ...s, scores: newScores } : s));
 
       const studentRef = doc(db, 'users', studentId);
-      await updateDoc(studentRef, { scores: newScores });
-      alert(`Submission ${status} successfully`);
+      await updateDoc(studentRef, { 
+        scores: newScores,
+        updatedAt: new Date().toISOString()
+      });
+
+      alert(`Worksheet submission ${status} successfully (Marks: ${assignedMark}/${maxScore})`);
       setGradingSubmission(null);
       setGradingMark('');
     } catch (error) {
       console.error('Error updating submission status:', error);
-      alert('Failed to update submission status');
+      alert('Failed to update submission status. Please check your network connection.');
     }
   };
 

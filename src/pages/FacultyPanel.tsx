@@ -156,27 +156,40 @@ export default function FacultyPanel() {
       const scores = student.scores ? JSON.parse(JSON.stringify(student.scores)) : {};
       const courseKey = getScoreKey(course);
       if (!scores[courseKey]) scores[courseKey] = {};
-      const topicScores = { ...(scores[courseKey][topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 }) } as TopicScore;
-      topicScores[field] = status;
       
-      if (status === 'approved') {
-        if (field === 'assignmentStatus') topicScores.assignment = mark !== undefined ? mark : 10;
-        if (field === 'videoStatus') topicScores.video = mark !== undefined ? mark : 20;
-        if (field === 'worksheetStatus') topicScores.worksheet = mark !== undefined ? mark : 20;
-        if (field === 'projectStatus') topicScores.project = mark !== undefined ? mark : 20;
-        if (field === 'mindMapStatus') topicScores.mindMap = mark !== undefined ? mark : 10;
-        if (field === 'attendanceStatus') topicScores.attendance = mark !== undefined ? mark : 10;
-      } else {
-        if (field === 'assignmentStatus') topicScores.assignment = 0;
-        if (field === 'videoStatus') topicScores.video = 0;
-        if (field === 'worksheetStatus') topicScores.worksheet = 0;
-        if (field === 'projectStatus') topicScores.project = 0;
-        if (field === 'mindMapStatus') topicScores.mindMap = 0;
-        if (field === 'attendanceStatus') topicScores.attendance = 0;
+      const type = field.replace('Status', '') as 'assignment' | 'video' | 'worksheet' | 'project' | 'mindMap' | 'attendance';
+      const maxScore = field === 'videoStatus' ? 20 : (field === 'assignmentStatus' ? 10 : (field === 'mindMapStatus' ? 10 : (field === 'attendanceStatus' ? 10 : 20)));
+      const assignedMark = status === 'approved' ? (mark !== undefined ? mark : maxScore) : 0;
+
+      const normTopic = topic.trim().toLowerCase();
+      let updatedCount = 0;
+
+      for (const catKey of Object.keys(scores)) {
+        if (!scores[catKey] || typeof scores[catKey] !== 'object') continue;
+        for (const tKey of Object.keys(scores[catKey])) {
+          const normTKey = tKey.trim().toLowerCase();
+          if (tKey === topic || normTKey === normTopic || normTKey.includes(normTopic) || normTopic.includes(normTKey)) {
+            scores[catKey][tKey] = {
+              ...(scores[catKey][tKey] || {}),
+              [field]: status,
+              [type]: assignedMark,
+              updatedAt: new Date().toISOString()
+            };
+            updatedCount++;
+          }
+        }
+      }
+
+      if (updatedCount === 0) {
+        scores[courseKey][topic] = {
+          ...(scores[courseKey][topic] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, onlineTest: 0, attendance: 0 }),
+          [field]: status,
+          [type]: assignedMark,
+          updatedAt: new Date().toISOString()
+        };
       }
       
-      scores[courseKey][topic] = topicScores;
-      await updateDoc(doc(db, 'users', studentId), { scores });
+      await updateDoc(doc(db, 'users', studentId), { scores, updatedAt: new Date().toISOString() });
       setGradingSubmission(null);
       setGradingMark('');
     } catch (err) {

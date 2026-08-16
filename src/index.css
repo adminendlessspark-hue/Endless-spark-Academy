@@ -182,3 +182,26 @@
 .no-spinners {
   -moz-appearance: textfield; /* Firefox */
 }
+
+/* Security: Prevent printing content and blank out print view for protected e-book materials */
+@media print {
+  body {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
+/* Watermark and anti-copy security helpers */
+.secure-content-protected {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+.secure-content-protected img,
+.secure-content-protected video {
+  -webkit-user-drag: none !important;
+  user-drag: none !important;
+}

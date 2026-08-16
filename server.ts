@@ -794,7 +794,7 @@ const upload = multer({
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = 3000;
 
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
@@ -2625,16 +2625,9 @@ async function startServer() {
     }
   });
 
-  const rawPort = process.env.PORT || 3000;
-  const isNamedPipeOrSocket = typeof rawPort === "string" && isNaN(Number(rawPort));
-
-  const server = isNamedPipeOrSocket
-    ? app.listen(rawPort, () => {
-        console.log(`Server successfully listening on pipe/socket ${rawPort} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
-      })
-    : app.listen(Number(rawPort) || 3000, "0.0.0.0", () => {
-        console.log(`Server successfully listening on host 0.0.0.0 on port ${Number(rawPort) || 3000} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
-      });
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server successfully listening on host 0.0.0.0 on port ${PORT} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
+  });
 
   // WebSocket for AI Agent Live Bridge
   const wss = new WebSocketServer({ server, path: "/api/chat-live" });

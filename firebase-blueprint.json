@@ -475,6 +475,14 @@
     "toolkit_purchases": {
       "schema": "object",
       "description": "Collection of script license purchase transactions."
+    },
+    "course_flipbooks": {
+      "schema": "object",
+      "description": "Collection of course interactive flipbooks and ebook materials."
+    },
+    "course_flipbook_media": {
+      "schema": "object",
+      "description": "Collection of chunked media documents for ebook images and videos stored in Firebase."
     }
   }
 }

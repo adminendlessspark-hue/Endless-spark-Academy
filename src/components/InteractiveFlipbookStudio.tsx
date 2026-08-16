@@ -984,11 +984,26 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
           }
         });
 
-        // Ensure every material's title matches its course title
-        const formattedMerged = merged.map(m => ({
-          ...m,
-          title: m.courseName || m.title || 'Diploma in Production Art Engineer'
-        }));
+        // Ensure every material's title strictly matches its course title and clean up any placeholder strings
+        const formattedMerged = merged.map(m => {
+          let effectiveCourse = m.courseName || m.pages?.[0]?.courseName || '';
+          if (!effectiveCourse || effectiveCourse.toLowerCase().includes('new course') || effectiveCourse.toLowerCase().includes('lecture material')) {
+            if (m.title && !m.title.toLowerCase().includes('new course') && !m.title.toLowerCase().includes('lecture material')) {
+              effectiveCourse = m.title;
+            } else {
+              effectiveCourse = configuredCourses[0]?.title || 'Diploma in Production Art Engineer';
+            }
+          }
+          return {
+            ...m,
+            courseName: effectiveCourse,
+            title: effectiveCourse,
+            pages: m.pages?.map(p => ({
+              ...p,
+              courseName: p.courseName && !p.courseName.toLowerCase().includes('new course') ? p.courseName : effectiveCourse
+            })) || []
+          };
+        });
 
         setMaterials(formattedMerged);
         setActiveMaterial(prevActive => {
@@ -1005,7 +1020,10 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         try {
           deletedIds = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
         } catch (_) {}
-        const filteredDefaults = DEFAULT_FLIPBOOKS.filter(d => !deletedIds.includes(d.id));
+        const filteredDefaults = DEFAULT_FLIPBOOKS.filter(d => !deletedIds.includes(d.id)).map(m => ({
+          ...m,
+          title: m.courseName || m.title || 'Diploma in Production Art Engineer'
+        }));
         setMaterials(filteredDefaults);
       }
     );
@@ -2835,6 +2853,37 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     }
   };
 
+  // Update Course Title & E-Book Name across active material and all pages
+  const handleUpdateCourseTitle = (newCourseTitle: string) => {
+    if (!newCourseTitle) return;
+    const cleanTitle = newCourseTitle.trim();
+    if (!cleanTitle) return;
+
+    const updatedPages = (activeMaterial.pages || []).map(p => ({
+      ...p,
+      courseName: cleanTitle
+    }));
+
+    const updatedMat: FlipbookMaterial = {
+      ...activeMaterial,
+      title: cleanTitle,
+      courseName: cleanTitle,
+      courseCategory: cleanTitle,
+      pages: updatedPages
+    };
+
+    setActiveMaterial(updatedMat);
+    setMaterials(prev => prev.map(m => m.id === updatedMat.id ? updatedMat : m));
+    
+    if (editingPage) {
+      const updatedCurrentPage = { ...editingPage, courseName: cleanTitle };
+      setEditingPage(updatedCurrentPage);
+      handleUpdatePage(updatedCurrentPage);
+    }
+
+    handleSaveMaterial(updatedMat, true);
+  };
+
   // Editor Actions
   const handleCreateNewMaterial = () => {
     const newMatId = `mat_${Date.now()}`;
@@ -3398,7 +3447,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             >
               {filteredMaterials.map((m) => (
                 <option key={m.id} value={m.id} className="bg-slate-900 text-slate-200">
-                  {m.title}
+                  {m.courseName || m.title || 'Diploma in Production Art Engineer'}
                 </option>
               ))}
               {filteredMaterials.length === 0 && (
@@ -4371,7 +4420,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
               <div className="space-y-4">
 
                 {/* Course Name Selection & Automatic E-Book Title Assignment */}
-                <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-2xl space-y-2">
+                <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-2xl space-y-2.5">
                   <label className="text-xs font-bold text-amber-300 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <BookOpen className="w-4 h-4 text-amber-400" />
@@ -4382,28 +4431,17 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     </span>
                   </label>
                   
+                  {/* Quick Select from Configured Courses */}
                   <select
-                    value={editingPage.courseName || activeMaterial.courseName || activeMaterial.title || ''}
+                    value={configuredCourses.some(c => c.title === (activeMaterial.title || editingPage.courseName)) ? (activeMaterial.title || editingPage.courseName) : 'custom'}
                     onChange={(e) => {
-                      const selectedCourse = e.target.value;
-                      if (selectedCourse) {
-                        const updatedPage = { ...editingPage, courseName: selectedCourse };
-                        setEditingPage(updatedPage);
-                        
-                        const updatedMat: FlipbookMaterial = { 
-                          ...activeMaterial, 
-                          title: selectedCourse,
-                          courseName: selectedCourse,
-                          courseCategory: selectedCourse,
-                          pages: activeMaterial.pages.map(p => ({ ...p, courseName: selectedCourse }))
-                        };
-                        setActiveMaterial(updatedMat);
-                        handleUpdatePage(updatedPage);
-                        handleSaveMaterial(updatedMat, true);
+                      if (e.target.value !== 'custom') {
+                        handleUpdateCourseTitle(e.target.value);
                       }
                     }}
                     className="w-full bg-slate-950 border border-amber-800/60 rounded-xl px-3 py-2 text-xs font-bold text-amber-200 focus:outline-none focus:border-amber-400 cursor-pointer"
                   >
+                    <option value="custom">-- Select Configured Course or Type Below --</option>
                     {configuredCourses.map(c => (
                       <option key={c.courseId} value={c.title} className="bg-slate-900">
                         {c.title}
@@ -4417,6 +4455,20 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         </option>
                       ))}
                   </select>
+
+                  {/* Direct Editable Text Input for Course Title / E-Book Name */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-semibold text-amber-400/80">Type or Edit Course Title (updates E-Book title instantly):</span>
+                    <input
+                      type="text"
+                      value={activeMaterial.title || editingPage.courseName || activeMaterial.courseName || ''}
+                      onChange={(e) => {
+                        handleUpdateCourseTitle(e.target.value);
+                      }}
+                      className="w-full bg-slate-950 border border-amber-800/60 rounded-xl px-3 py-2 text-xs font-bold text-amber-200 focus:outline-none focus:border-amber-400 placeholder:text-amber-700/60"
+                      placeholder="e.g. Diploma in Production Art Engineer"
+                    />
+                  </div>
                 </div>
 
                 {/* Module Name Selector and Custom Module Input */}

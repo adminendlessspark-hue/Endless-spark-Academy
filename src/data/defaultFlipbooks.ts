@@ -4,7 +4,7 @@ import { SVG_DIAGRAMS } from '../utils/mediaStore';
 export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
   {
     id: 'material-production-art-mod1',
-    title: 'Diploma in Production Art Engineer - Module 1: Fundamentals of Colour',
+    title: 'Diploma in Production Art Engineer',
     description: 'Complete 16-page faculty master curriculum handbook covering electromagnetic light spectrum, trichromatic vision, RGB & CMYK physics, Pantone spot colors, prepress trapping, and Delta-E tolerances.',
     courseName: 'Diploma in Production Art Engineer',
     courseCategory: 'production-art-engineer',

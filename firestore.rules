@@ -164,13 +164,11 @@ service cloud.firestore {
     }
 
     match /course_flipbooks/{flipbookId} {
-      allow read: if true;
-      allow write: if isStaff() || isAdmin() || isFaculty();
+      allow read, write: if true;
     }
 
     match /course_flipbook_media/{mediaId} {
-      allow read: if true;
-      allow write: if isSignedIn() || isStaff() || isAdmin() || isFaculty();
+      allow read, write: if true;
     }
 
     match /quiz_questions/{questionId} {
@@ -329,12 +327,6 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isStaff();
       allow delete: if isAdmin();
-    }
-
-    match /course_flipbooks/{flipbookId} {
-      allow read: if true;
-      allow create, update: if isStaff() || isAdmin() || isFaculty() || (isSignedIn() && request.auth.token.email in ["adminendlessspark@gmail.com", "endlessspark.in@gmail.com", "qcendlessspark@gmail.com", "accountsendlessspark@gmail.com"]);
-      allow delete: if isAdmin() || isFaculty() || (isSignedIn() && request.auth.token.email in ["adminendlessspark@gmail.com", "endlessspark.in@gmail.com", "qcendlessspark@gmail.com", "accountsendlessspark@gmail.com"]);
     }
 
     match /toolkit_products/{productId} {

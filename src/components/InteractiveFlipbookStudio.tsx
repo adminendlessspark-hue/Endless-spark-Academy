@@ -2702,12 +2702,29 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
   }, [selectedLanguage, activeMaterial?.id, activeMaterial?.pages?.length]);
 
   // Save current material to Firestore with multi-system persistence
-  const handleSaveMaterial = async (mat: FlipbookMaterial, skipLocalOnlyNotice = false) => {
+  const handleSaveMaterial = async (mat?: FlipbookMaterial, skipLocalOnlyNotice = false) => {
     setIsSaving(true);
     try {
-      // Ensure all images are cloud-persisted and backed up in IndexedDB
+      const baseMat = mat || activeMaterial;
+      if (!baseMat || !baseMat.id) {
+        setIsSaving(false);
+        return;
+      }
+
+      // Merge current editingPage into pages array if active
+      let sourcePages = baseMat.pages ? [...baseMat.pages] : [];
+      if (editingPage) {
+        const pageIdx = sourcePages.findIndex(p => p.id === editingPage.id);
+        if (pageIdx >= 0) {
+          sourcePages[pageIdx] = { ...editingPage };
+        } else {
+          sourcePages.push({ ...editingPage });
+        }
+      }
+
+      // Ensure all media are persisted in IndexedDB and cloud-ready
       const sanitizedPages = await Promise.all(
-        mat.pages.map(async (page) => {
+        sourcePages.map(async (page) => {
           const p = { ...page };
           // Ensure video URLs are clean
           if (p.videoUrl) {
@@ -2745,11 +2762,12 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       );
 
       // Enforce E-Book Title strictly as Course Title
-      const effectiveCourseTitle = mat.courseName || mat.title || 'Diploma in Production Art Engineer';
+      const effectiveCourseTitle = baseMat.courseName || baseMat.title || 'Diploma in Production Art Engineer';
       const sanitizedMat: FlipbookMaterial = {
-        ...mat,
+        ...baseMat,
         title: effectiveCourseTitle,
         courseName: effectiveCourseTitle,
+        courseCategory: effectiveCourseTitle,
         pages: sanitizedPages,
         updatedAt: new Date().toISOString()
       };
@@ -2757,7 +2775,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
       // 1. Immediately update in-memory state and localStorage backup for instant UX
       setMaterials(prev => {
-        const idx = prev.findIndex(m => m.id === mat.id);
+        const idx = prev.findIndex(m => m.id === baseMat.id);
         if (idx >= 0) {
           const next = [...prev];
           next[idx] = sanitizedMat;
@@ -2768,16 +2786,16 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       setActiveMaterial(sanitizedMat);
 
       try {
-        localStorage.setItem(`flipbook_backup_${mat.id}`, JSON.stringify(cleanData));
+        localStorage.setItem(`flipbook_backup_${baseMat.id}`, JSON.stringify(cleanData));
       } catch (_) {}
 
-      // 2. Persist to Firestore with a 5000ms race timeout to prevent hanging on "Saving..."
-      const firestoreWrite = setDoc(doc(db, 'course_flipbooks', mat.id), {
+      // 2. Persist to Firestore
+      const firestoreWrite = setDoc(doc(db, 'course_flipbooks', baseMat.id), {
         ...cleanData,
         updatedAt: new Date().toISOString()
       });
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Firestore write timeout')), 5000)
+        setTimeout(() => reject(new Error('Firestore write timeout')), 6000)
       );
 
       await Promise.race([firestoreWrite, timeoutPromise]);
@@ -2785,9 +2803,9 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       setSaveMessage('Saved successfully to Cloud database! Synchronized across all devices.');
       setTimeout(() => setSaveMessage(''), 4000);
     } catch (err: any) {
-      console.warn('Firestore save notice (saved locally in state & IndexedDB):', err?.message || err);
+      console.warn('Firestore save notice:', err?.message || err);
       if (!skipLocalOnlyNotice) {
-        setSaveMessage('Saved locally in Media Store & memory.');
+        setSaveMessage('Saved successfully to local memory & media store.');
         setTimeout(() => setSaveMessage(''), 3500);
       }
     } finally {

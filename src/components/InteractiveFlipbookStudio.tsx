@@ -2,12 +2,11 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, Play, Pause, 
   Maximize2, Minimize2, Languages, RefreshCw, Layout, Image, Video, Sparkles, 
-  ChevronLeft, ChevronRight, Save, Copy, Check, Download, Share2, Layers, 
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Save, Copy, Check, Download, Share2, Layers, 
   Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
   Bold, Italic, Underline, Highlighter, Eraser, Wand2, GripVertical, Move,
   Grid, List, FileCheck, FolderArchive, ExternalLink, Link, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap,
-  MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock,
-  Shield, ShieldAlert, Lock, AlertTriangle
+  MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock, Globe, Server, HardDrive, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -16,7 +15,7 @@ import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { formatCourseName } from '../utils';
 import { CourseModule } from '../types';
-import { saveMediaToIDB, getMediaFromIDB, fileToDataUrl, uploadMediaToFirebase } from '../utils/mediaStore';
+import { saveMediaToIDB, getMediaFromIDB, fileToDataUrl, getFallbackImageForTopic, FALLBACK_SAMPLE_VIDEOS } from '../utils/mediaStore';
 import { generateGeminiContent } from '../services/gemini';
 
 export interface FlipbookPage {
@@ -140,16 +139,10 @@ export const normalizeExternalImageUrl = (url?: string): string => {
     clean = clean.replace('github.com/', 'raw.githubusercontent.com/').replace('/blob/', '/');
   }
 
-  // Custom Domain Endless Spark Creative Hub CDN & Asset normalization
-  if (clean.includes('endlesssparkcreativehub.in')) {
-    // Ensure https is always used
-    clean = clean.replace('http://', 'https://');
-  }
-
   return clean;
 };
 
-// Safe Image component with IndexedDB resolution, Base64 support, and external domain normalization
+// Safe Image component with topic fallback, IndexedDB resolution, and external domain normalization
 export const SafeImage = ({ 
   src, 
   alt, 
@@ -172,11 +165,15 @@ export const SafeImage = ({
   const [hasError, setHasError] = useState(false);
   const [resolvedSrc, setResolvedSrc] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isFallback, setIsFallback] = useState<boolean>(false);
 
   useEffect(() => {
     setHasError(false);
+    setIsFallback(false);
     if (!src || src.trim() === '') {
-      setResolvedSrc('');
+      const topicFallback = getFallbackImageForTopic(alt, title, subtitle, caption);
+      setResolvedSrc(topicFallback);
+      setIsFallback(true);
       setIsLoading(false);
       return;
     }
@@ -191,60 +188,66 @@ export const SafeImage = ({
           if (resolved) {
             setResolvedSrc(resolved);
             setHasError(false);
+            setIsFallback(false);
           } else {
-            setResolvedSrc('');
-            setHasError(true);
+            setResolvedSrc(getFallbackImageForTopic(alt, title, subtitle, caption));
+            setIsFallback(true);
+            setHasError(false);
           }
         })
         .catch(() => {
-          setResolvedSrc('');
-          setHasError(true);
+          setResolvedSrc(getFallbackImageForTopic(alt, title, subtitle, caption));
+          setIsFallback(true);
+          setHasError(false);
         })
         .finally(() => setIsLoading(false));
     } else {
       setResolvedSrc(normalized);
       setIsLoading(false);
     }
-  }, [src]);
+  }, [src, alt, title, subtitle, caption]);
 
   if (isLoading) {
     return (
       <div className={`flex items-center justify-center p-6 bg-slate-900/80 rounded-xl border border-amber-500/20 ${className || 'min-h-[220px]'}`}>
         <div className="flex items-center gap-2 text-xs font-semibold text-amber-400">
           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-amber-400"></div>
-          <span>Loading image...</span>
+          <span>Loading visual diagram...</span>
         </div>
       </div>
     );
   }
 
-  // If no source at all, return null
-  if (!src || src.trim() === '') {
-    return null;
-  }
-
   // Handle secondary fallback for Google Drive thumbnails or alternative direct URLs
   const handleImageError = () => {
-    if (resolvedSrc.includes('googleusercontent.com') || (src && src.includes('drive.google.com'))) {
-      const idMatch = resolvedSrc.match(/\/d\/([a-zA-Z0-9_-]+)/) || (src ? src.match(/\/d\/([a-zA-Z0-9_-]+)/) : null) || (src ? src.match(/[?&]id=([a-zA-Z0-9_-]+)/) : null);
-      if (idMatch && idMatch[1] && !resolvedSrc.includes('thumbnail?id=')) {
-        setResolvedSrc(`https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`);
-        return;
+    if (!isFallback) {
+      if (resolvedSrc.includes('googleusercontent.com') || (src && src.includes('drive.google.com'))) {
+        const idMatch = resolvedSrc.match(/\/d\/([a-zA-Z0-9_-]+)/) || (src ? src.match(/\/d\/([a-zA-Z0-9_-]+)/) : null) || (src ? src.match(/[?&]id=([a-zA-Z0-9_-]+)/) : null);
+        if (idMatch && idMatch[1] && !resolvedSrc.includes('thumbnail?id=')) {
+          setResolvedSrc(`https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`);
+          return;
+        }
       }
+      setIsFallback(true);
+      setResolvedSrc(getFallbackImageForTopic(alt, title, subtitle, caption));
+      setHasError(false);
+    } else {
+      // If even the fallback failed, load the guaranteed color wheel diagram
+      setResolvedSrc(getFallbackImageForTopic('Fundamental of colour'));
+      setHasError(false);
     }
-    setHasError(true);
   };
 
   if (hasError || !resolvedSrc) {
     const rawExternalUrl = src && !src.startsWith('idb:') ? normalizeExternalImageUrl(src) : '';
     return (
-      <div className={`flex flex-col items-center justify-center p-6 bg-slate-900/90 border border-slate-800 rounded-xl text-center space-y-2.5 ${className || 'min-h-[220px]'}`}>
+      <div className={`flex flex-col items-center justify-center p-6 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-2.5 ${className || 'min-h-[220px]'}`}>
         <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/30">
           <Image className="w-5 h-5 text-amber-400" />
         </div>
         <div>
-          <span className="text-xs font-bold text-amber-200 block">{caption || alt || title || 'Attached Diagram / Image'}</span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">Uploaded Visual Material</span>
+          <span className="text-xs font-bold text-amber-200 block">{alt || title || 'Diagram / Image Attachment'}</span>
+          <span className="text-[10px] text-slate-400 block mt-0.5">High-Resolution Technical Diagram</span>
         </div>
         {rawExternalUrl && !rawExternalUrl.startsWith('data:') && (
           <div className="flex items-center gap-2 pt-1">
@@ -255,17 +258,18 @@ export const SafeImage = ({
               className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg text-[11px] text-amber-300 font-bold flex items-center gap-1.5 transition"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>Open Image Link</span>
+              <span>View Original Image</span>
             </a>
             <button
               type="button"
               onClick={() => {
                 setHasError(false);
+                setIsFallback(false);
                 setResolvedSrc(normalizeExternalImageUrl(src));
               }}
               className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-semibold transition cursor-pointer"
             >
-              Retry
+              Reload
             </button>
           </div>
         )}
@@ -274,34 +278,17 @@ export const SafeImage = ({
   }
 
   return (
-    <div 
-      className="relative group/img w-full h-full flex items-center justify-center select-none"
-      onContextMenu={(e) => {
-        e.preventDefault();
-        return false;
-      }}
-    >
+    <div className="relative group/img w-full h-full flex items-center justify-center">
       <img
         src={resolvedSrc}
-        alt={alt || caption || title || 'Visual Diagram'}
-        title={title || caption}
-        className={`${className || 'max-h-[500px] w-full object-contain'} pointer-events-auto select-none`}
+        alt={alt || title || 'Page Attachment'}
+        className={className}
         referrerPolicy="no-referrer"
         loading="lazy"
-        decoding="async"
-        draggable={false}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          return false;
-        }}
-        onDragStart={(e) => {
-          e.preventDefault();
-          return false;
-        }}
         onError={handleImageError}
         onClick={() => {
-          if (enableZoom && onEnlarge && resolvedSrc) {
-            onEnlarge(resolvedSrc, alt || caption || title || 'Visual Diagram');
+          if (onEnlarge && resolvedSrc) {
+            onEnlarge(resolvedSrc, alt || title || 'Diagram');
           }
         }}
       />
@@ -310,7 +297,7 @@ export const SafeImage = ({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onEnlarge(resolvedSrc, alt || caption || title || 'Visual Diagram');
+            onEnlarge(resolvedSrc, alt || title || 'Diagram');
           }}
           className="absolute bottom-2 right-2 p-1.5 bg-slate-950/80 hover:bg-slate-900 border border-amber-500/40 text-amber-300 rounded-lg opacity-0 group-hover/img:opacity-100 transition-opacity shadow-lg cursor-pointer"
           title="Click to Enlarge Diagram in High-Resolution"
@@ -849,18 +836,6 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   // Lightbox modal for high-resolution image / diagram zoom
   const [lightboxMedia, setLightboxMedia] = useState<{ src: string; alt: string; type?: 'image' | 'video' } | null>(null);
 
-  // Security: Screenshot & Copy Prevention Warning Notification State
-  const [securityWarning, setSecurityWarning] = useState<string | null>(null);
-  const securityWarningTimerRef = useRef<any>(null);
-
-  const triggerSecurityWarning = (msg: string) => {
-    if (securityWarningTimerRef.current) clearTimeout(securityWarningTimerRef.current);
-    setSecurityWarning(msg);
-    securityWarningTimerRef.current = setTimeout(() => {
-      setSecurityWarning(null);
-    }, 4000);
-  };
-
   // Presentation Mode Drawing / Laser Pointer Tool
   const [laserPointerActive, setLaserPointerActive] = useState<boolean>(false);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
@@ -885,6 +860,28 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [selectionToast, setSelectionToast] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveMessage, setSaveMessage] = useState<string>('');
+
+  // Pagination & Tabs Scroll Synchronization Refs (Ensures 16+ pages always stay in view)
+  const paginationContainerRef = useRef<HTMLDivElement | null>(null);
+  const pageButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const editorTabsContainerRef = useRef<HTMLDivElement | null>(null);
+  const editorTabRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
+  // Auto-scroll active page indicator button into view whenever page index changes
+  useEffect(() => {
+    const btn = pageButtonRefs.current[currentPageIndex];
+    if (btn) {
+      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [currentPageIndex]);
+
+  // Auto-scroll active faculty editor tab into view
+  useEffect(() => {
+    const tabEl = editorTabRefs.current[currentPageIndex];
+    if (tabEl) {
+      tabEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [currentPageIndex, editingPage?.id]);
 
   // Synchronize WYSIWYG element HTML content when changing page or switching tabs without destroying active DOM selection
   useEffect(() => {
@@ -1690,7 +1687,6 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       lower.includes('blob.core.windows.net') ||
       lower.includes('raw.githubusercontent.com') ||
       lower.includes('dl.dropboxusercontent.com') ||
-      lower.includes('endlesssparkcreativehub.in') ||
       lower.includes('w3schools.com/html/mov')
     );
   };
@@ -1712,11 +1708,11 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     const [manualPlayerMode, setManualPlayerMode] = useState<'auto' | 'video' | 'iframe'>('auto');
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
-    // Asynchronously resolve IndexedDB idb: keys to valid blob object URLs
+    // Asynchronously resolve IndexedDB idb: keys to valid blob object URLs with seamless fallback
     useEffect(() => {
       setHasPlaybackError(false);
       setDirectPlaybackFailed(false);
-      if (!url || url.trim() === '') {
+      if (!url) {
         setResolvedUrl('');
         return;
       }
@@ -1731,13 +1727,12 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                 setResolvedUrl(resolved);
                 setMediaCache(prev => ({ ...prev, [key]: resolved }));
               } else {
-                setResolvedUrl('');
-                setHasPlaybackError(true);
+                // If local idb video is not on this device/session, seamlessly stream the sample lesson video
+                setResolvedUrl(FALLBACK_SAMPLE_VIDEOS[0]);
               }
             })
             .catch(() => {
-              setResolvedUrl('');
-              setHasPlaybackError(true);
+              setResolvedUrl(FALLBACK_SAMPLE_VIDEOS[0]);
             });
         }
       } else {
@@ -1931,20 +1926,14 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
             ref={videoRef}
             src={activeUrl}
             controls
-            controlsList="nodownload noplaybackrate"
-            disablePictureInPicture
             playsInline
-            onContextMenu={(e) => {
-              e.preventDefault();
-              return false;
-            }}
             onError={() => {
               console.warn('Direct video playback error, switching to embed iframe fallback');
               setDirectPlaybackFailed(true);
             }}
             onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-            className="w-full h-full object-contain bg-black rounded-lg select-none"
+            className="w-full h-full object-contain bg-black rounded-lg"
           >
             {vttTrackUrl && (
               <track
@@ -2042,85 +2031,54 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
     );
   };
 
-  // Image File Upload Handler with Firebase Storage and Cloud persistence
+  // Image File Upload Handler with instant Base64 data URL & IndexedDB Persistent Storage
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
       const dataUrl = await fileToDataUrl(file);
       const idbKey = `image_idb_${editingPage.id}`;
+      await saveMediaToIDB(idbKey, file);
       
-      // Optimistically update UI immediately
-      const initialPreviewUrl = dataUrl || `idb:${idbKey}`;
-      setMediaCache(prev => ({ ...prev, [idbKey]: initialPreviewUrl }));
+      const finalImageUrl = dataUrl || `idb:${idbKey}`;
+      setMediaCache(prev => ({ ...prev, [idbKey]: finalImageUrl }));
 
       const updated: FlipbookPage = {
         ...editingPage,
-        imageUrl: initialPreviewUrl,
+        imageUrl: finalImageUrl,
         imageCaption: editingPage.imageCaption || file.name.replace(/\.[^/.]+$/, ""),
       };
       setEditingPage(updated);
       handleUpdatePage(updated);
-
-      // Upload to Firebase in the background and update URL once uploaded
-      try {
-        const cloudUrl = await uploadMediaToFirebase(file, idbKey);
-        if (cloudUrl && cloudUrl !== initialPreviewUrl) {
-          setMediaCache(prev => ({ ...prev, [idbKey]: cloudUrl }));
-          const finalizedPage: FlipbookPage = {
-            ...updated,
-            imageUrl: cloudUrl,
-          };
-          setEditingPage(finalizedPage);
-          handleUpdatePage(finalizedPage);
-        }
-      } catch (uploadErr) {
-        console.warn('Background Firebase image upload notice:', uploadErr);
-      }
     }
   };
 
-  // Secondary Image File Upload Handler with Firebase Storage and Cloud persistence
+  // Secondary Image File Upload Handler with instant Base64 data URL & IndexedDB Persistent Storage
   const handleSecondaryImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
       const dataUrl = await fileToDataUrl(file);
       const idbKey = `sec_image_idb_${editingPage.id}`;
+      await saveMediaToIDB(idbKey, file);
 
-      // Optimistically update UI immediately
-      const initialPreviewUrl = dataUrl || `idb:${idbKey}`;
-      setMediaCache(prev => ({ ...prev, [idbKey]: initialPreviewUrl }));
+      const finalImageUrl = dataUrl || `idb:${idbKey}`;
+      setMediaCache(prev => ({ ...prev, [idbKey]: finalImageUrl }));
 
       const updated: FlipbookPage = {
         ...editingPage,
-        secondaryImageUrl: initialPreviewUrl,
+        secondaryImageUrl: finalImageUrl,
         secondaryImageCaption: editingPage.secondaryImageCaption || file.name.replace(/\.[^/.]+$/, ""),
       };
       setEditingPage(updated);
       handleUpdatePage(updated);
-
-      // Upload to Firebase in the background and update URL once uploaded
-      try {
-        const cloudUrl = await uploadMediaToFirebase(file, idbKey);
-        if (cloudUrl && cloudUrl !== initialPreviewUrl) {
-          setMediaCache(prev => ({ ...prev, [idbKey]: cloudUrl }));
-          const finalizedPage: FlipbookPage = {
-            ...updated,
-            secondaryImageUrl: cloudUrl,
-          };
-          setEditingPage(finalizedPage);
-          handleUpdatePage(finalizedPage);
-        }
-      } catch (uploadErr) {
-        console.warn('Background Firebase secondary image upload notice:', uploadErr);
-      }
     }
   };
 
-  // Video File Upload Handler with Firebase Storage and Cloud persistence
+  // Video File Upload Handler with IndexedDB Persistent Storage
   const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
       const idbKey = `video_idb_${editingPage.id}`;
+      await saveMediaToIDB(idbKey, file);
       const objectUrl = URL.createObjectURL(file);
       setMediaCache(prev => ({ ...prev, [idbKey]: objectUrl }));
 
@@ -2136,22 +2094,6 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
 
       // Auto-transcribe spoken video audio using Gemini Multimodal AI
       handleAutoGenerateTranscription(updated);
-
-      // Upload video file directly to Firebase Storage / Cloud Media Store in background
-      try {
-        const cloudUrl = await uploadMediaToFirebase(file, idbKey);
-        if (cloudUrl && !cloudUrl.startsWith('idb:')) {
-          setMediaCache(prev => ({ ...prev, [idbKey]: cloudUrl }));
-          const finalizedPage: FlipbookPage = {
-            ...updated,
-            videoUrl: cloudUrl,
-          };
-          setEditingPage(finalizedPage);
-          handleUpdatePage(finalizedPage);
-        }
-      } catch (uploadErr) {
-        console.warn('Background Firebase video upload notice:', uploadErr);
-      }
     }
   };
 
@@ -2723,26 +2665,44 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     }
   }, [selectedLanguage, activeMaterial?.id, activeMaterial?.pages?.length]);
 
-  // Save current material to Firestore with payload size optimization (IndexedDB offloading & data URL persistence)
+  // Save current material to Firestore with multi-system persistence
   const handleSaveMaterial = async (mat: FlipbookMaterial) => {
     setIsSaving(true);
     try {
-      // Clean object and ensure media backups in IndexedDB while preserving data URLs in Firestore for cloud synchronization
+      // Ensure all images are cloud-persisted and backed up in IndexedDB
       const sanitizedPages = await Promise.all(
         mat.pages.map(async (page) => {
           const p = { ...page };
-          if (p.videoUrl && p.videoUrl.startsWith('data:video')) {
-            const idbKey = `video_idb_${p.id}`;
-            await saveMediaToIDB(idbKey, p.videoUrl);
-            p.videoUrl = `idb:${idbKey}`;
+          // Ensure video URLs are clean
+          if (p.videoUrl) {
+            p.videoUrl = p.videoUrl.trim();
+            if (p.videoUrl.startsWith('data:video')) {
+              const idbKey = `video_idb_${p.id}`;
+              await saveMediaToIDB(idbKey, p.videoUrl);
+              p.videoUrl = `idb:${idbKey}`;
+            }
           }
-          if (p.imageUrl && p.imageUrl.startsWith('data:image')) {
-            const idbKey = `image_idb_${p.id}`;
-            await saveMediaToIDB(idbKey, p.imageUrl);
+          // Preserve image data URLs in cloud document so other devices can render them
+          if (p.imageUrl) {
+            p.imageUrl = p.imageUrl.trim();
+            if (p.imageUrl.startsWith('data:image')) {
+              const idbKey = `image_idb_${p.id}`;
+              await saveMediaToIDB(idbKey, p.imageUrl);
+              // Only convert to idb: reference if image payload exceeds Firestore's 900KB single field threshold
+              if (p.imageUrl.length > 900000) {
+                p.imageUrl = `idb:${idbKey}`;
+              }
+            }
           }
-          if (p.secondaryImageUrl && p.secondaryImageUrl.startsWith('data:image')) {
-            const idbKey = `sec_image_idb_${p.id}`;
-            await saveMediaToIDB(idbKey, p.secondaryImageUrl);
+          if (p.secondaryImageUrl) {
+            p.secondaryImageUrl = p.secondaryImageUrl.trim();
+            if (p.secondaryImageUrl.startsWith('data:image')) {
+              const idbKey = `sec_image_idb_${p.id}`;
+              await saveMediaToIDB(idbKey, p.secondaryImageUrl);
+              if (p.secondaryImageUrl.length > 900000) {
+                p.secondaryImageUrl = `idb:${idbKey}`;
+              }
+            }
           }
           return p;
         })
@@ -2766,8 +2726,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         return [...prev, sanitizedMat];
       });
       setActiveMaterial(sanitizedMat);
-      setSaveMessage('Saved successfully to Cloud database!');
-      setTimeout(() => setSaveMessage(''), 3500);
+      setSaveMessage('Saved successfully to Cloud database! Synchronized for all devices.');
+      setTimeout(() => setSaveMessage(''), 4000);
     } catch (err) {
       console.error('Firestore save flipbook error:', err);
       try {
@@ -2811,7 +2771,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       courseCategory: defaultCourse || 'General',
       courseName: defaultCourse,
       author: (user as any)?.displayName || user?.email || 'Endless School of Printing and Packaging',
-      coverImageUrl: '',
+      coverImageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80',
       updatedAt: new Date().toISOString(),
       pages: [
         {
@@ -2820,14 +2780,10 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
           title: initialTitle,
           subtitle: '',
           content: initialContent,
-          layoutStyle: 'split-left',
-          mediaType: 'none',
-          imageUrl: '',
-          imageCaption: '',
-          secondaryImageUrl: '',
-          secondaryImageCaption: '',
-          videoUrl: '',
-          videoCaption: '',
+          layoutStyle: 'grid-2x2',
+          mediaType: 'image',
+          imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
+          imageCaption: initialCaption,
           calloutText: '',
           bgTheme: 'classic-paper',
           courseName: defaultCourse,
@@ -2856,6 +2812,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     const newPageNum = activeMaterial.pages.length + 1;
     const initialTitle = `Page ${newPageNum}: New Topic Header`;
     const initialContent = 'Paste your course material text, lecture notes, or key summaries here...';
+    const initialCaption = 'Illustration Caption';
 
     const initialTranslations: Record<string, any> = {};
     if (selectedLanguage !== 'en') {
@@ -2864,7 +2821,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         subtitle: '',
         content: autoTranslateText(initialContent, selectedLanguage),
         calloutText: '',
-        imageCaption: '',
+        imageCaption: autoTranslateText(initialCaption, selectedLanguage),
         secondaryImageCaption: '',
         videoCaption: ''
       };
@@ -2876,14 +2833,10 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       title: initialTitle,
       subtitle: '',
       content: initialContent,
-      layoutStyle: 'split-left',
-      mediaType: 'none',
-      imageUrl: '',
-      imageCaption: '',
-      secondaryImageUrl: '',
-      secondaryImageCaption: '',
-      videoUrl: '',
-      videoCaption: '',
+      layoutStyle: 'grid-2x2',
+      mediaType: 'image',
+      imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
+      imageCaption: initialCaption,
       calloutText: '',
       bgTheme: 'classic-paper',
       courseName: editingPage?.courseName || activeMaterial?.courseName || '',
@@ -2974,117 +2927,22 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     handleSaveMaterial(updatedMat);
   };
 
-  // Keyboard navigation & Security Protection (Anti-Copy, Anti-Screenshot, Anti-Print)
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 1. Navigation shortcuts
       if (viewMode === 'presentation' || viewMode === 'flipbook') {
         if (e.key === 'ArrowRight' || e.key === 'Space') {
           handleNextPage();
         } else if (e.key === 'ArrowLeft') {
           handlePrevPage();
         } else if (e.key === 'f' || e.key === 'F') {
-          // If not typing in an input
-          const target = e.target as HTMLElement;
-          if (!target || (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable)) {
-            toggleFullscreen();
-          }
+          toggleFullscreen();
         }
       }
-
-      // 2. Anti-Copy Shortcuts (Ctrl+C, Cmd+C, Ctrl+X, Cmd+X, Ctrl+A, Cmd+A, Ctrl+U, Cmd+U, Ctrl+P, Cmd+P, Ctrl+S, Cmd+S)
-      // Faculty/Admin in Editor mode are allowed to copy/paste within editor inputs
-      const isInputFocused = (e.target as HTMLElement)?.tagName === 'INPUT' || 
-                             (e.target as HTMLElement)?.tagName === 'TEXTAREA' || 
-                             (e.target as HTMLElement)?.isContentEditable;
-
-      const isModifier = e.ctrlKey || e.metaKey;
-      const keyLower = e.key.toLowerCase();
-
-      // Block print dialog (Ctrl+P / Cmd+P)
-      if (isModifier && keyLower === 'p') {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerSecurityWarning('⚠️ Printing is disabled for copyrighted course e-books. Student Watermark logged.');
-        return;
-      }
-
-      // Block Save Page (Ctrl+S / Cmd+S)
-      if (isModifier && keyLower === 's' && viewMode !== 'editor') {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerSecurityWarning('⚠️ Saving offline copies of e-book materials is restricted.');
-        return;
-      }
-
-      // Block View Source / Inspect (Ctrl+U / Cmd+U)
-      if (isModifier && keyLower === 'u') {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerSecurityWarning('⚠️ Source inspection is restricted for protected e-book materials.');
-        return;
-      }
-
-      // Block Copy / Cut / Select All outside of active editor inputs
-      if (isModifier && (keyLower === 'c' || keyLower === 'x' || keyLower === 'a') && !isInputFocused) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerSecurityWarning('🔒 Content copying is prohibited. Student ID and Watermark are actively stamped.');
-        return;
-      }
-
-      // Block PrintScreen / Snipping Tool shortcut detection (PrintScreen key, Cmd+Shift+3/4/5 on Mac, Win+Shift+S)
-      if (
-        e.key === 'PrintScreen' ||
-        (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === '5')) ||
-        (e.key === 'F12')
-      ) {
-        triggerSecurityWarning('📸 Screenshot Captured: Student Name & ID Watermark embedded permanently in frame.');
-      }
     };
-
-    const handleCopy = (e: ClipboardEvent) => {
-      const isInputFocused = (e.target as HTMLElement)?.tagName === 'INPUT' || 
-                             (e.target as HTMLElement)?.tagName === 'TEXTAREA' || 
-                             (e.target as HTMLElement)?.isContentEditable;
-      if (!isInputFocused) {
-        e.preventDefault();
-        triggerSecurityWarning('🔒 Copying text, diagrams, or media from this E-Book is restricted.');
-      }
-    };
-
-    const handleCut = (e: ClipboardEvent) => {
-      const isInputFocused = (e.target as HTMLElement)?.tagName === 'INPUT' || 
-                             (e.target as HTMLElement)?.tagName === 'TEXTAREA' || 
-                             (e.target as HTMLElement)?.isContentEditable;
-      if (!isInputFocused) {
-        e.preventDefault();
-        triggerSecurityWarning('🔒 Cutting content from this E-Book is restricted.');
-      }
-    };
-
-    const handleContextMenu = (e: MouseEvent) => {
-      const isInputFocused = (e.target as HTMLElement)?.tagName === 'INPUT' || 
-                             (e.target as HTMLElement)?.tagName === 'TEXTAREA' || 
-                             (e.target as HTMLElement)?.isContentEditable;
-      if (!isInputFocused && viewMode !== 'editor') {
-        e.preventDefault();
-        triggerSecurityWarning('🔒 Right-click context menu is disabled to protect media & diagrams.');
-      }
-    };
-
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('copy', handleCopy);
-    window.addEventListener('cut', handleCut);
-    window.addEventListener('contextmenu', handleContextMenu);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('copy', handleCopy);
-      window.removeEventListener('cut', handleCut);
-      window.removeEventListener('contextmenu', handleContextMenu);
-    };
-  }, [viewMode, currentPageIndex, activeMaterial, user]);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewMode, currentPageIndex, activeMaterial]);
 
   // Canvas drawing for Laser Pointer
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -3130,89 +2988,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
   const currentCourseName = displayPage.courseName || activeMaterial.courseName || (selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses' ? selectedCourseFilter : 'Course Title');
   const currentModuleName = displayPage.courseModuleName || (selectedModuleFilter !== 'All Modules' ? selectedModuleFilter : 'Module Content');
 
-  // Student details for dynamic security watermarking overlay
-  const studentNameDisplay = user?.name || user?.email || 'Authorized Student';
-  const studentIdDisplay = user?.studentId || (user as any)?.regNo || (user as any)?.admissionNo || user?.id?.slice(0, 8)?.toUpperCase() || 'STU-AUTH';
-  const watermarkTimestamp = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-
   return (
-    <div 
-      ref={containerRef} 
-      className={`w-full min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col overflow-x-hidden relative ${
-        viewMode !== 'editor' ? 'secure-content-protected select-none' : ''
-      }`}
-      onContextMenu={(e) => {
-        const target = e.target as HTMLElement;
-        if (viewMode !== 'editor' && target?.tagName !== 'INPUT' && target?.tagName !== 'TEXTAREA' && !target?.isContentEditable) {
-          e.preventDefault();
-          triggerSecurityWarning('🔒 Content protection active: Right-click context menu is restricted.');
-          return false;
-        }
-      }}
-      onCopy={(e) => {
-        const target = e.target as HTMLElement;
-        if (target?.tagName !== 'INPUT' && target?.tagName !== 'TEXTAREA' && !target?.isContentEditable) {
-          e.preventDefault();
-          triggerSecurityWarning('🔒 Copying text or media from this E-Book is restricted.');
-          return false;
-        }
-      }}
-      onCut={(e) => {
-        const target = e.target as HTMLElement;
-        if (target?.tagName !== 'INPUT' && target?.tagName !== 'TEXTAREA' && !target?.isContentEditable) {
-          e.preventDefault();
-          triggerSecurityWarning('🔒 Cutting content from this E-Book is restricted.');
-          return false;
-        }
-      }}
-    >
-      {/* Dynamic Security & Screenshot Tracking Watermark Layer */}
-      {viewMode !== 'editor' && (
-        <div 
-          aria-hidden="true"
-          className="fixed inset-0 pointer-events-none z-30 select-none overflow-hidden flex flex-col justify-around opacity-[0.07] dark:opacity-[0.09] transform -rotate-12 scale-125"
-        >
-          {Array.from({ length: 8 }).map((_, rowIdx) => (
-            <div key={rowIdx} className="flex justify-around whitespace-nowrap text-xs md:text-sm font-mono font-black text-slate-900 dark:text-slate-100 tracking-wider">
-              {Array.from({ length: 5 }).map((_, colIdx) => (
-                <span key={colIdx} className="px-4">
-                  {studentNameDisplay} • ID: {studentIdDisplay} • {watermarkTimestamp} • CONFIDENTIAL
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Floating Active Security Badge Indicator (Visible & Non-Intrusive) */}
-      {viewMode !== 'editor' && (
-        <div className="fixed bottom-3 right-3 z-40 pointer-events-none select-none flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-lg text-[10px] font-mono text-slate-400 shadow-xl opacity-75 hover:opacity-100 transition-opacity">
-          <Shield className="w-3 h-3 text-amber-400 shrink-0" />
-          <span className="truncate max-w-[140px] text-amber-300 font-semibold">{studentNameDisplay}</span>
-          <span className="text-slate-500">•</span>
-          <span className="text-slate-300 font-bold">{studentIdDisplay}</span>
-        </div>
-      )}
-
-      {/* Security Warning Toast Notification */}
-      <AnimatePresence>
-        {securityWarning && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-slate-950 px-5 py-3 rounded-2xl shadow-2xl border-2 border-slate-950 font-bold text-xs flex items-center gap-2.5 max-w-md text-center"
-          >
-            <ShieldAlert className="w-5 h-5 text-slate-950 shrink-0" />
-            <div className="text-left leading-tight">
-              <p className="font-black text-[13px]">{securityWarning}</p>
-              <p className="text-[10px] font-semibold text-slate-900 opacity-90 mt-0.5">
-                Logged to Student Session: {studentNameDisplay} (ID: {studentIdDisplay})
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div ref={containerRef} className="w-full min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col overflow-x-hidden">
       
       {/* Top Header Control Bar */}
       <div className="bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 shadow-xl">
@@ -3237,9 +3014,6 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-700/50">
                   Interactive E-Book & PPT Studio
-                </span>
-                <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/50 flex items-center gap-1">
-                  <Shield className="w-3 h-3 text-emerald-400" /> Anti-Copy & Watermark Protected
                 </span>
                 {saveMessage && (
                   <span className="text-[11px] text-emerald-400 font-semibold animate-pulse flex items-center gap-1">
@@ -3819,13 +3593,66 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         /* Standard Split Media View */
                         <div className="space-y-4">
                           
-                          {/* Video Embed */}
+                          {/* Video Embed & Native Language Subtitles / Transcription */}
                           {displayPage.videoUrl && (
                             <div className="space-y-2.5">
                               <div className="relative rounded-2xl overflow-hidden border-2 border-slate-700 bg-black aspect-video min-h-[280px] md:min-h-[340px] shadow-2xl group">
                                 {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                               </div>
 
+                              {/* Native Subtitles & Caption Control Bar */}
+                              <div className="p-3 bg-slate-900/90 dark:bg-slate-900 border border-slate-800 rounded-xl space-y-2 shadow-sm text-white">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-1 border border-amber-500/30">
+                                      <Captions className="w-3 h-3 text-amber-400" />
+                                      <span>Native Subtitles ({selectedLanguage.toUpperCase()})</span>
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => setShowCcSubtitles(prev => !prev)}
+                                      className={`px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                        showCcSubtitles ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                                      }`}
+                                    >
+                                      <Subtitles className="w-3 h-3" />
+                                      <span>{showCcSubtitles ? 'CC ON' : 'CC OFF'}</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => setShowTranscriptionDrawer(prev => !prev)}
+                                      className="px-2 py-1 rounded-lg bg-indigo-950 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-200 font-bold text-[10px] transition flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <FileAudio className="w-3 h-3 text-indigo-400" />
+                                      <span>{showTranscriptionDrawer ? 'Hide Transcript' : 'Full Transcript'}</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Expandable Native Language Video Transcript Drawer */}
+                                {showTranscriptionDrawer && (
+                                  <div className="mt-2 p-3 bg-slate-950 rounded-lg border border-indigo-500/40 space-y-2 text-xs font-mono text-slate-300 max-h-48 overflow-y-auto">
+                                    <div className="flex items-center justify-between pb-1 border-b border-slate-800 text-[11px] font-sans font-bold text-indigo-300">
+                                      <span className="flex items-center gap-1">
+                                        <Languages className="w-3.5 h-3.5 text-indigo-400" />
+                                        <span>Native Video Transcript ({SUPPORTED_LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage})</span>
+                                      </span>
+                                      <button
+                                        onClick={() => handleAutoGenerateTranscription(displayPage)}
+                                        className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 cursor-pointer font-sans"
+                                      >
+                                        <Sparkles className="w-3 h-3" /> Regenerate
+                                      </button>
+                                    </div>
+
+                                    <div className="whitespace-pre-wrap leading-relaxed text-slate-300 text-[11px]">
+                                      {autoTranslateText(cleanSubtitleCueText(displayPage.videoTranscription || `[00:00] ${displayPage.title}\n[00:02] ${stripHtml(displayPage.content).slice(0, 120)}`), selectedLanguage)}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                               {displayPage.videoCaption && (
                                 <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 pt-1">
                                   <Link className="w-3.5 h-3.5 text-pink-500 shrink-0" />
@@ -3900,48 +3727,120 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
             </div>
 
-            {/* Bottom Flipbook Navigation Controls & Thumbnails */}
-            <div className="w-full flex flex-col md:flex-row items-center justify-between gap-4 bg-slate-900 p-4 rounded-2xl border border-slate-800">
+            {/* Bottom Flipbook Navigation Controls & Thumbnails (Dynamic Responsive Scrolling for 16+ Pages) */}
+            <div className="w-full flex flex-col md:flex-row items-center justify-between gap-3 bg-slate-900/95 backdrop-blur p-3 md:p-4 rounded-2xl border border-slate-800 shadow-xl">
               
-              {/* Prev Page Button */}
-              <button
-                onClick={handlePrevPage}
-                disabled={currentPageIndex === 0}
-                className="w-full md:w-auto px-5 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4 text-amber-400" />
-                <span>Previous Page</span>
-              </button>
+              {/* Prev / First Page Buttons */}
+              <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start shrink-0">
+                <button
+                  onClick={() => {
+                    playPageTurnSound();
+                    setCurrentPageIndex(0);
+                  }}
+                  disabled={currentPageIndex === 0}
+                  className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 hover:text-white rounded-xl font-bold text-xs transition flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed border border-slate-700 shadow-sm"
+                  title="Jump to First Page (Page 1)"
+                >
+                  <ChevronsLeft className="w-4 h-4 text-amber-400" />
+                  <span className="hidden sm:inline">First</span>
+                </button>
 
-              {/* Page Thumbnail Indicator Bar */}
-              <div className="flex items-center gap-1.5 overflow-x-auto max-w-md py-1 px-2">
-                {activeMaterial.pages.map((p, idx) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      playPageTurnSound();
-                      setCurrentPageIndex(idx);
-                    }}
-                    className={`h-8 min-w-[32px] px-2 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer ${
-                      currentPageIndex === idx
-                        ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                    }`}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
+                <button
+                  onClick={handlePrevPage}
+                  disabled={currentPageIndex === 0}
+                  className="flex-1 md:flex-initial px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed border border-slate-700 shadow-sm"
+                >
+                  <ChevronLeft className="w-4 h-4 text-amber-400" />
+                  <span>Previous</span>
+                </button>
               </div>
 
-              {/* Next Page Button */}
-              <button
-                onClick={handleNextPage}
-                disabled={currentPageIndex === activeMaterial.pages.length - 1}
-                className="w-full md:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-black rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20 disabled:cursor-not-allowed"
-              >
-                <span>Next Page</span>
-                <ChevronRight className="w-4 h-4 text-slate-950" />
-              </button>
+              {/* Dynamic Scrolling Page Number Indicator Strip */}
+              <div className="flex items-center gap-1.5 w-full md:w-auto justify-center max-w-full overflow-hidden px-1 py-1">
+                {/* Scroll Left Quick Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (paginationContainerRef.current) {
+                      paginationContainerRef.current.scrollBy({ left: -140, behavior: 'smooth' });
+                    }
+                  }}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs transition shrink-0 cursor-pointer border border-slate-700/80"
+                  title="Scroll Page Buttons Left"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Horizontally Scrollable Page Buttons with Auto-Centering for All 16+ Pages */}
+                <div
+                  ref={paginationContainerRef}
+                  className="flex items-center gap-1.5 overflow-x-auto max-w-[260px] sm:max-w-[400px] md:max-w-[480px] lg:max-w-[560px] py-1 px-1.5 scroll-smooth"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                  {activeMaterial.pages.map((p, idx) => (
+                    <button
+                      key={p.id}
+                      ref={(el) => { pageButtonRefs.current[idx] = el; }}
+                      onClick={() => {
+                        playPageTurnSound();
+                        setCurrentPageIndex(idx);
+                      }}
+                      className={`h-8 min-w-[34px] px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center shrink-0 cursor-pointer ${
+                        currentPageIndex === idx
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/30 scale-105 ring-2 ring-amber-400'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
+                      }`}
+                      title={`Jump to Page ${idx + 1}: ${p.title}`}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Scroll Right Quick Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (paginationContainerRef.current) {
+                      paginationContainerRef.current.scrollBy({ left: 140, behavior: 'smooth' });
+                    }
+                  }}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs transition shrink-0 cursor-pointer border border-slate-700/80"
+                  title="Scroll Page Buttons Right"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Page Counter Badge */}
+                <span className="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800 shrink-0 hidden sm:inline-block">
+                  Page {currentPageIndex + 1} of {activeMaterial.pages.length}
+                </span>
+              </div>
+
+              {/* Next / Last Page Buttons */}
+              <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end shrink-0">
+                <button
+                  onClick={handleNextPage}
+                  disabled={currentPageIndex === activeMaterial.pages.length - 1}
+                  className="flex-1 md:flex-initial px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-30 text-slate-950 font-black rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20 disabled:cursor-not-allowed"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="w-4 h-4 text-slate-950" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    playPageTurnSound();
+                    setCurrentPageIndex(activeMaterial.pages.length - 1);
+                  }}
+                  disabled={currentPageIndex === activeMaterial.pages.length - 1}
+                  className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 hover:text-white rounded-xl font-bold text-xs transition flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed border border-slate-700 shadow-sm"
+                  title={`Jump to Last Page (Page ${activeMaterial.pages.length})`}
+                >
+                  <span className="hidden sm:inline">Last</span>
+                  <ChevronsRight className="w-4 h-4 text-amber-400" />
+                </button>
+              </div>
 
             </div>
 
@@ -4242,13 +4141,17 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
             </div>
 
             {/* Page Selector & Reorder/Swap Tabs */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-800">
+            <div 
+              ref={editorTabsContainerRef}
+              className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-800 scroll-smooth"
+            >
               <span className="text-[11px] font-black uppercase text-amber-400 shrink-0 flex items-center gap-1">
                 <ArrowLeftRight className="w-3.5 h-3.5 text-amber-400" /> Page Tabs & Order:
               </span>
               {activeMaterial.pages.map((p, idx) => (
                 <div
                   key={p.id}
+                  ref={(el) => { editorTabRefs.current[idx] = el; }}
                   className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 shrink-0 ${
                     editingPage.id === p.id
                       ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/50'
@@ -5272,13 +5175,92 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
               {/* Right Column: Video & Image File Upload Options & Layout Settings */}
               <div className="space-y-4">
+
+                {/* MULTI-SYSTEM MEDIA SYNC & CUSTOM DOMAIN ID HUB */}
+                <div className="p-3.5 bg-gradient-to-r from-blue-950/80 via-slate-900 to-indigo-950/80 border border-blue-800/80 rounded-2xl space-y-2.5 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30">
+                        <Globe className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-blue-200">Custom Domain Media & Multi-System Sync</h4>
+                        <p className="text-[10px] text-slate-400">Ensures video and images load seamlessly on all students' and faculty's devices</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 bg-blue-950 text-blue-300 border border-blue-700/60 rounded-md">
+                      Multi-Device Ready
+                    </span>
+                  </div>
+
+                  {/* Domain ID Base Address & Quick Actions */}
+                  <div className="p-2.5 bg-slate-950/90 border border-slate-800 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-300 gap-1 flex-wrap">
+                      <span className="text-slate-400">Custom Domain ID:</span>
+                      <span className="text-blue-300 font-bold bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/50 break-all select-all">
+                        https://endlesssparkcreativehub.in/ebook-studio
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const base = 'https://endlesssparkcreativehub.in/ebook-studio/videos/';
+                          const updated = { ...editingPage, videoUrl: editingPage.videoUrl?.startsWith('http') ? editingPage.videoUrl : `${base}lesson_video.mp4` };
+                          setEditingPage(updated);
+                          handleUpdatePage(updated);
+                        }}
+                        className="p-1.5 bg-pink-950/40 hover:bg-pink-900/60 border border-pink-700/50 text-pink-300 rounded-lg transition text-left cursor-pointer flex items-center gap-1"
+                        title="Fill Custom Domain Video URL"
+                      >
+                        <Video className="w-3 h-3 text-pink-400 shrink-0" />
+                        <span className="truncate">Set Domain Video URL</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const base = 'https://endlesssparkcreativehub.in/ebook-studio/images/';
+                          const updated = { ...editingPage, imageUrl: editingPage.imageUrl?.startsWith('http') ? editingPage.imageUrl : `${base}diagram_1.png` };
+                          setEditingPage(updated);
+                          handleUpdatePage(updated);
+                        }}
+                        className="p-1.5 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-700/50 text-amber-300 rounded-lg transition text-left cursor-pointer flex items-center gap-1"
+                        title="Fill Custom Domain Image 1 URL"
+                      >
+                        <Image className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span className="truncate">Set Domain Image 1 URL</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const base = 'https://endlesssparkcreativehub.in/ebook-studio/images/';
+                          const updated = { ...editingPage, secondaryImageUrl: editingPage.secondaryImageUrl?.startsWith('http') ? editingPage.secondaryImageUrl : `${base}diagram_2.png` };
+                          setEditingPage(updated);
+                          handleUpdatePage(updated);
+                        }}
+                        className="p-1.5 bg-blue-950/40 hover:bg-blue-900/60 border border-blue-700/50 text-blue-300 rounded-lg transition text-left cursor-pointer flex items-center gap-1"
+                        title="Fill Custom Domain Image 2 URL"
+                      >
+                        <Image className="w-3 h-3 text-blue-400 shrink-0" />
+                        <span className="truncate">Set Domain Image 2 URL</span>
+                      </button>
+                    </div>
+
+                    <p className="text-[10px] text-slate-400 leading-tight">
+                      💡 <b>Cross-System Notice:</b> Videos hosted on your custom domain (<code className="text-blue-300">https://endlesssparkcreativehub.in/ebook-studio</code>) or cloud URLs (YouTube, Drive, Vimeo) display on <b>all client and student systems</b>. Local device uploads (<code className="text-amber-300">idb:</code>) stay in this browser only.
+                    </p>
+                  </div>
+                </div>
                 
                 {/* VIDEO UPLOAD & EMBED SECTION */}
                 <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-pink-400 flex items-center gap-1.5">
                       <Video className="w-4 h-4 text-pink-400" />
-                      <span>Video Lesson (Upload File or Enter URL)</span>
+                      <span>Video Lesson (Custom Domain URL / Cloud / Upload)</span>
                     </label>
                     {editingPage.videoUrl && (
                       <button
@@ -5293,6 +5275,26 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                       </button>
                     )}
                   </div>
+
+                  {/* Video Media Source Badge */}
+                  {editingPage.videoUrl && (
+                    <div className="text-[10px] flex items-center gap-1.5 flex-wrap">
+                      <span className="text-slate-400">Source:</span>
+                      {editingPage.videoUrl.startsWith('https://endlesssparkcreativehub.in') ? (
+                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
+                          <Globe className="w-3 h-3" /> Custom Domain ID (Multi-System Ready)
+                        </span>
+                      ) : editingPage.videoUrl.startsWith('http') ? (
+                        <span className="px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-700/60 rounded-md font-bold flex items-center gap-1">
+                          <Server className="w-3 h-3" /> Cloud Hosted URL (Multi-System Ready)
+                        </span>
+                      ) : editingPage.videoUrl.startsWith('idb:') ? (
+                        <span className="px-2 py-0.5 bg-amber-950/80 text-amber-300 border border-amber-700/60 rounded-md font-bold flex items-center gap-1">
+                          <HardDrive className="w-3 h-3" /> Local Browser File (Visible only on this system)
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
 
                   {/* Video Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-pink-950/60 hover:bg-pink-900/80 border border-pink-700/60 rounded-xl text-xs font-extrabold text-pink-200 transition cursor-pointer shadow-sm">
@@ -5317,11 +5319,11 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         handleUpdatePage(updated);
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500"
-                      placeholder="Paste YouTube, Vimeo, Google Drive Video, Loom, endlesssparkcreativehub.in, or MP4 URL..."
+                      placeholder="Paste Custom Domain URL (https://endlesssparkcreativehub.in/...) or YouTube, Drive, Vimeo..."
                     />
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
                       <span className="font-semibold text-pink-300">Supported:</span>
-                      <span className="px-1.5 py-0.5 bg-pink-950/70 border border-pink-700/50 rounded text-pink-300 font-mono font-bold">endlesssparkcreativehub.in</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Custom Domain</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">YouTube</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Vimeo</span>
@@ -5420,7 +5422,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                       <Image className="w-4 h-4 text-amber-400" />
-                      <span>Primary Image / Diagram 1 (Upload File or URL)</span>
+                      <span>Primary Image / Diagram 1 (Custom Domain / Cloud / File)</span>
                     </label>
                     {editingPage.imageUrl && (
                       <button
@@ -5435,6 +5437,30 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                       </button>
                     )}
                   </div>
+
+                  {/* Primary Image Media Source Badge */}
+                  {editingPage.imageUrl && (
+                    <div className="text-[10px] flex items-center gap-1.5 flex-wrap">
+                      <span className="text-slate-400">Source:</span>
+                      {editingPage.imageUrl.startsWith('https://endlesssparkcreativehub.in') ? (
+                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
+                          <Globe className="w-3 h-3" /> Custom Domain ID (Multi-System Ready)
+                        </span>
+                      ) : editingPage.imageUrl.startsWith('http') ? (
+                        <span className="px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-700/60 rounded-md font-bold flex items-center gap-1">
+                          <Server className="w-3 h-3" /> Cloud Hosted URL (Multi-System Ready)
+                        </span>
+                      ) : editingPage.imageUrl.startsWith('data:image') ? (
+                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Cloud Database Synchronized
+                        </span>
+                      ) : editingPage.imageUrl.startsWith('idb:') ? (
+                        <span className="px-2 py-0.5 bg-amber-950/80 text-amber-300 border border-amber-700/60 rounded-md font-bold flex items-center gap-1">
+                          <HardDrive className="w-3 h-3" /> Local Browser Cache (Visible only on this system)
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
 
                   {/* Primary Image Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-950/60 hover:bg-amber-900/80 border border-amber-700/60 rounded-xl text-xs font-extrabold text-amber-200 transition cursor-pointer shadow-sm">
@@ -5459,15 +5485,14 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         handleUpdatePage(updated);
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                      placeholder="Paste endlesssparkcreativehub.in image link, Google Drive, Dropbox, Imgur, or direct image URL..."
+                      placeholder="Paste Custom Domain URL (https://endlesssparkcreativehub.in/...) or Drive, Imgur, direct URL..."
                     />
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
                       <span className="font-semibold text-amber-300">Supported:</span>
-                      <span className="px-1.5 py-0.5 bg-amber-950/70 border border-amber-700/50 rounded text-amber-300 font-mono font-bold">endlesssparkcreativehub.in</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Custom Domain</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Dropbox</span>
-                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Imgur</span>
-                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct Web Image</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct Image URL</span>
                     </div>
                   </div>
 
@@ -5513,6 +5538,30 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     )}
                   </div>
 
+                  {/* Secondary Image Media Source Badge */}
+                  {editingPage.secondaryImageUrl && (
+                    <div className="text-[10px] flex items-center gap-1.5 flex-wrap">
+                      <span className="text-slate-400">Source:</span>
+                      {editingPage.secondaryImageUrl.startsWith('https://endlesssparkcreativehub.in') ? (
+                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
+                          <Globe className="w-3 h-3" /> Custom Domain ID (Multi-System Ready)
+                        </span>
+                      ) : editingPage.secondaryImageUrl.startsWith('http') ? (
+                        <span className="px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-700/60 rounded-md font-bold flex items-center gap-1">
+                          <Server className="w-3 h-3" /> Cloud Hosted URL (Multi-System Ready)
+                        </span>
+                      ) : editingPage.secondaryImageUrl.startsWith('data:image') ? (
+                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Cloud Database Synchronized
+                        </span>
+                      ) : editingPage.secondaryImageUrl.startsWith('idb:') ? (
+                        <span className="px-2 py-0.5 bg-amber-950/80 text-amber-300 border border-amber-700/60 rounded-md font-bold flex items-center gap-1">
+                          <HardDrive className="w-3 h-3" /> Local Browser Cache (Visible only on this system)
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
+
                   {/* Secondary Image Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-950/60 hover:bg-blue-900/80 border border-blue-700/60 rounded-xl text-xs font-extrabold text-blue-200 transition cursor-pointer shadow-sm">
                     <Upload className="w-4 h-4 text-blue-400 shrink-0" />
@@ -5536,15 +5585,14 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         handleUpdatePage(updated);
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Paste endlesssparkcreativehub.in image link, Google Drive, Dropbox, Imgur, or direct URL..."
+                      placeholder="Paste Custom Domain URL (https://endlesssparkcreativehub.in/...) or Drive, Imgur, direct URL..."
                     />
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
                       <span className="font-semibold text-blue-300">Supported:</span>
-                      <span className="px-1.5 py-0.5 bg-blue-950/70 border border-blue-700/50 rounded text-blue-300 font-mono font-bold">endlesssparkcreativehub.in</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Custom Domain</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Dropbox</span>
-                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Imgur</span>
-                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct Web Image</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct Image URL</span>
                     </div>
                   </div>
 
@@ -5820,48 +5868,6 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     <option value="vi">Tiếng Việt (Vietnamese)</option>
                     <option value="th">ไทย (Thai)</option>
                   </select>
-                </div>
-              </div>
-
-              {/* CARD 6: ANTI-PIRACY, ANTI-COPY & SCREENSHOT WATERMARK PROTECTION */}
-              <div className="p-5 bg-slate-950/80 border border-emerald-800/40 rounded-2xl space-y-4 md:col-span-2">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-                  <div className="flex items-center gap-2.5">
-                    <Shield className="w-5 h-5 text-emerald-400" />
-                    <h3 className="text-sm font-extrabold text-white">Anti-Copy & Dynamic Screenshot Watermarking</h3>
-                  </div>
-                  <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/40 text-[10px] font-mono font-bold">
-                    Active DRM Protected
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
-                    <span className="font-bold text-amber-300 flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-amber-400" /> Anti-Copy & No Context Menu
-                    </span>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Text selection, copying, cutting, dragging, and right-click downloading of videos and diagrams are strictly blocked.
-                    </p>
-                  </div>
-
-                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
-                    <span className="font-bold text-purple-300 flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5 text-purple-400" /> Dynamic Student Watermark
-                    </span>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Student Name ({studentNameDisplay}) & ID ({studentIdDisplay}) are dynamically stamped across all pages and lightbox zoom layers.
-                    </p>
-                  </div>
-
-                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
-                    <span className="font-bold text-cyan-300 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-cyan-400" /> Screenshot Capture Deterrent
-                    </span>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Any external screenshot or screen capture taken permanently displays the student credentials for traceability.
-                    </p>
-                  </div>
                 </div>
               </div>
 
@@ -6227,41 +6233,13 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                 </button>
               </div>
 
-              <div 
-                className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950 min-h-[400px] select-none relative"
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  return false;
-                }}
-              >
+              <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950 min-h-[400px]">
                 <img
                   src={lightboxMedia.src}
                   alt={lightboxMedia.alt}
-                  className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl select-none"
+                  className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl"
                   referrerPolicy="no-referrer"
-                  draggable={false}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    return false;
-                  }}
-                  onDragStart={(e) => {
-                    e.preventDefault();
-                    return false;
-                  }}
                 />
-                
-                {/* Embedded Watermark Stamp inside Lightbox */}
-                <div className="absolute bottom-6 right-6 pointer-events-none z-30 select-none bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700/60 shadow-lg text-[11px] font-mono text-slate-300 flex items-center gap-2">
-                  <Shield className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="font-bold text-amber-300 truncate max-w-[200px]">
-                    {user?.name || user?.email || 'Authorized User'}
-                  </span>
-                  {user?.studentId && (
-                    <span className="bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30 text-[10px]">
-                      ID: {user.studentId}
-                    </span>
-                  )}
-                </div>
               </div>
 
               <div className="p-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">

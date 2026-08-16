@@ -1,9 +1,5 @@
-import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
-import { doc, setDoc, getDoc, collection, writeBatch } from 'firebase/firestore';
-import { storage, db } from '../firebase';
-
-// IndexedDB & Firebase Storage / Firestore Cloud Store for Video/Image Media Uploads
-// Solves Firestore ~1MB document limit, provides Firebase Storage persistence and cross-device sync.
+// IndexedDB & Local Storage Resilient Store for Video/Image Media Uploads
+// Solves Firestore ~1MB document limit and provides instant offline media playback.
 
 const IDB_NAME_V2 = 'FlipbookStudio_MediaStore_v2';
 const IDB_NAME_V1 = 'FlipbookStudio_MediaStore';
@@ -530,18 +526,18 @@ function openDB(dbName = IDB_NAME_V2): Promise<IDBDatabase> {
 }
 
 /**
- * Converts an image file to an optimized, high-resolution Base64 Data URL (JPEG / PNG / WebP / SVG)
- * Allows images to be stored directly in Firestore / localStorage and loaded instantaneously.
+ * Converts an image file to an optimized, high-resolution Base64 Data URL (JPEG / PNG / WebP)
+ * This allows images to be stored directly and loaded instantaneously without async delay.
  */
-export function fileToDataUrl(file: File, maxDimension = 1280, quality = 0.82): Promise<string> {
+export function fileToDataUrl(file: File, maxDimension = 1600, quality = 0.88): Promise<string> {
   return new Promise((resolve) => {
     if (!file) {
       resolve('');
       return;
     }
 
-    // For SVG or small files (< 200KB), read directly as data URL without canvas conversion
-    if (file.type === 'image/svg+xml' || file.size < 200 * 1024) {
+    // For SVG or small files (< 350KB), read directly as data URL without compression
+    if (file.type === 'image/svg+xml' || file.size < 350 * 1024) {
       const reader = new FileReader();
       reader.onload = () => resolve((reader.result as string) || '');
       reader.onerror = () => resolve('');
@@ -549,10 +545,9 @@ export function fileToDataUrl(file: File, maxDimension = 1280, quality = 0.82): 
       return;
     }
 
-    // For larger PNG / JPG / WebP images, downscale gracefully on canvas to maintain high visual clarity while keeping payload under 180KB
+    // For larger PNG / JPG / WebP images, downscale gracefully on canvas to maintain high quality while keeping payload < 300KB
     const reader = new FileReader();
     reader.onload = (e) => {
-      const rawResult = (e.target?.result as string) || '';
       const img = document.createElement('img');
       img.onload = () => {
         let width = img.naturalWidth || img.width;
@@ -573,20 +568,19 @@ export function fileToDataUrl(file: File, maxDimension = 1280, quality = 0.82): 
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          resolve(rawResult);
+          resolve((e.target?.result as string) || '');
           return;
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        // Default to JPEG with quality 0.82 for guaranteed small payload (~90KB-180KB) unless it is a small PNG with transparency
-        const outputMime = 'image/jpeg';
+        const outputMime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
         const dataUrl = canvas.toDataURL(outputMime, quality);
-        resolve(dataUrl || rawResult);
+        resolve(dataUrl);
       };
       img.onerror = () => {
-        resolve(rawResult);
+        resolve((e.target?.result as string) || '');
       };
-      img.src = rawResult;
+      img.src = (e.target?.result as string) || '';
     };
     reader.onerror = () => resolve('');
     reader.readAsDataURL(file);
@@ -645,7 +639,7 @@ export async function saveMediaToIDB(key: string, data: File | Blob | string | A
 }
 
 /**
- * Retrieve a video/image Object URL or Data URL from IndexedDB / Memory / LocalStorage / Firestore Cloud Chunks
+ * Retrieve a video/image Object URL or Data URL from IndexedDB / Memory / LocalStorage
  */
 export async function getMediaFromIDB(key: string): Promise<string | null> {
   const cleanKey = key.startsWith('idb:') ? key.replace('idb:', '') : key;
@@ -666,9 +660,9 @@ export async function getMediaFromIDB(key: string): Promise<string | null> {
 
   // 3. Check IndexedDB store
   try {
-    const dbInstance = await openDB();
-    const idbResult = await new Promise<string | null>((resolve) => {
-      const tx = dbInstance.transaction(IDB_STORE, 'readonly');
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
       const store = tx.objectStore(IDB_STORE);
       const req = store.get(cleanKey);
 
@@ -698,150 +692,9 @@ export async function getMediaFromIDB(key: string): Promise<string | null> {
 
       req.onerror = () => resolve(null);
     });
-
-    if (idbResult) return idbResult;
   } catch (err) {
-    console.warn('IDB lookup notice for key:', cleanKey, err);
+    console.warn('getMediaFromIDB error:', err);
+    return null;
   }
-
-  // 4. Cloud Fallback: Check if media was uploaded to Firestore chunk collection (`course_flipbook_media`)
-  try {
-    const mediaDocRef = doc(db, 'course_flipbook_media', cleanKey);
-    const snap = await getDoc(mediaDocRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      if (data && data.url) {
-        GLOBAL_MEDIA_CACHE.set(cleanKey, data.url);
-        return data.url;
-      }
-      if (data && data.dataUrl) {
-        GLOBAL_MEDIA_CACHE.set(cleanKey, data.dataUrl);
-        // Cache to IDB for future instant retrieval
-        saveMediaToIDB(cleanKey, data.dataUrl).catch(() => {});
-        return data.dataUrl;
-      }
-      if (data && Array.isArray(data.chunks)) {
-        const assembled = data.chunks.join('');
-        GLOBAL_MEDIA_CACHE.set(cleanKey, assembled);
-        saveMediaToIDB(cleanKey, assembled).catch(() => {});
-        return assembled;
-      }
-    }
-  } catch (cloudErr) {
-    console.warn('Firestore media doc lookup notice:', cloudErr);
-  }
-
-  return null;
-}
-
-/**
- * Upload a File or Blob directly to Firebase Storage.
- * If Storage is available, returns the public secure https:// download URL.
- * If Storage has bucket/network restrictions, seamlessly falls back to storing in Firestore `course_flipbook_media`.
- */
-export async function uploadMediaToFirebase(
-  file: File | Blob,
-  pathOrKey: string,
-  onProgress?: (progressPercent: number) => void
-): Promise<string> {
-  const cleanKey = pathOrKey.startsWith('idb:') ? pathOrKey.replace('idb:', '') : pathOrKey;
-
-  // 1. Immediately cache in IDB and local memory for instant zero-latency UI display
-  await saveMediaToIDB(cleanKey, file);
-
-  // 2. Attempt primary upload to Firebase Storage
-  try {
-    const fileExtension = file instanceof File ? (file.name.split('.').pop() || 'bin') : 'bin';
-    const storagePath = `flipbooks/${cleanKey}_${Date.now()}.${fileExtension}`;
-    const storageRef = ref(storage, storagePath);
-
-    const contentType = file.type || (file instanceof File ? file.type : 'application/octet-stream');
-    const metadata = { contentType };
-
-    const uploadTask = uploadBytesResumable(storageRef, file, metadata);
-
-    const downloadUrl = await new Promise<string>((resolve, reject) => {
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          if (snapshot.totalBytes > 0 && onProgress) {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            onProgress(Math.round(progress));
-          }
-        },
-        (error) => {
-          console.warn('Firebase Storage upload warning, falling back to Firestore Cloud Media:', error.message);
-          reject(error);
-        },
-        async () => {
-          try {
-            const url = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(url);
-          } catch (e) {
-            reject(e);
-          }
-        }
-      );
-    });
-
-    if (downloadUrl) {
-      GLOBAL_MEDIA_CACHE.set(cleanKey, downloadUrl);
-      // Also register download URL in Firestore course_flipbook_media for cross-reference
-      try {
-        await setDoc(doc(db, 'course_flipbook_media', cleanKey), {
-          key: cleanKey,
-          url: downloadUrl,
-          type: contentType,
-          createdAt: new Date().toISOString(),
-        });
-      } catch (_) {}
-      return downloadUrl;
-    }
-  } catch (storageErr) {
-    console.warn('Firebase Storage direct upload notice:', storageErr);
-  }
-
-  // 3. Fallback: Save to Firestore `course_flipbook_media` chunked documents
-  try {
-    let dataUrl = '';
-    if (typeof file === 'string') {
-      dataUrl = file;
-    } else if (file.type.startsWith('image/')) {
-      dataUrl = await fileToDataUrl(file as File, 1600, 0.85);
-    } else {
-      // For video or other blobs, read as Base64 Data URL
-      dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string) || '');
-        reader.onerror = () => resolve('');
-        reader.readAsDataURL(file);
-      });
-    }
-
-    if (dataUrl) {
-      GLOBAL_MEDIA_CACHE.set(cleanKey, dataUrl);
-
-      // Break into <=600KB chunks to stay well below Firestore 1MB document limit
-      const chunkSize = 600 * 1024;
-      const chunks: string[] = [];
-      for (let i = 0; i < dataUrl.length; i += chunkSize) {
-        chunks.push(dataUrl.substring(i, i + chunkSize));
-      }
-
-      await setDoc(doc(db, 'course_flipbook_media', cleanKey), {
-        key: cleanKey,
-        chunks,
-        type: file.type || 'media',
-        size: dataUrl.length,
-        createdAt: new Date().toISOString(),
-      });
-
-      return `idb:${cleanKey}`;
-    }
-  } catch (fsErr) {
-    console.error('Firestore cloud media fallback save error:', fsErr);
-  }
-
-  return `idb:${cleanKey}`;
 }
 

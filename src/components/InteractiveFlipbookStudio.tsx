@@ -14,63 +14,12 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { formatCourseName } from '../utils';
-import { CourseModule } from '../types';
+import { CourseModule, FlipbookPage, FlipbookMaterial } from '../types';
 import { saveMediaToIDB, getMediaFromIDB, fileToDataUrl, getFallbackImageForTopic, FALLBACK_SAMPLE_VIDEOS } from '../utils/mediaStore';
 import { generateGeminiContent } from '../services/gemini';
+import { DEFAULT_FLIPBOOKS } from '../data/defaultFlipbooks';
 
-export interface FlipbookPage {
-  id: string;
-  pageNumber: number;
-  title: string;
-  subtitle?: string;
-  content: string;
-  isCustomEdited?: boolean;
-  contentFontFamily?: string;
-  contentFontSize?: string;
-  contentTextColor?: string;
-  contentFontStyle?: string;
-  contentTextAlign?: 'left' | 'center' | 'right' | 'justify';
-  pageBackgroundColor?: string;
-  translations?: Record<string, { 
-    title?: string; 
-    subtitle?: string; 
-    content?: string; 
-    calloutText?: string; 
-    imageCaption?: string; 
-    secondaryImageCaption?: string; 
-    videoCaption?: string; 
-    videoTranscription?: string 
-  }>;
-  mediaType?: 'none' | 'image' | 'video' | 'both';
-  imageUrl?: string;
-  imageCaption?: string;
-  secondaryImageUrl?: string;
-  secondaryImageCaption?: string;
-  videoUrl?: string;
-  videoCaption?: string;
-  videoTranscription?: string;
-  mediaSwapOrder?: 'video-first' | 'image-first';
-  layoutStyle?: 'split-left' | 'split-right' | 'media-top' | 'media-bottom' | 'text-only' | 'media-hero' | 'grid-2x2' | 'grid-bento' | 'grid-right-2-images' | 'grid-2-images' | 'grid-right-video-image' | 'grid-right-media-swap';
-  calloutText?: string;
-  bgTheme?: 'classic-paper' | 'dark-studio' | 'clean-white' | 'blueprint' | 'golden-aged';
-  courseName?: string;
-  courseModuleId?: string;
-  courseModuleName?: string;
-  exerciseFilePath?: string;
-  exerciseTitle?: string;
-}
-
-export interface FlipbookMaterial {
-  id: string;
-  title: string;
-  description: string;
-  courseName?: string;
-  courseCategory: string;
-  author: string;
-  coverImageUrl?: string;
-  pages: FlipbookPage[];
-  updatedAt: string;
-}
+export type { FlipbookPage, FlipbookMaterial };
 
 // Course Modules List for Exercise Linking
 export const COURSE_MODULES: { id: string; name: string; code: string }[] = [];
@@ -579,8 +528,6 @@ export function autoTranslateText(text: string, targetLangCode: string): string 
   return translatedParts.join('');
 }
 
-import { DEFAULT_FLIPBOOKS } from '../data/defaultFlipbooks';
-
 export interface InteractiveFlipbookStudioProps {
   initialMaterial?: FlipbookMaterial;
   courseCategory?: string;
@@ -644,17 +591,19 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
     const set = new Set<string>();
     set.add('All Course Titles');
-    configuredCourses.forEach(c => set.add(c.title));
-    dbModules.forEach(mod => {
-      if (mod.category) {
-        const matchedConfig = configuredCourses.find(c => c.courseId === mod.category);
+    (configuredCourses || []).forEach(c => {
+      if (c?.title) set.add(c.title);
+    });
+    (dbModules || []).forEach(mod => {
+      if (mod?.category) {
+        const matchedConfig = (configuredCourses || []).find(c => c?.courseId === mod.category);
         set.add(matchedConfig ? matchedConfig.title : formatCourseName(mod.category));
       }
     });
-    DEFAULT_FLIPBOOKS.forEach(m => {
-      if (m.courseName) set.add(m.courseName);
-      if (m.courseCategory) {
-        const matchedConfig = configuredCourses.find(c => c.courseId === m.courseCategory);
+    (DEFAULT_FLIPBOOKS || []).forEach(m => {
+      if (m?.courseName) set.add(m.courseName);
+      if (m?.courseCategory) {
+        const matchedConfig = (configuredCourses || []).find(c => c?.courseId === m.courseCategory);
         set.add(matchedConfig ? matchedConfig.title : formatCourseName(m.courseCategory));
       }
     });
@@ -681,8 +630,16 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [viewMode, setViewMode] = useState<'flipbook' | 'presentation' | 'editor' | 'grid-overview' | 'settings'>('flipbook');
   
   // Materials List & Active Material
-  const [materials, setMaterials] = useState<FlipbookMaterial[]>(DEFAULT_FLIPBOOKS);
-  const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(initialMaterial || DEFAULT_FLIPBOOKS[0]);
+  const [materials, setMaterials] = useState<FlipbookMaterial[]>(() => DEFAULT_FLIPBOOKS || []);
+  const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(() => initialMaterial || (DEFAULT_FLIPBOOKS && DEFAULT_FLIPBOOKS[0]) || {
+    id: 'default-fallback',
+    title: 'Diploma in Production Art Engineer',
+    description: 'Faculty master curriculum handbook',
+    courseCategory: 'production-art-engineer',
+    author: 'Endless School of Printing and Packaging',
+    pages: [],
+    updatedAt: new Date().toISOString()
+  });
 
   // Resolve student assigned native language
   const studentAssignedNativeLang = React.useMemo(() => {
@@ -945,19 +902,20 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
   // Auto Page Turn Slideshow Effect
   useEffect(() => {
-    if (!isAutoFlipping || autoFlipInterval <= 0) return;
+    const pageCount = activeMaterial?.pages?.length || 0;
+    if (!isAutoFlipping || autoFlipInterval <= 0 || pageCount === 0) return;
     const timer = setInterval(() => {
-      setCurrentPageIndex(prev => (prev < activeMaterial.pages.length - 1 ? prev + 1 : 0));
+      setCurrentPageIndex(prev => (prev < pageCount - 1 ? prev + 1 : 0));
     }, autoFlipInterval * 1000);
     return () => clearInterval(timer);
-  }, [isAutoFlipping, autoFlipInterval, activeMaterial.pages.length]);
+  }, [isAutoFlipping, autoFlipInterval, activeMaterial?.pages?.length]);
 
   // TTS Auto-Read Page Narration Effect
   useEffect(() => {
     if (!ttsAutoRead) return;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const currentPageObj = activeMaterial.pages[currentPageIndex];
+      const currentPageObj = activeMaterial?.pages?.[currentPageIndex];
       if (currentPageObj) {
         const textToRead = `${currentPageObj.title}. ${stripHtml(currentPageObj.content || '')}`;
         const utterance = new SpeechSynthesisUtterance(textToRead);
@@ -965,7 +923,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         window.speechSynthesis.speak(utterance);
       }
     }
-  }, [currentPageIndex, ttsAutoRead, ttsRate, activeMaterial.pages]);
+  }, [currentPageIndex, ttsAutoRead, ttsRate, activeMaterial?.pages]);
 
   // "How to Create E-Books" Modal Guide State
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
@@ -1126,7 +1084,13 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   }, [filteredMaterials, activeMaterial?.id]);
 
   // Current Active Page
-  const currentPage = activeMaterial.pages[currentPageIndex] || activeMaterial.pages[0];
+  const currentPage = activeMaterial?.pages?.[currentPageIndex] || activeMaterial?.pages?.[0] || {
+    id: 'placeholder-p1',
+    pageNumber: 1,
+    title: 'Fundamental of colour',
+    content: '<p>Loading curriculum contents...</p>',
+    bgTheme: 'classic-paper' as const
+  };
 
   // Language translated strings generator
   const getTranslatedPage = (page: FlipbookPage, langCode: string) => {
@@ -3932,33 +3896,6 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                       {/* IF LAYOUT IS DYNAMIC SWAP VIDEO & IMAGE GRID (Stacked Top & Bottom with Dynamic Swapping) */}
                       {(displayPage.layoutStyle === 'grid-right-video-image' || displayPage.layoutStyle === 'grid-right-media-swap') ? (
                         <div className="space-y-3.5">
-                          {/* Dynamic Swap Control Bar */}
-                          <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 px-3 shadow-md">
-                            <div className="flex items-center gap-2">
-                              <span className="p-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                <Layers className="w-3.5 h-3.5" />
-                              </span>
-                              <div>
-                                <span className="text-[11px] font-black uppercase tracking-wider text-amber-300 block">
-                                  Right-Side Dynamic Media Grid
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-semibold block">
-                                  {displayPage.mediaSwapOrder === 'image-first' ? '🖼️ Diagram (Top) • 🎬 Video (Bottom)' : '🎬 Video (Top) • 🖼️ Diagram (Bottom)'}
-                                </span>
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => handleToggleMediaSwap(displayPage)}
-                              className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 border border-amber-300/40 shrink-0"
-                              title="Click to dynamically swap positions of Video and Image on the right side"
-                            >
-                              <ArrowUpDown className="w-3.5 h-3.5 text-slate-950" />
-                              <span>Swap {displayPage.mediaSwapOrder === 'image-first' ? 'Video to Top 🎬' : 'Image to Top 🖼️'}</span>
-                            </button>
-                          </div>
-
                           {/* Render Stacked Cards according to mediaSwapOrder */}
                           <div className="flex flex-col gap-3.5">
                             {/* Card 1 (Top Card) */}
@@ -3968,16 +3905,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                                 <div className="flex items-center justify-between pb-1 border-b border-slate-800">
                                   <span className="text-[11px] font-extrabold uppercase text-amber-300 flex items-center gap-1.5">
                                     <Image className="w-3.5 h-3.5 text-amber-400" />
-                                    <span>Top Item: {displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
+                                    <span>{displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleMediaSwap(displayPage)}
-                                    className="text-[10px] text-amber-400 hover:text-amber-200 font-bold flex items-center gap-1 cursor-pointer bg-slate-950 px-2 py-0.5 rounded border border-slate-800"
-                                    title="Swap to Bottom"
-                                  >
-                                    <ArrowUpDown className="w-3 h-3" /> Move Down
-                                  </button>
                                 </div>
                                 <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[190px] max-h-[300px] flex items-center justify-center p-2">
                                   <SafeImage 
@@ -4003,16 +3932,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                                 <div className="flex items-center justify-between pb-1 border-b border-slate-800">
                                   <span className="text-[11px] font-extrabold uppercase text-pink-300 flex items-center gap-1.5">
                                     <Video className="w-3.5 h-3.5 text-pink-400" />
-                                    <span>Top Item: {displayPage.videoCaption || 'Demonstration Video'}</span>
+                                    <span>{displayPage.videoCaption || 'Demonstration Video'}</span>
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleMediaSwap(displayPage)}
-                                    className="text-[10px] text-pink-400 hover:text-pink-200 font-bold flex items-center gap-1 cursor-pointer bg-slate-950 px-2 py-0.5 rounded border border-slate-800"
-                                    title="Swap to Bottom"
-                                  >
-                                    <ArrowUpDown className="w-3 h-3" /> Move Down
-                                  </button>
                                 </div>
                                 <div className="rounded-xl overflow-hidden border border-slate-800 bg-black aspect-video min-h-[190px] max-h-[300px]">
                                   {renderVideoPlayer(displayPage.videoUrl || FALLBACK_SAMPLE_VIDEOS[0]?.url, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
@@ -4033,16 +3954,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                                 <div className="flex items-center justify-between pb-1 border-b border-slate-800">
                                   <span className="text-[11px] font-extrabold uppercase text-pink-300 flex items-center gap-1.5">
                                     <Video className="w-3.5 h-3.5 text-pink-400" />
-                                    <span>Bottom Item: {displayPage.videoCaption || 'Demonstration Video'}</span>
+                                    <span>{displayPage.videoCaption || 'Demonstration Video'}</span>
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleMediaSwap(displayPage)}
-                                    className="text-[10px] text-pink-400 hover:text-pink-200 font-bold flex items-center gap-1 cursor-pointer bg-slate-950 px-2 py-0.5 rounded border border-slate-800"
-                                    title="Swap to Top"
-                                  >
-                                    <ArrowUpDown className="w-3 h-3" /> Move Up
-                                  </button>
                                 </div>
                                 <div className="rounded-xl overflow-hidden border border-slate-800 bg-black aspect-video min-h-[190px] max-h-[300px]">
                                   {renderVideoPlayer(displayPage.videoUrl || FALLBACK_SAMPLE_VIDEOS[0]?.url, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
@@ -4060,16 +3973,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                                 <div className="flex items-center justify-between pb-1 border-b border-slate-800">
                                   <span className="text-[11px] font-extrabold uppercase text-amber-300 flex items-center gap-1.5">
                                     <Image className="w-3.5 h-3.5 text-amber-400" />
-                                    <span>Bottom Item: {displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
+                                    <span>{displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleMediaSwap(displayPage)}
-                                    className="text-[10px] text-amber-400 hover:text-amber-200 font-bold flex items-center gap-1 cursor-pointer bg-slate-950 px-2 py-0.5 rounded border border-slate-800"
-                                    title="Swap to Top"
-                                  >
-                                    <ArrowUpDown className="w-3 h-3" /> Move Up
-                                  </button>
                                 </div>
                                 <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[190px] max-h-[300px] flex items-center justify-center p-2">
                                   <SafeImage 
@@ -4530,23 +4435,6 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                 <div className="md:col-span-5 space-y-3">
                   {(displayPage.layoutStyle === 'grid-right-video-image' || displayPage.layoutStyle === 'grid-right-media-swap' || (displayPage.videoUrl && displayPage.imageUrl)) ? (
                     <div className="space-y-3">
-                      {/* Dynamic Swap Switcher Header */}
-                      <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-1.5 shadow-md">
-                        <span className="text-[11px] font-black uppercase text-amber-300 flex items-center gap-1.5">
-                          <Layers className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Right-Side Dynamic Grid</span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleMediaSwap(displayPage)}
-                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] transition flex items-center gap-1 cursor-pointer"
-                          title="Dynamically swap video and image positions"
-                        >
-                          <ArrowUpDown className="w-3 h-3" />
-                          <span>Swap {displayPage.mediaSwapOrder === 'image-first' ? 'Video Up 🎬' : 'Image Up 🖼️'}</span>
-                        </button>
-                      </div>
-
                       {/* Stacked Content according to mediaSwapOrder */}
                       {displayPage.mediaSwapOrder === 'image-first' ? (
                         <>

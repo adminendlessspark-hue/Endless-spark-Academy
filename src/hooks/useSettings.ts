@@ -11,8 +11,6 @@ export interface Banner {
   overview?: string[];
 }
 
-import { useAuth } from '../AuthContext';
-
 export function useSettings() {
   const [logoUrl, setLogoUrl] = useState<string>(() => localStorage.getItem('cached_logoUrl') || '/logo.png');
   const [landingPageTitleImageUrl, setLandingPageTitleImageUrl] = useState<string>(() => localStorage.getItem('cached_titleImageUrl') || '');

@@ -1,4 +1,4 @@
-import { FlipbookMaterial } from '../components/InteractiveFlipbookStudio';
+import { FlipbookMaterial } from '../types';
 import { SVG_DIAGRAMS } from '../utils/mediaStore';
 
 export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [

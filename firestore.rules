@@ -171,6 +171,13 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /uploaded_files/{fileId} {
+      allow read, write: if true;
+      match /chunks/{chunkId} {
+        allow read, write: if true;
+      }
+    }
+
     match /quiz_questions/{questionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();

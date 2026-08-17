@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, Play, Pause, 
+  BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, ArrowUpDown, Play, Pause, 
   Maximize2, Minimize2, Languages, RefreshCw, Layout, Image, Video, Sparkles, 
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Save, Copy, Check, Download, Share2, Layers, 
   Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, CheckCircle2, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
@@ -49,7 +49,8 @@ export interface FlipbookPage {
   videoUrl?: string;
   videoCaption?: string;
   videoTranscription?: string;
-  layoutStyle?: 'split-left' | 'split-right' | 'media-top' | 'media-bottom' | 'text-only' | 'media-hero' | 'grid-2x2' | 'grid-bento' | 'grid-right-2-images' | 'grid-2-images';
+  mediaSwapOrder?: 'video-first' | 'image-first';
+  layoutStyle?: 'split-left' | 'split-right' | 'media-top' | 'media-bottom' | 'text-only' | 'media-hero' | 'grid-2x2' | 'grid-bento' | 'grid-right-2-images' | 'grid-2-images' | 'grid-right-video-image' | 'grid-right-media-swap';
   calloutText?: string;
   bgTheme?: 'classic-paper' | 'dark-studio' | 'clean-white' | 'blueprint' | 'golden-aged';
   courseName?: string;
@@ -902,6 +903,17 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [showCcSubtitles, setShowCcSubtitles] = useState<boolean>(true);
   const [showTranscriptionDrawer, setShowTranscriptionDrawer] = useState<boolean>(false);
   const [isGeneratingAiTranscription, setIsGeneratingAiTranscription] = useState<boolean>(false);
+  const [uploadingMediaState, setUploadingMediaState] = useState<{
+    isUploading: boolean;
+    progress: number;
+    fileName: string;
+    targetType: 'image' | 'video' | 'secondaryImage' | null;
+  }>({
+    isUploading: false,
+    progress: 0,
+    fileName: '',
+    targetType: null
+  });
 
   // Helper to resolve media URLs (handles 'idb:key' stored in IndexedDB for heavy video/image files)
   const resolveMediaUrl = (url?: string): string => {
@@ -2139,7 +2151,68 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
     );
   };
 
-  // Image File Upload Handler with instant Base64 data URL & IndexedDB Persistent Storage
+  // Helper to upload media file directly to Firebase Cloud Storage (Blaze Plan pay-as-you-go)
+  const uploadFileToCloudStorage = async (
+    file: File,
+    folderPath: string,
+    targetType: 'image' | 'video' | 'secondaryImage'
+  ): Promise<string | null> => {
+    setUploadingMediaState({
+      isUploading: true,
+      progress: 0,
+      fileName: file.name,
+      targetType
+    });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const xhr = new XMLHttpRequest();
+      const uploadPromise = new Promise<string>((resolve, reject) => {
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const p = Math.round((event.loaded / event.total) * 100);
+            setUploadingMediaState(prev => ({ ...prev, progress: p }));
+          }
+        });
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const res = JSON.parse(xhr.responseText);
+              if (res.url) {
+                resolve(res.url);
+              } else {
+                reject(new Error('No URL in upload response'));
+              }
+            } catch (e) {
+              reject(e);
+            }
+          } else {
+            reject(new Error(`Server upload returned status ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.open('POST', `/api/upload-media?path=${encodeURIComponent(folderPath)}`);
+        xhr.send(formData);
+      });
+
+      const cloudUrl = await uploadPromise;
+      return cloudUrl;
+    } catch (err: any) {
+      console.warn(`[CloudStorage] Direct upload note for ${file.name}:`, err?.message || err);
+      return null;
+    } finally {
+      setUploadingMediaState({
+        isUploading: false,
+        progress: 100,
+        fileName: '',
+        targetType: null
+      });
+    }
+  };
+
+  // Image File Upload Handler with instant local preview & Firebase Cloud Storage Persistence
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
@@ -2147,20 +2220,32 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
       const idbKey = `image_idb_${editingPage.id}`;
       await saveMediaToIDB(idbKey, file);
       
-      const finalImageUrl = dataUrl || `idb:${idbKey}`;
-      setMediaCache(prev => ({ ...prev, [idbKey]: finalImageUrl }));
+      const localPreviewUrl = dataUrl || `idb:${idbKey}`;
+      setMediaCache(prev => ({ ...prev, [idbKey]: localPreviewUrl }));
 
-      const updated: FlipbookPage = {
+      // Immediate responsive update
+      let updated: FlipbookPage = {
         ...editingPage,
-        imageUrl: finalImageUrl,
+        imageUrl: localPreviewUrl,
         imageCaption: editingPage.imageCaption || file.name.replace(/\.[^/.]+$/, ""),
       };
       setEditingPage(updated);
       handleUpdatePage(updated);
+
+      // Asynchronous Blaze Plan Cloud Storage Upload
+      const cloudUrl = await uploadFileToCloudStorage(file, 'flipbooks/images', 'image');
+      if (cloudUrl) {
+        updated = {
+          ...updated,
+          imageUrl: cloudUrl,
+        };
+        setEditingPage(updated);
+        handleUpdatePage(updated);
+      }
     }
   };
 
-  // Secondary Image File Upload Handler with instant Base64 data URL & IndexedDB Persistent Storage
+  // Secondary Image File Upload Handler with instant local preview & Firebase Cloud Storage Persistence
   const handleSecondaryImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
@@ -2168,20 +2253,31 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
       const idbKey = `sec_image_idb_${editingPage.id}`;
       await saveMediaToIDB(idbKey, file);
 
-      const finalImageUrl = dataUrl || `idb:${idbKey}`;
-      setMediaCache(prev => ({ ...prev, [idbKey]: finalImageUrl }));
+      const localPreviewUrl = dataUrl || `idb:${idbKey}`;
+      setMediaCache(prev => ({ ...prev, [idbKey]: localPreviewUrl }));
 
-      const updated: FlipbookPage = {
+      let updated: FlipbookPage = {
         ...editingPage,
-        secondaryImageUrl: finalImageUrl,
+        secondaryImageUrl: localPreviewUrl,
         secondaryImageCaption: editingPage.secondaryImageCaption || file.name.replace(/\.[^/.]+$/, ""),
       };
       setEditingPage(updated);
       handleUpdatePage(updated);
+
+      // Asynchronous Blaze Plan Cloud Storage Upload
+      const cloudUrl = await uploadFileToCloudStorage(file, 'flipbooks/images', 'secondaryImage');
+      if (cloudUrl) {
+        updated = {
+          ...updated,
+          secondaryImageUrl: cloudUrl,
+        };
+        setEditingPage(updated);
+        handleUpdatePage(updated);
+      }
     }
   };
 
-  // Video File Upload Handler with IndexedDB Persistent Storage
+  // Video File Upload Handler with instant local playback & Firebase Cloud Storage Persistence
   const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingPage) {
@@ -2192,7 +2288,7 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
 
       const defaultCaption = editingPage.videoCaption || `Video Demonstration: ${file.name.replace(/\.[^/.]+$/, "")}`;
 
-      const updated: FlipbookPage = {
+      let updated: FlipbookPage = {
         ...editingPage,
         videoUrl: `idb:${idbKey}`,
         videoCaption: defaultCaption,
@@ -2202,6 +2298,17 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
 
       // Auto-transcribe spoken video audio using Gemini Multimodal AI
       handleAutoGenerateTranscription(updated);
+
+      // Asynchronous Blaze Plan Cloud Storage Upload (supporting files of any size)
+      const cloudUrl = await uploadFileToCloudStorage(file, 'flipbooks/videos', 'video');
+      if (cloudUrl) {
+        updated = {
+          ...updated,
+          videoUrl: cloudUrl,
+        };
+        setEditingPage(updated);
+        handleUpdatePage(updated);
+      }
     }
   };
 
@@ -3227,6 +3334,38 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     handleSaveMaterial(updatedMat);
   };
 
+  // Dynamic Right-Side Video & Image Swap Helper (Toggles vertical order: Video Top / Image Bottom <-> Image Top / Video Bottom)
+  const handleToggleMediaSwap = (targetPage?: FlipbookPage) => {
+    const pageToSwap = targetPage || editingPage || activeMaterial?.pages?.[currentPageIndex];
+    if (!pageToSwap) return;
+
+    const currentOrder = pageToSwap.mediaSwapOrder || 'video-first';
+    const newOrder: 'video-first' | 'image-first' = currentOrder === 'video-first' ? 'image-first' : 'video-first';
+
+    const updatedPage: FlipbookPage = {
+      ...pageToSwap,
+      mediaSwapOrder: newOrder,
+      layoutStyle: (pageToSwap.layoutStyle === 'grid-right-video-image' || pageToSwap.layoutStyle === 'grid-right-media-swap')
+        ? pageToSwap.layoutStyle
+        : 'grid-right-video-image'
+    };
+
+    if (editingPage && editingPage.id === pageToSwap.id) {
+      setEditingPage(updatedPage);
+    }
+
+    handleUpdatePage(updatedPage);
+
+    // Save material with updated swap state
+    const updatedPages = activeMaterial.pages.map(p => p.id === updatedPage.id ? updatedPage : p);
+    const updatedMat = { ...activeMaterial, pages: updatedPages };
+    setActiveMaterial(updatedMat);
+    handleSaveMaterial(updatedMat, true);
+
+    setSaveMessage(`Dynamic Right-Side Media Swapped: ${newOrder === 'image-first' ? '🖼️ Image (Top) / 🎬 Video (Bottom)' : '🎬 Video (Top) / 🖼️ Image (Bottom)'}`);
+    setTimeout(() => setSaveMessage(''), 2500);
+  };
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -3790,8 +3929,170 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         <span>Layout: {displayPage.layoutStyle || 'split-left'}</span>
                       </div>
 
-                      {/* IF LAYOUT IS 2-IMAGES GRID (Stacked Top & Bottom) */}
-                      {(displayPage.layoutStyle === 'grid-right-2-images' || displayPage.layoutStyle === 'grid-2-images') ? (
+                      {/* IF LAYOUT IS DYNAMIC SWAP VIDEO & IMAGE GRID (Stacked Top & Bottom with Dynamic Swapping) */}
+                      {(displayPage.layoutStyle === 'grid-right-video-image' || displayPage.layoutStyle === 'grid-right-media-swap') ? (
+                        <div className="space-y-3.5">
+                          {/* Dynamic Swap Control Bar */}
+                          <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 px-3 shadow-md">
+                            <div className="flex items-center gap-2">
+                              <span className="p-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                <Layers className="w-3.5 h-3.5" />
+                              </span>
+                              <div>
+                                <span className="text-[11px] font-black uppercase tracking-wider text-amber-300 block">
+                                  Right-Side Dynamic Media Grid
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-semibold block">
+                                  {displayPage.mediaSwapOrder === 'image-first' ? '🖼️ Diagram (Top) • 🎬 Video (Bottom)' : '🎬 Video (Top) • 🖼️ Diagram (Bottom)'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMediaSwap(displayPage)}
+                              className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 border border-amber-300/40 shrink-0"
+                              title="Click to dynamically swap positions of Video and Image on the right side"
+                            >
+                              <ArrowUpDown className="w-3.5 h-3.5 text-slate-950" />
+                              <span>Swap {displayPage.mediaSwapOrder === 'image-first' ? 'Video to Top 🎬' : 'Image to Top 🖼️'}</span>
+                            </button>
+                          </div>
+
+                          {/* Render Stacked Cards according to mediaSwapOrder */}
+                          <div className="flex flex-col gap-3.5">
+                            {/* Card 1 (Top Card) */}
+                            {displayPage.mediaSwapOrder === 'image-first' ? (
+                              /* 1. IMAGE CARD (Top) */
+                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-amber-500/40 shadow-lg flex flex-col justify-between space-y-2">
+                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                                  <span className="text-[11px] font-extrabold uppercase text-amber-300 flex items-center gap-1.5">
+                                    <Image className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>Top Item: {displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleMediaSwap(displayPage)}
+                                    className="text-[10px] text-amber-400 hover:text-amber-200 font-bold flex items-center gap-1 cursor-pointer bg-slate-950 px-2 py-0.5 rounded border border-slate-800"
+                                    title="Swap to Bottom"
+                                  >
+                                    <ArrowUpDown className="w-3 h-3" /> Move Down
+                                  </button>
+                                </div>
+                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[190px] max-h-[300px] flex items-center justify-center p-2">
+                                  <SafeImage 
+                                    src={displayPage.imageUrl || 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80'} 
+                                    alt={displayPage.imageCaption || displayPage.title || 'Diagram'} 
+                                    title={displayPage.title}
+                                    subtitle={displayPage.subtitle}
+                                    caption={displayPage.imageCaption}
+                                    className="max-h-[280px] w-full object-contain cursor-pointer" 
+                                    onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                                  />
+                                </div>
+                                {displayPage.imageCaption && (
+                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-amber-200 dark:text-amber-300 pt-0.5">
+                                    <Link className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                    <span>{displayPage.imageCaption}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              /* 1. VIDEO CARD (Top) */
+                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-pink-500/40 shadow-lg flex flex-col justify-between space-y-2">
+                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                                  <span className="text-[11px] font-extrabold uppercase text-pink-300 flex items-center gap-1.5">
+                                    <Video className="w-3.5 h-3.5 text-pink-400" />
+                                    <span>Top Item: {displayPage.videoCaption || 'Demonstration Video'}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleMediaSwap(displayPage)}
+                                    className="text-[10px] text-pink-400 hover:text-pink-200 font-bold flex items-center gap-1 cursor-pointer bg-slate-950 px-2 py-0.5 rounded border border-slate-800"
+                                    title="Swap to Bottom"
+                                  >
+                                    <ArrowUpDown className="w-3 h-3" /> Move Down
+                                  </button>
+                                </div>
+                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-black aspect-video min-h-[190px] max-h-[300px]">
+                                  {renderVideoPlayer(displayPage.videoUrl || FALLBACK_SAMPLE_VIDEOS[0]?.url, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
+                                </div>
+                                {displayPage.videoCaption && (
+                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-pink-200 dark:text-pink-300 pt-0.5">
+                                    <Link className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                    <span>{displayPage.videoCaption}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Card 2 (Bottom Card) */}
+                            {displayPage.mediaSwapOrder === 'image-first' ? (
+                              /* 2. VIDEO CARD (Bottom) */
+                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-pink-500/40 shadow-lg flex flex-col justify-between space-y-2">
+                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                                  <span className="text-[11px] font-extrabold uppercase text-pink-300 flex items-center gap-1.5">
+                                    <Video className="w-3.5 h-3.5 text-pink-400" />
+                                    <span>Bottom Item: {displayPage.videoCaption || 'Demonstration Video'}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleMediaSwap(displayPage)}
+                                    className="text-[10px] text-pink-400 hover:text-pink-200 font-bold flex items-center gap-1 cursor-pointer bg-slate-950 px-2 py-0.5 rounded border border-slate-800"
+                                    title="Swap to Top"
+                                  >
+                                    <ArrowUpDown className="w-3 h-3" /> Move Up
+                                  </button>
+                                </div>
+                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-black aspect-video min-h-[190px] max-h-[300px]">
+                                  {renderVideoPlayer(displayPage.videoUrl || FALLBACK_SAMPLE_VIDEOS[0]?.url, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
+                                </div>
+                                {displayPage.videoCaption && (
+                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-pink-200 dark:text-pink-300 pt-0.5">
+                                    <Link className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                    <span>{displayPage.videoCaption}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              /* 2. IMAGE CARD (Bottom) */
+                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-amber-500/40 shadow-lg flex flex-col justify-between space-y-2">
+                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                                  <span className="text-[11px] font-extrabold uppercase text-amber-300 flex items-center gap-1.5">
+                                    <Image className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>Bottom Item: {displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleMediaSwap(displayPage)}
+                                    className="text-[10px] text-amber-400 hover:text-amber-200 font-bold flex items-center gap-1 cursor-pointer bg-slate-950 px-2 py-0.5 rounded border border-slate-800"
+                                    title="Swap to Top"
+                                  >
+                                    <ArrowUpDown className="w-3 h-3" /> Move Up
+                                  </button>
+                                </div>
+                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[190px] max-h-[300px] flex items-center justify-center p-2">
+                                  <SafeImage 
+                                    src={displayPage.imageUrl || 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80'} 
+                                    alt={displayPage.imageCaption || displayPage.title || 'Diagram'} 
+                                    title={displayPage.title}
+                                    subtitle={displayPage.subtitle}
+                                    caption={displayPage.imageCaption}
+                                    className="max-h-[280px] w-full object-contain cursor-pointer" 
+                                    onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                                  />
+                                </div>
+                                {displayPage.imageCaption && (
+                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-amber-200 dark:text-amber-300 pt-0.5">
+                                    <Link className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                    <span>{displayPage.imageCaption}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (displayPage.layoutStyle === 'grid-right-2-images' || displayPage.layoutStyle === 'grid-2-images') ? (
                         <div className="space-y-4">
                           <div className="flex flex-col gap-4">
                             {/* Image #1 (Top) */}
@@ -4227,7 +4528,75 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
                 {/* Right Media Column */}
                 <div className="md:col-span-5 space-y-3">
-                  {displayPage.videoUrl ? (
+                  {(displayPage.layoutStyle === 'grid-right-video-image' || displayPage.layoutStyle === 'grid-right-media-swap' || (displayPage.videoUrl && displayPage.imageUrl)) ? (
+                    <div className="space-y-3">
+                      {/* Dynamic Swap Switcher Header */}
+                      <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-1.5 shadow-md">
+                        <span className="text-[11px] font-black uppercase text-amber-300 flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Right-Side Dynamic Grid</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMediaSwap(displayPage)}
+                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] transition flex items-center gap-1 cursor-pointer"
+                          title="Dynamically swap video and image positions"
+                        >
+                          <ArrowUpDown className="w-3 h-3" />
+                          <span>Swap {displayPage.mediaSwapOrder === 'image-first' ? 'Video Up 🎬' : 'Image Up 🖼️'}</span>
+                        </button>
+                      </div>
+
+                      {/* Stacked Content according to mediaSwapOrder */}
+                      {displayPage.mediaSwapOrder === 'image-first' ? (
+                        <>
+                          {/* Image Top */}
+                          {displayPage.imageUrl && (
+                            <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[180px] max-h-[260px] flex items-center justify-center p-2">
+                              <SafeImage 
+                                src={displayPage.imageUrl} 
+                                alt={displayPage.title || 'Slide Visual'} 
+                                title={displayPage.title}
+                                subtitle={displayPage.subtitle}
+                                caption={displayPage.imageCaption}
+                                className="max-h-[240px] w-full object-contain rounded-lg cursor-pointer" 
+                                onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                              />
+                            </div>
+                          )}
+                          {/* Video Bottom */}
+                          {displayPage.videoUrl && (
+                            <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[180px] max-h-[260px] shadow-xl">
+                              {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {/* Video Top */}
+                          {displayPage.videoUrl && (
+                            <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[180px] max-h-[260px] shadow-xl">
+                              {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
+                            </div>
+                          )}
+                          {/* Image Bottom */}
+                          {displayPage.imageUrl && (
+                            <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[180px] max-h-[260px] flex items-center justify-center p-2">
+                              <SafeImage 
+                                src={displayPage.imageUrl} 
+                                alt={displayPage.title || 'Slide Visual'} 
+                                title={displayPage.title}
+                                subtitle={displayPage.subtitle}
+                                caption={displayPage.imageCaption}
+                                className="max-h-[240px] w-full object-contain rounded-lg cursor-pointer" 
+                                onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ) : displayPage.videoUrl ? (
                     <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[280px] shadow-xl">
                       {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                     </div>
@@ -5705,7 +6074,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   {/* Video Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-pink-950/60 hover:bg-pink-900/80 border border-pink-700/60 rounded-xl text-xs font-extrabold text-pink-200 transition cursor-pointer shadow-sm">
                     <Upload className="w-4 h-4 text-pink-400 shrink-0" />
-                    <span>Upload Local Video File (MP4 / WebM / MOV)</span>
+                    <span>Upload Video File (MP4 / WebM / MOV - Blaze Cloud Storage)</span>
                     <input
                       type="file"
                       accept="video/*"
@@ -5713,6 +6082,25 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                       className="hidden"
                     />
                   </label>
+
+                  {/* Video Upload Progress Indicator */}
+                  {uploadingMediaState.isUploading && uploadingMediaState.targetType === 'video' && (
+                    <div className="p-2.5 bg-pink-950/80 border border-pink-700/60 rounded-xl space-y-1.5 animate-pulse">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-pink-300">
+                        <span className="truncate max-w-[200px] flex items-center gap-1.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-pink-400" />
+                          <span>Uploading to Cloud Storage... ({uploadingMediaState.fileName})</span>
+                        </span>
+                        <span>{uploadingMediaState.progress}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-pink-950 rounded-full overflow-hidden border border-pink-800">
+                        <div 
+                          className="h-full bg-gradient-to-r from-pink-500 to-rose-400 transition-all duration-300 ease-out rounded-full"
+                          style={{ width: `${uploadingMediaState.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Video URL Text Input with Domain Guide */}
                   <div className="space-y-1">
@@ -5871,7 +6259,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   {/* Primary Image Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-950/60 hover:bg-amber-900/80 border border-amber-700/60 rounded-xl text-xs font-extrabold text-amber-200 transition cursor-pointer shadow-sm">
                     <Upload className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Upload Image 1 File (PNG / JPG / SVG)</span>
+                    <span>Upload Image 1 File (PNG / JPG / SVG - Blaze Cloud Storage)</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -5879,6 +6267,25 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                       className="hidden"
                     />
                   </label>
+
+                  {/* Primary Image Upload Progress Indicator */}
+                  {uploadingMediaState.isUploading && uploadingMediaState.targetType === 'image' && (
+                    <div className="p-2.5 bg-amber-950/80 border border-amber-700/60 rounded-xl space-y-1.5 animate-pulse">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                        <span className="truncate max-w-[200px] flex items-center gap-1.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                          <span>Uploading Image to Cloud Storage... ({uploadingMediaState.fileName})</span>
+                        </span>
+                        <span>{uploadingMediaState.progress}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-amber-950 rounded-full overflow-hidden border border-amber-800">
+                        <div 
+                          className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-300 ease-out rounded-full"
+                          style={{ width: `${uploadingMediaState.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Primary Image URL Text Input with Domain Guide */}
                   <div className="space-y-1">
@@ -5971,7 +6378,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   {/* Secondary Image Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-950/60 hover:bg-blue-900/80 border border-blue-700/60 rounded-xl text-xs font-extrabold text-blue-200 transition cursor-pointer shadow-sm">
                     <Upload className="w-4 h-4 text-blue-400 shrink-0" />
-                    <span>Upload Image 2 File (PNG / JPG / SVG)</span>
+                    <span>Upload Image 2 File (PNG / JPG / SVG - Blaze Cloud Storage)</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -5979,6 +6386,25 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                       className="hidden"
                     />
                   </label>
+
+                  {/* Secondary Image Upload Progress Indicator */}
+                  {uploadingMediaState.isUploading && uploadingMediaState.targetType === 'secondaryImage' && (
+                    <div className="p-2.5 bg-blue-950/80 border border-blue-700/60 rounded-xl space-y-1.5 animate-pulse">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-blue-300">
+                        <span className="truncate max-w-[200px] flex items-center gap-1.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                          <span>Uploading Image 2 to Cloud Storage... ({uploadingMediaState.fileName})</span>
+                        </span>
+                        <span>{uploadingMediaState.progress}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-blue-950 rounded-full overflow-hidden border border-blue-800">
+                        <div 
+                          className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-300 ease-out rounded-full"
+                          style={{ width: `${uploadingMediaState.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Secondary Image URL Text Input with Domain Guide */}
                   <div className="space-y-1">
@@ -6050,6 +6476,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     }}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none"
                   >
+                    <option value="grid-right-video-image">🎬🖼️ Right Side Grid (Video & Image Stacked with Dynamic Swap)</option>
                     <option value="grid-right-2-images">🖼️ Right Side Grid (2 Images Stacked Top & Bottom)</option>
                     <option value="grid-2x2">2x2 Multi-Card Grid Layout (Text + Video + Image + File)</option>
                     <option value="grid-bento">Bento Box Grid Layout (Feature Tiles)</option>
@@ -6058,6 +6485,34 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     <option value="media-top">Media Banner Top, Text Bottom</option>
                     <option value="text-only">Full Page Typography Text Layout</option>
                   </select>
+                </div>
+
+                {/* Dynamic Right-Side Video & Image Grid & Swap Studio Controls */}
+                <div className="p-3.5 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-amber-500/40 rounded-2xl space-y-2.5 shadow-md">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase text-amber-300 flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-amber-400" />
+                      <span>Dynamic Right Side Media Grid</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      {editingPage.mediaSwapOrder === 'image-first' ? '🖼️ Image (Top) / 🎬 Video (Bottom)' : '🎬 Video (Top) / 🖼️ Image (Bottom)'}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-300 leading-normal">
+                    This layout splits the page into content on the left, and a stacked Video + Image grid on the right. You can dynamically swap which media item appears on top at any time.
+                  </p>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMediaSwap(editingPage)}
+                      className="w-full py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 border border-amber-300/40"
+                    >
+                      <ArrowUpDown className="w-4 h-4 text-slate-950" />
+                      <span>Dynamically Swap Positions ({editingPage.mediaSwapOrder === 'image-first' ? 'Switch to 🎬 Video Top' : 'Switch to 🖼️ Image Top'})</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Quick Done Button */}

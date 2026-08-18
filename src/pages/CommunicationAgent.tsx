@@ -131,10 +131,21 @@ export default function CommunicationAgent() {
     return () => unsubscribe();
   }, []);
 
-  const configuredCourses = React.useMemo(() => [
-    ...(financialSettings?.coursesConfig || []),
-    { courseId: 'printing-and-packaging-cross-courses', title: 'Diploma in Printing and Packaging Cross Courses' }
-  ], [financialSettings?.coursesConfig]);
+  const configuredCourses = React.useMemo(() => {
+    const map = new Map<string, { courseId: string; title: string }>();
+    (financialSettings?.coursesConfig || []).forEach(c => {
+      if (c && c.courseId) {
+        map.set(c.courseId, { courseId: c.courseId, title: c.title || formatCourseName(c.courseId) });
+      }
+    });
+    if (!map.has('printing-and-packaging-cross-courses')) {
+      map.set('printing-and-packaging-cross-courses', {
+        courseId: 'printing-and-packaging-cross-courses',
+        title: 'Diploma in Printing and Packaging Cross Courses'
+      });
+    }
+    return Array.from(map.values());
+  }, [financialSettings?.coursesConfig]);
 
   // ChatGPT Video & Speech Translator State
   const [translatorInput, setTranslatorInput] = useState('');

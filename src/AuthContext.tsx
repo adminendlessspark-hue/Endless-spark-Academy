@@ -165,10 +165,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (firebaseUser) {
-        // User is signed in, fetch their profile from Firestore
+        const userEmail = (firebaseUser.email || '').toLowerCase();
+        const isHardcodedAdmin = ADMIN_EMAILS.some(e => e.toLowerCase() === userEmail);
+
+        // Immediate cache hydration / instant user provision for zero-latency load
+        const cached = localStorage.getItem(`cached_user_profile_${firebaseUser.uid}`);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            setUser(parsed);
+            setIsLoading(false);
+          } catch (e) {}
+        } else if (isHardcodedAdmin) {
+          setUser({
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || userEmail.split('@')[0] || 'Admin',
+            email: userEmail,
+            role: 'admin',
+            isApproved: true,
+            username: userEmail.split('@')[0],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          } as any);
+          setIsLoading(false);
+        }
+
+        // User is signed in, listen to their profile in Firestore in background
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         
-        // Use onSnapshot for real-time updates to the user profile
         unsubProfile = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const newData = docSnap.data() as User;
@@ -181,37 +205,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               return;
             }
 
-            // Check for password expiry (30 days) - Disabled as requested by admin
-            /*
-            const hasPasswordProvider = firebaseUser.providerData.some(p => p.providerId === 'password');
-            if (hasPasswordProvider) {
-              const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-              const lastUpdate = newData.lastPasswordUpdate ? new Date(newData.lastPasswordUpdate).getTime() : 0;
-              if (Date.now() - lastUpdate > THIRTY_DAYS && !newData.mustChangePassword) {
-                updateDoc(userDocRef, { mustChangePassword: true }).catch(console.error);
-              }
-            }
-            */
-
             setUser(prev => {
               if (JSON.stringify(prev) === JSON.stringify(newData)) {
                 return prev;
               }
               return newData;
             });
-            // Cache successful profile to support offline/quota-limited sandbox mode
+            // Cache successful profile to support fast immediate loads
             localStorage.setItem(`cached_user_profile_${firebaseUser.uid}`, JSON.stringify(newData));
           } else {
-            console.warn("User document not found in Firestore");
-            // If the email is in hardcoded admins, allow entry as a placeholder admin
-            if (firebaseUser.email && ADMIN_EMAILS.includes(firebaseUser.email)) {
+            // If the email is in hardcoded admins, allow entry as an admin
+            if (isHardcodedAdmin) {
               setUser({
                 id: firebaseUser.uid,
                 name: firebaseUser.displayName || 'Admin',
                 email: firebaseUser.email,
                 role: 'admin',
                 isApproved: true,
-                username: firebaseUser.email.split('@')[0],
+                username: (firebaseUser.email || 'admin').split('@')[0],
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
               } as any);
@@ -222,21 +233,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsLoading(false);
           
           // Attempt recovery using cached profile
-          const cached = localStorage.getItem(`cached_user_profile_${firebaseUser.uid}`);
-          if (cached) {
+          const cachedProfile = localStorage.getItem(`cached_user_profile_${firebaseUser.uid}`);
+          if (cachedProfile) {
             try {
-              const parsed = JSON.parse(cached);
+              const parsed = JSON.parse(cachedProfile);
               setUser(parsed);
-              console.warn("Recovered user profile from local cache following Firestore read/rate-limit error:", error);
               return;
-            } catch (e) {
-              console.error("Malformed profile cache:", e);
-            }
+            } catch (e) {}
           }
 
-          // Generate synthetic sandbox profile based on authentication state
+          // Generate synthetic profile based on authentication state
           if (firebaseUser.email) {
-            const role = ADMIN_EMAILS.includes(firebaseUser.email) ? 'admin' : 'student';
+            const role = isHardcodedAdmin ? 'admin' : 'student';
             const fallbackProfile = {
               id: firebaseUser.uid,
               name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
@@ -248,7 +256,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               updatedAt: new Date().toISOString()
             };
             setUser(fallbackProfile as any);
-            console.warn("Created dynamic offline/sandbox user profile:", fallbackProfile);
             return;
           }
 
@@ -275,7 +282,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let email = cleanIdentifier;
       
       // If it's not an email, try finding by username via server API
-      // Check for @ but also allow registration numbers which might not be emails
       if (!cleanIdentifier.includes('@')) {
         const response = await fetch('/api/get-email-by-username', {
           method: 'POST',
@@ -294,21 +300,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const userCredential = await signInWithEmailAndPassword(auth, email, cleanPassword);
       const firebaseUser = userCredential.user;
-      
-      // Fetch user doc to check status
-      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-      if (userDoc.exists()) {
-        const userData = userDoc.data() as User;
-        if (userData.role === 'student' && userData.isPhasedOut) {
-          await signOut(auth);
-          throw new Error('Your account has been phased out due to guideline violations or unpaid fees. Please contact administration.');
-        }
-        if (userData.role === 'student' && userData.expiryDate && new Date(userData.expiryDate) < new Date()) {
-          await signOut(auth);
-          throw new Error('Your course duration has expired. Please contact administration to extend your access.');
-        }
+      const userEmail = (firebaseUser.email || email).toLowerCase();
+      const isHardcodedAdmin = ADMIN_EMAILS.some(e => e.toLowerCase() === userEmail);
+
+      // Instant admin resolution (<100ms)
+      if (isHardcodedAdmin) {
+        setUser({
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || userEmail.split('@')[0],
+          email: userEmail,
+          role: 'admin',
+          isApproved: true,
+          username: userEmail.split('@')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        } as any);
+        setIsLoading(false);
         return true;
       }
+
+      // Fast check with a 2-second timeout so network lag doesn't block the UI
+      try {
+        const docPromise = getDoc(doc(db, 'users', firebaseUser.uid));
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+        const userDoc = await Promise.race([docPromise, timeoutPromise]);
+
+        if (userDoc && userDoc.exists()) {
+          const userData = userDoc.data() as User;
+          if (userData.role === 'student' && userData.isPhasedOut) {
+            await signOut(auth);
+            throw new Error('Your account has been phased out due to guideline violations or unpaid fees. Please contact administration.');
+          }
+          if (userData.role === 'student' && userData.expiryDate && new Date(userData.expiryDate) < new Date()) {
+            await signOut(auth);
+            throw new Error('Your course duration has expired. Please contact administration to extend your access.');
+          }
+          setUser(userData);
+          setIsLoading(false);
+        }
+      } catch (checkErr: any) {
+        if (checkErr.message && (checkErr.message.includes('phased out') || checkErr.message.includes('expired'))) {
+          throw checkErr;
+        }
+      }
+
       return true;
     } catch (error: any) {
       console.error("Login error:", error);

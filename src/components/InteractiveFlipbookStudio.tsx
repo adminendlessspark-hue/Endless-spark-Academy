@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, Play, Pause, 
+  BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, ArrowUpDown, Play, Pause, 
   Maximize2, Minimize2, Languages, RefreshCw, Layout, Image, Video, Sparkles, 
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Save, Copy, Check, Download, Share2, Layers, 
   Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, CheckCircle2, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
   Bold, Italic, Underline, Highlighter, Eraser, Wand2, GripVertical, Move,
   Grid, List, FileCheck, FolderArchive, ExternalLink, Link, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap,
-  MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock, Globe, Server, HardDrive, AlertCircle
+  MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock, Globe, Server, HardDrive, AlertCircle, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -14,62 +14,12 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { formatCourseName } from '../utils';
-import { CourseModule } from '../types';
+import { CourseModule, FlipbookPage, FlipbookMaterial } from '../types';
 import { saveMediaToIDB, getMediaFromIDB, fileToDataUrl, getFallbackImageForTopic, FALLBACK_SAMPLE_VIDEOS } from '../utils/mediaStore';
 import { generateGeminiContent } from '../services/gemini';
+import { DEFAULT_FLIPBOOKS } from '../data/defaultFlipbooks';
 
-export interface FlipbookPage {
-  id: string;
-  pageNumber: number;
-  title: string;
-  subtitle?: string;
-  content: string;
-  isCustomEdited?: boolean;
-  contentFontFamily?: string;
-  contentFontSize?: string;
-  contentTextColor?: string;
-  contentFontStyle?: string;
-  contentTextAlign?: 'left' | 'center' | 'right' | 'justify';
-  pageBackgroundColor?: string;
-  translations?: Record<string, { 
-    title?: string; 
-    subtitle?: string; 
-    content?: string; 
-    calloutText?: string; 
-    imageCaption?: string; 
-    secondaryImageCaption?: string; 
-    videoCaption?: string; 
-    videoTranscription?: string 
-  }>;
-  mediaType?: 'none' | 'image' | 'video' | 'both';
-  imageUrl?: string;
-  imageCaption?: string;
-  secondaryImageUrl?: string;
-  secondaryImageCaption?: string;
-  videoUrl?: string;
-  videoCaption?: string;
-  videoTranscription?: string;
-  layoutStyle?: 'split-left' | 'split-right' | 'media-top' | 'media-bottom' | 'text-only' | 'media-hero' | 'grid-2x2' | 'grid-bento' | 'grid-right-2-images' | 'grid-2-images';
-  calloutText?: string;
-  bgTheme?: 'classic-paper' | 'dark-studio' | 'clean-white' | 'blueprint' | 'golden-aged';
-  courseName?: string;
-  courseModuleId?: string;
-  courseModuleName?: string;
-  exerciseFilePath?: string;
-  exerciseTitle?: string;
-}
-
-export interface FlipbookMaterial {
-  id: string;
-  title: string;
-  description: string;
-  courseName?: string;
-  courseCategory: string;
-  author: string;
-  coverImageUrl?: string;
-  pages: FlipbookPage[];
-  updatedAt: string;
-}
+export type { FlipbookPage, FlipbookMaterial };
 
 // Course Modules List for Exercise Linking
 export const COURSE_MODULES: { id: string; name: string; code: string }[] = [];
@@ -142,7 +92,7 @@ export const normalizeExternalImageUrl = (url?: string): string => {
   return clean;
 };
 
-// Safe Image component with topic fallback, IndexedDB resolution, and external domain normalization
+// Safe Image component with IndexedDB resolution and external domain normalization
 export const SafeImage = ({ 
   src, 
   alt, 
@@ -171,9 +121,8 @@ export const SafeImage = ({
     setHasError(false);
     setIsFallback(false);
     if (!src || src.trim() === '') {
-      const topicFallback = getFallbackImageForTopic(alt, title, subtitle, caption);
-      setResolvedSrc(topicFallback);
-      setIsFallback(true);
+      setResolvedSrc('');
+      setIsFallback(false);
       setIsLoading(false);
       return;
     }
@@ -190,14 +139,14 @@ export const SafeImage = ({
             setHasError(false);
             setIsFallback(false);
           } else {
-            setResolvedSrc(getFallbackImageForTopic(alt, title, subtitle, caption));
-            setIsFallback(true);
+            setResolvedSrc('');
+            setIsFallback(false);
             setHasError(false);
           }
         })
         .catch(() => {
-          setResolvedSrc(getFallbackImageForTopic(alt, title, subtitle, caption));
-          setIsFallback(true);
+          setResolvedSrc('');
+          setIsFallback(false);
           setHasError(false);
         })
         .finally(() => setIsLoading(false));
@@ -212,42 +161,27 @@ export const SafeImage = ({
       <div className={`flex items-center justify-center p-6 bg-slate-900/80 rounded-xl border border-amber-500/20 ${className || 'min-h-[220px]'}`}>
         <div className="flex items-center gap-2 text-xs font-semibold text-amber-400">
           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-amber-400"></div>
-          <span>Loading visual diagram...</span>
+          <span>Loading image...</span>
         </div>
       </div>
     );
   }
 
-  // Handle secondary fallback for Google Drive thumbnails or alternative direct URLs
+  // Handle image error
   const handleImageError = () => {
-    if (!isFallback) {
-      if (resolvedSrc.includes('googleusercontent.com') || (src && src.includes('drive.google.com'))) {
-        const idMatch = resolvedSrc.match(/\/d\/([a-zA-Z0-9_-]+)/) || (src ? src.match(/\/d\/([a-zA-Z0-9_-]+)/) : null) || (src ? src.match(/[?&]id=([a-zA-Z0-9_-]+)/) : null);
-        if (idMatch && idMatch[1] && !resolvedSrc.includes('thumbnail?id=')) {
-          setResolvedSrc(`https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1600`);
-          return;
-        }
-      }
-      setIsFallback(true);
-      setResolvedSrc(getFallbackImageForTopic(alt, title, subtitle, caption));
-      setHasError(false);
-    } else {
-      // If even the fallback failed, load the guaranteed color wheel diagram
-      setResolvedSrc(getFallbackImageForTopic('Fundamental of colour'));
-      setHasError(false);
-    }
+    setHasError(true);
   };
 
-  if (hasError || !resolvedSrc) {
+  if (hasError || !resolvedSrc || !src || src.trim() === '') {
     const rawExternalUrl = src && !src.startsWith('idb:') ? normalizeExternalImageUrl(src) : '';
     return (
-      <div className={`flex flex-col items-center justify-center p-6 bg-slate-900/90 border border-amber-500/30 rounded-xl text-center space-y-2.5 ${className || 'min-h-[220px]'}`}>
-        <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/30">
-          <Image className="w-5 h-5 text-amber-400" />
+      <div className={`flex flex-col items-center justify-center p-6 bg-slate-900/50 border border-dashed border-slate-700/60 rounded-xl text-center space-y-2.5 ${className || 'min-h-[220px]'}`}>
+        <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700">
+          <Image className="w-5 h-5 text-slate-400" />
         </div>
         <div>
-          <span className="text-xs font-bold text-amber-200 block">{alt || title || 'Diagram / Image Attachment'}</span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">High-Resolution Technical Diagram</span>
+          <span className="text-xs font-semibold text-slate-300 block">{alt || title || 'No Image Attached'}</span>
+          <span className="text-[10px] text-slate-500 block mt-0.5">Upload image directly to Firebase in the Page Editor</span>
         </div>
         {rawExternalUrl && !rawExternalUrl.startsWith('data:') && (
           <div className="flex items-center gap-2 pt-1">
@@ -258,19 +192,8 @@ export const SafeImage = ({
               className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg text-[11px] text-amber-300 font-bold flex items-center gap-1.5 transition"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>View Original Image</span>
+              <span>View Original</span>
             </a>
-            <button
-              type="button"
-              onClick={() => {
-                setHasError(false);
-                setIsFallback(false);
-                setResolvedSrc(normalizeExternalImageUrl(src));
-              }}
-              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-semibold transition cursor-pointer"
-            >
-              Reload
-            </button>
           </div>
         )}
       </div>
@@ -578,8 +501,6 @@ export function autoTranslateText(text: string, targetLangCode: string): string 
   return translatedParts.join('');
 }
 
-import { DEFAULT_FLIPBOOKS } from '../data/defaultFlipbooks';
-
 export interface InteractiveFlipbookStudioProps {
   initialMaterial?: FlipbookMaterial;
   courseCategory?: string;
@@ -609,10 +530,21 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     return () => unsubscribe();
   }, []);
 
-  const configuredCourses = React.useMemo(() => [
-    ...(financialSettings?.coursesConfig || []),
-    { courseId: 'printing-and-packaging-cross-courses', title: 'Diploma in Printing and Packaging Cross Courses' }
-  ], [financialSettings?.coursesConfig]);
+  const configuredCourses = React.useMemo(() => {
+    const map = new Map<string, { courseId: string; title: string }>();
+    (financialSettings?.coursesConfig || []).forEach(c => {
+      if (c && c.courseId) {
+        map.set(c.courseId, { courseId: c.courseId, title: c.title || formatCourseName(c.courseId) });
+      }
+    });
+    if (!map.has('printing-and-packaging-cross-courses')) {
+      map.set('printing-and-packaging-cross-courses', {
+        courseId: 'printing-and-packaging-cross-courses',
+        title: 'Diploma in Printing and Packaging Cross Courses'
+      });
+    }
+    return Array.from(map.values());
+  }, [financialSettings?.coursesConfig]);
 
   // Student assigned course titles derived from user profile
   const isStudent = user?.role === 'student' || (!isAdmin && !isQC && !isElevated && user?.role !== 'faculty' && user?.role !== 'admin');
@@ -643,17 +575,19 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
     const set = new Set<string>();
     set.add('All Course Titles');
-    configuredCourses.forEach(c => set.add(c.title));
-    dbModules.forEach(mod => {
-      if (mod.category) {
-        const matchedConfig = configuredCourses.find(c => c.courseId === mod.category);
+    (configuredCourses || []).forEach(c => {
+      if (c?.title) set.add(c.title);
+    });
+    (dbModules || []).forEach(mod => {
+      if (mod?.category) {
+        const matchedConfig = (configuredCourses || []).find(c => c?.courseId === mod.category);
         set.add(matchedConfig ? matchedConfig.title : formatCourseName(mod.category));
       }
     });
-    DEFAULT_FLIPBOOKS.forEach(m => {
-      if (m.courseName) set.add(m.courseName);
-      if (m.courseCategory) {
-        const matchedConfig = configuredCourses.find(c => c.courseId === m.courseCategory);
+    (DEFAULT_FLIPBOOKS || []).forEach(m => {
+      if (m?.courseName) set.add(m.courseName);
+      if (m?.courseCategory) {
+        const matchedConfig = (configuredCourses || []).find(c => c?.courseId === m.courseCategory);
         set.add(matchedConfig ? matchedConfig.title : formatCourseName(m.courseCategory));
       }
     });
@@ -680,8 +614,16 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [viewMode, setViewMode] = useState<'flipbook' | 'presentation' | 'editor' | 'grid-overview' | 'settings'>('flipbook');
   
   // Materials List & Active Material
-  const [materials, setMaterials] = useState<FlipbookMaterial[]>(DEFAULT_FLIPBOOKS);
-  const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(initialMaterial || DEFAULT_FLIPBOOKS[0]);
+  const [materials, setMaterials] = useState<FlipbookMaterial[]>(() => DEFAULT_FLIPBOOKS || []);
+  const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(() => initialMaterial || (DEFAULT_FLIPBOOKS && DEFAULT_FLIPBOOKS[0]) || {
+    id: 'default-fallback',
+    title: 'Diploma in Production Art Engineer',
+    description: 'Faculty master curriculum handbook',
+    courseCategory: 'production-art-engineer',
+    author: 'Endless School of Printing and Packaging',
+    pages: [],
+    updatedAt: new Date().toISOString()
+  });
 
   // Resolve student assigned native language
   const studentAssignedNativeLang = React.useMemo(() => {
@@ -944,19 +886,20 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
   // Auto Page Turn Slideshow Effect
   useEffect(() => {
-    if (!isAutoFlipping || autoFlipInterval <= 0) return;
+    const pageCount = activeMaterial?.pages?.length || 0;
+    if (!isAutoFlipping || autoFlipInterval <= 0 || pageCount === 0) return;
     const timer = setInterval(() => {
-      setCurrentPageIndex(prev => (prev < activeMaterial.pages.length - 1 ? prev + 1 : 0));
+      setCurrentPageIndex(prev => (prev < pageCount - 1 ? prev + 1 : 0));
     }, autoFlipInterval * 1000);
     return () => clearInterval(timer);
-  }, [isAutoFlipping, autoFlipInterval, activeMaterial.pages.length]);
+  }, [isAutoFlipping, autoFlipInterval, activeMaterial?.pages?.length]);
 
   // TTS Auto-Read Page Narration Effect
   useEffect(() => {
     if (!ttsAutoRead) return;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const currentPageObj = activeMaterial.pages[currentPageIndex];
+      const currentPageObj = activeMaterial?.pages?.[currentPageIndex];
       if (currentPageObj) {
         const textToRead = `${currentPageObj.title}. ${stripHtml(currentPageObj.content || '')}`;
         const utterance = new SpeechSynthesisUtterance(textToRead);
@@ -964,7 +907,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         window.speechSynthesis.speak(utterance);
       }
     }
-  }, [currentPageIndex, ttsAutoRead, ttsRate, activeMaterial.pages]);
+  }, [currentPageIndex, ttsAutoRead, ttsRate, activeMaterial?.pages]);
 
   // "How to Create E-Books" Modal Guide State
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
@@ -1125,7 +1068,13 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   }, [filteredMaterials, activeMaterial?.id]);
 
   // Current Active Page
-  const currentPage = activeMaterial.pages[currentPageIndex] || activeMaterial.pages[0];
+  const currentPage = activeMaterial?.pages?.[currentPageIndex] || activeMaterial?.pages?.[0] || {
+    id: 'placeholder-p1',
+    pageNumber: 1,
+    title: 'Fundamental of colour',
+    content: '<p>Loading curriculum contents...</p>',
+    bgTheme: 'classic-paper' as const
+  };
 
   // Language translated strings generator
   const getTranslatedPage = (page: FlipbookPage, langCode: string) => {
@@ -1846,12 +1795,11 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
                 setResolvedUrl(resolved);
                 setMediaCache(prev => ({ ...prev, [key]: resolved }));
               } else {
-                // If local idb video is not on this device/session, seamlessly stream the sample lesson video
-                setResolvedUrl(FALLBACK_SAMPLE_VIDEOS[0]);
+                setResolvedUrl('');
               }
             })
             .catch(() => {
-              setResolvedUrl(FALLBACK_SAMPLE_VIDEOS[0]);
+              setResolvedUrl('');
             });
         }
       } else {
@@ -2034,6 +1982,18 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
           activeUrl.endsWith('.webm') ||
           activeUrl.endsWith('.mov') ||
           activeUrl.includes('commondatastorage.googleapis.com')));
+
+    if (!activeUrl && !url) {
+      return (
+        <div className="relative w-full h-full min-h-[180px] bg-slate-900/50 border border-dashed border-slate-700/60 rounded-xl overflow-hidden flex flex-col items-center justify-center p-6 text-center space-y-2">
+          <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700">
+            <Video className="w-5 h-5 text-slate-400" />
+          </div>
+          <span className="text-xs font-semibold text-slate-300">No Video Attached</span>
+          <span className="text-[10px] text-slate-500">Upload video directly to Firebase in the Page Editor</span>
+        </div>
+      );
+    }
 
     const embedUrl = getEmbedVideoUrl(activeUrl || url);
     const rawExternalUrl = url && !url.startsWith('idb:') && !url.startsWith('data:') ? url : '';
@@ -3150,7 +3110,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       courseCategory: defaultCourse,
       courseName: defaultCourse,
       author: (user as any)?.displayName || user?.email || 'Endless School of Printing and Packaging',
-      coverImageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80',
+      coverImageUrl: '',
       updatedAt: new Date().toISOString(),
       pages: [
         {
@@ -3161,7 +3121,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
           content: initialContent,
           layoutStyle: 'grid-2x2',
           mediaType: 'image',
-          imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
+          imageUrl: '',
           imageCaption: initialCaption,
           calloutText: '',
           bgTheme: 'classic-paper',
@@ -3216,7 +3176,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
       content: initialContent,
       layoutStyle: 'grid-2x2',
       mediaType: 'image',
-      imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
+      imageUrl: '',
       imageCaption: initialCaption,
       calloutText: '',
       bgTheme: 'classic-paper',
@@ -3331,6 +3291,38 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     setCurrentPageIndex(toIdx);
     setEditingPage(renumbered[toIdx]);
     handleSaveMaterial(updatedMat);
+  };
+
+  // Dynamic Right-Side Video & Image Swap Helper (Toggles vertical order: Video Top / Image Bottom <-> Image Top / Video Bottom)
+  const handleToggleMediaSwap = (targetPage?: FlipbookPage) => {
+    const pageToSwap = targetPage || editingPage || activeMaterial?.pages?.[currentPageIndex];
+    if (!pageToSwap) return;
+
+    const currentOrder = pageToSwap.mediaSwapOrder || 'video-first';
+    const newOrder: 'video-first' | 'image-first' = currentOrder === 'video-first' ? 'image-first' : 'video-first';
+
+    const updatedPage: FlipbookPage = {
+      ...pageToSwap,
+      mediaSwapOrder: newOrder,
+      layoutStyle: (pageToSwap.layoutStyle === 'grid-right-video-image' || pageToSwap.layoutStyle === 'grid-right-media-swap')
+        ? pageToSwap.layoutStyle
+        : 'grid-right-video-image'
+    };
+
+    if (editingPage && editingPage.id === pageToSwap.id) {
+      setEditingPage(updatedPage);
+    }
+
+    handleUpdatePage(updatedPage);
+
+    // Save material with updated swap state
+    const updatedPages = activeMaterial.pages.map(p => p.id === updatedPage.id ? updatedPage : p);
+    const updatedMat = { ...activeMaterial, pages: updatedPages };
+    setActiveMaterial(updatedMat);
+    handleSaveMaterial(updatedMat, true);
+
+    setSaveMessage(`Dynamic Right-Side Media Swapped: ${newOrder === 'image-first' ? '🖼️ Image (Top) / 🎬 Video (Bottom)' : '🎬 Video (Top) / 🖼️ Image (Bottom)'}`);
+    setTimeout(() => setSaveMessage(''), 2500);
   };
 
   // Keyboard navigation
@@ -3896,8 +3888,111 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         <span>Layout: {displayPage.layoutStyle || 'split-left'}</span>
                       </div>
 
-                      {/* IF LAYOUT IS 2-IMAGES GRID (Stacked Top & Bottom) */}
-                      {(displayPage.layoutStyle === 'grid-right-2-images' || displayPage.layoutStyle === 'grid-2-images') ? (
+                      {/* IF LAYOUT IS DYNAMIC SWAP VIDEO & IMAGE GRID (Stacked Top & Bottom with Dynamic Swapping) */}
+                      {(displayPage.layoutStyle === 'grid-right-video-image' || displayPage.layoutStyle === 'grid-right-media-swap') ? (
+                        <div className="space-y-3.5">
+                          {/* Render Stacked Cards according to mediaSwapOrder */}
+                          <div className="flex flex-col gap-3.5">
+                            {/* Card 1 (Top Card) */}
+                            {displayPage.mediaSwapOrder === 'image-first' ? (
+                              /* 1. IMAGE CARD (Top) */
+                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-amber-500/40 shadow-lg flex flex-col justify-between space-y-2">
+                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                                  <span className="text-[11px] font-extrabold uppercase text-amber-300 flex items-center gap-1.5">
+                                    <Image className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>{displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
+                                  </span>
+                                </div>
+                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[190px] max-h-[300px] flex items-center justify-center p-2">
+                                  <SafeImage 
+                                    src={displayPage.imageUrl || ''} 
+                                    alt={displayPage.imageCaption || displayPage.title || 'Diagram'} 
+                                    title={displayPage.title}
+                                    subtitle={displayPage.subtitle}
+                                    caption={displayPage.imageCaption}
+                                    className="max-h-[280px] w-full object-contain cursor-pointer" 
+                                    onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                                  />
+                                </div>
+                                {displayPage.imageCaption && (
+                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-amber-200 dark:text-amber-300 pt-0.5">
+                                    <Link className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                    <span>{displayPage.imageCaption}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              /* 1. VIDEO CARD (Top) */
+                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-pink-500/40 shadow-lg flex flex-col justify-between space-y-2">
+                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                                  <span className="text-[11px] font-extrabold uppercase text-pink-300 flex items-center gap-1.5">
+                                    <Video className="w-3.5 h-3.5 text-pink-400" />
+                                    <span>{displayPage.videoCaption || 'Demonstration Video'}</span>
+                                  </span>
+                                </div>
+                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-black aspect-video min-h-[190px] max-h-[300px]">
+                                  {renderVideoPlayer(displayPage.videoUrl || '', displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
+                                </div>
+                                {displayPage.videoCaption && (
+                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-pink-200 dark:text-pink-300 pt-0.5">
+                                    <Link className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                    <span>{displayPage.videoCaption}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Card 2 (Bottom Card) */}
+                            {displayPage.mediaSwapOrder === 'image-first' ? (
+                              /* 2. VIDEO CARD (Bottom) */
+                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-pink-500/40 shadow-lg flex flex-col justify-between space-y-2">
+                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                                  <span className="text-[11px] font-extrabold uppercase text-pink-300 flex items-center gap-1.5">
+                                    <Video className="w-3.5 h-3.5 text-pink-400" />
+                                    <span>{displayPage.videoCaption || 'Demonstration Video'}</span>
+                                  </span>
+                                </div>
+                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-black aspect-video min-h-[190px] max-h-[300px]">
+                                  {renderVideoPlayer(displayPage.videoUrl || '', displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
+                                </div>
+                                {displayPage.videoCaption && (
+                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-pink-200 dark:text-pink-300 pt-0.5">
+                                    <Link className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                    <span>{displayPage.videoCaption}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              /* 2. IMAGE CARD (Bottom) */
+                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-amber-500/40 shadow-lg flex flex-col justify-between space-y-2">
+                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                                  <span className="text-[11px] font-extrabold uppercase text-amber-300 flex items-center gap-1.5">
+                                    <Image className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>{displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
+                                  </span>
+                                </div>
+                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[190px] max-h-[300px] flex items-center justify-center p-2">
+                                  <SafeImage 
+                                    src={displayPage.imageUrl || ''} 
+                                    alt={displayPage.imageCaption || displayPage.title || 'Diagram'} 
+                                    title={displayPage.title}
+                                    subtitle={displayPage.subtitle}
+                                    caption={displayPage.imageCaption}
+                                    className="max-h-[280px] w-full object-contain cursor-pointer" 
+                                    onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                                  />
+                                </div>
+                                {displayPage.imageCaption && (
+                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-amber-200 dark:text-amber-300 pt-0.5">
+                                    <Link className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                    <span>{displayPage.imageCaption}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (displayPage.layoutStyle === 'grid-right-2-images' || displayPage.layoutStyle === 'grid-2-images') ? (
                         <div className="space-y-4">
                           <div className="flex flex-col gap-4">
                             {/* Image #1 (Top) */}
@@ -4333,7 +4428,58 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
                 {/* Right Media Column */}
                 <div className="md:col-span-5 space-y-3">
-                  {displayPage.videoUrl ? (
+                  {(displayPage.layoutStyle === 'grid-right-video-image' || displayPage.layoutStyle === 'grid-right-media-swap' || (displayPage.videoUrl && displayPage.imageUrl)) ? (
+                    <div className="space-y-3">
+                      {/* Stacked Content according to mediaSwapOrder */}
+                      {displayPage.mediaSwapOrder === 'image-first' ? (
+                        <>
+                          {/* Image Top */}
+                          {displayPage.imageUrl && (
+                            <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[180px] max-h-[260px] flex items-center justify-center p-2">
+                              <SafeImage 
+                                src={displayPage.imageUrl} 
+                                alt={displayPage.title || 'Slide Visual'} 
+                                title={displayPage.title}
+                                subtitle={displayPage.subtitle}
+                                caption={displayPage.imageCaption}
+                                className="max-h-[240px] w-full object-contain rounded-lg cursor-pointer" 
+                                onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                              />
+                            </div>
+                          )}
+                          {/* Video Bottom */}
+                          {displayPage.videoUrl && (
+                            <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[180px] max-h-[260px] shadow-xl">
+                              {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {/* Video Top */}
+                          {displayPage.videoUrl && (
+                            <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[180px] max-h-[260px] shadow-xl">
+                              {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
+                            </div>
+                          )}
+                          {/* Image Bottom */}
+                          {displayPage.imageUrl && (
+                            <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[180px] max-h-[260px] flex items-center justify-center p-2">
+                              <SafeImage 
+                                src={displayPage.imageUrl} 
+                                alt={displayPage.title || 'Slide Visual'} 
+                                title={displayPage.title}
+                                subtitle={displayPage.subtitle}
+                                caption={displayPage.imageCaption}
+                                className="max-h-[240px] w-full object-contain rounded-lg cursor-pointer" 
+                                onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ) : displayPage.videoUrl ? (
                     <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[280px] shadow-xl">
                       {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                     </div>
@@ -5687,92 +5833,12 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
               {/* Right Column: Video & Image File Upload Options & Layout Settings */}
               <div className="space-y-4">
-
-                {/* MULTI-SYSTEM MEDIA SYNC & CUSTOM DOMAIN ID HUB */}
-                <div className="p-3.5 bg-gradient-to-r from-blue-950/80 via-slate-900 to-indigo-950/80 border border-blue-800/80 rounded-2xl space-y-2.5 shadow-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30">
-                        <Globe className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-black text-blue-200">Custom Domain Media & Multi-System Sync</h4>
-                        <p className="text-[10px] text-slate-400">Ensures video and images load seamlessly on all students' and faculty's devices</p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 bg-blue-950 text-blue-300 border border-blue-700/60 rounded-md">
-                      Multi-Device Ready
-                    </span>
-                  </div>
-
-                  {/* Domain ID Base Address & Quick Actions */}
-                  <div className="p-2.5 bg-slate-950/90 border border-slate-800 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-300 gap-1 flex-wrap">
-                      <span className="text-slate-400">Custom Domain ID:</span>
-                      <span className="text-blue-300 font-bold bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/50 break-all select-all">
-                        https://endlesssparkcreativehub.in/ebook-studio
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1 text-[10px]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const base = 'https://endlesssparkcreativehub.in/ebook-studio/videos/';
-                          const updated = { ...editingPage, videoUrl: editingPage.videoUrl?.startsWith('http') ? editingPage.videoUrl : `${base}lesson_video.mp4` };
-                          setEditingPage(updated);
-                          handleUpdatePage(updated);
-                        }}
-                        className="p-1.5 bg-pink-950/40 hover:bg-pink-900/60 border border-pink-700/50 text-pink-300 rounded-lg transition text-left cursor-pointer flex items-center gap-1"
-                        title="Fill Custom Domain Video URL"
-                      >
-                        <Video className="w-3 h-3 text-pink-400 shrink-0" />
-                        <span className="truncate">Set Domain Video URL</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const base = 'https://endlesssparkcreativehub.in/ebook-studio/images/';
-                          const updated = { ...editingPage, imageUrl: editingPage.imageUrl?.startsWith('http') ? editingPage.imageUrl : `${base}diagram_1.png` };
-                          setEditingPage(updated);
-                          handleUpdatePage(updated);
-                        }}
-                        className="p-1.5 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-700/50 text-amber-300 rounded-lg transition text-left cursor-pointer flex items-center gap-1"
-                        title="Fill Custom Domain Image 1 URL"
-                      >
-                        <Image className="w-3 h-3 text-amber-400 shrink-0" />
-                        <span className="truncate">Set Domain Image 1 URL</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const base = 'https://endlesssparkcreativehub.in/ebook-studio/images/';
-                          const updated = { ...editingPage, secondaryImageUrl: editingPage.secondaryImageUrl?.startsWith('http') ? editingPage.secondaryImageUrl : `${base}diagram_2.png` };
-                          setEditingPage(updated);
-                          handleUpdatePage(updated);
-                        }}
-                        className="p-1.5 bg-blue-950/40 hover:bg-blue-900/60 border border-blue-700/50 text-blue-300 rounded-lg transition text-left cursor-pointer flex items-center gap-1"
-                        title="Fill Custom Domain Image 2 URL"
-                      >
-                        <Image className="w-3 h-3 text-blue-400 shrink-0" />
-                        <span className="truncate">Set Domain Image 2 URL</span>
-                      </button>
-                    </div>
-
-                    <p className="text-[10px] text-slate-400 leading-tight">
-                      💡 <b>Cross-System Notice:</b> Videos hosted on your custom domain (<code className="text-blue-300">https://endlesssparkcreativehub.in/ebook-studio</code>) or cloud URLs (YouTube, Drive, Vimeo) display on <b>all client and student systems</b>. Local device uploads (<code className="text-amber-300">idb:</code>) stay in this browser only.
-                    </p>
-                  </div>
-                </div>
-                
                 {/* VIDEO UPLOAD & EMBED SECTION */}
                 <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-pink-400 flex items-center gap-1.5">
                       <Video className="w-4 h-4 text-pink-400" />
-                      <span>Video Lesson (Custom Domain URL / Cloud / Upload)</span>
+                      <span>Video Lesson (Google Drive / Firebase / Cloud / File)</span>
                     </label>
                     {editingPage.videoUrl && (
                       <button
@@ -5792,17 +5858,13 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   {editingPage.videoUrl && (
                     <div className="text-[10px] flex items-center gap-1.5 flex-wrap">
                       <span className="text-slate-400">Source:</span>
-                      {editingPage.videoUrl.startsWith('https://endlesssparkcreativehub.in') ? (
-                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
-                          <Globe className="w-3 h-3" /> Custom Domain ID (Multi-System Ready)
-                        </span>
-                      ) : editingPage.videoUrl.startsWith('http') ? (
+                      {editingPage.videoUrl.startsWith('http') ? (
                         <span className="px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-700/60 rounded-md font-bold flex items-center gap-1">
-                          <Server className="w-3 h-3" /> Cloud Hosted URL (Multi-System Ready)
+                          <Server className="w-3 h-3" /> Cloud / Google Drive / Firebase URL (Synchronized)
                         </span>
                       ) : editingPage.videoUrl.startsWith('idb:') ? (
-                        <span className="px-2 py-0.5 bg-amber-950/80 text-amber-300 border border-amber-700/60 rounded-md font-bold flex items-center gap-1">
-                          <HardDrive className="w-3 h-3" /> Local Browser File (Visible only on this system)
+                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
+                          <HardDrive className="w-3 h-3" /> Uploaded File (Stored)
                         </span>
                       ) : null}
                     </div>
@@ -5811,7 +5873,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   {/* Video Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-pink-950/60 hover:bg-pink-900/80 border border-pink-700/60 rounded-xl text-xs font-extrabold text-pink-200 transition cursor-pointer shadow-sm">
                     <Upload className="w-4 h-4 text-pink-400 shrink-0" />
-                    <span>Upload Video File (MP4 / WebM / MOV - Blaze Cloud Storage)</span>
+                    <span>Upload Video File (MP4 / WebM / MOV - Firebase Cloud Storage)</span>
                     <input
                       type="file"
                       accept="video/*"
@@ -5850,13 +5912,13 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         handleUpdatePage(updated);
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500"
-                      placeholder="Paste Custom Domain URL (https://endlesssparkcreativehub.in/...) or YouTube, Drive, Vimeo..."
+                      placeholder="Paste Google Drive, Firebase Storage, YouTube, Vimeo, or direct Video URL..."
                     />
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
                       <span className="font-semibold text-pink-300">Supported:</span>
-                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Custom Domain</span>
-                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">YouTube</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Firebase Storage</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">YouTube</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Vimeo</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct MP4 / WebM</span>
                     </div>
@@ -5953,7 +6015,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                       <Image className="w-4 h-4 text-amber-400" />
-                      <span>Primary Image / Diagram 1 (Custom Domain / Cloud / File)</span>
+                      <span>Primary Image / Diagram 1 (Google Drive / Firebase / Cloud / File)</span>
                     </label>
                     {editingPage.imageUrl && (
                       <button
@@ -5973,21 +6035,17 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   {editingPage.imageUrl && (
                     <div className="text-[10px] flex items-center gap-1.5 flex-wrap">
                       <span className="text-slate-400">Source:</span>
-                      {editingPage.imageUrl.startsWith('https://endlesssparkcreativehub.in') ? (
-                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
-                          <Globe className="w-3 h-3" /> Custom Domain ID (Multi-System Ready)
-                        </span>
-                      ) : editingPage.imageUrl.startsWith('http') ? (
+                      {editingPage.imageUrl.startsWith('http') ? (
                         <span className="px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-700/60 rounded-md font-bold flex items-center gap-1">
-                          <Server className="w-3 h-3" /> Cloud Hosted URL (Multi-System Ready)
+                          <Server className="w-3 h-3" /> Cloud / Google Drive / Firebase URL (Synchronized)
                         </span>
                       ) : editingPage.imageUrl.startsWith('data:image') ? (
                         <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Cloud Database Synchronized
                         </span>
                       ) : editingPage.imageUrl.startsWith('idb:') ? (
-                        <span className="px-2 py-0.5 bg-amber-950/80 text-amber-300 border border-amber-700/60 rounded-md font-bold flex items-center gap-1">
-                          <HardDrive className="w-3 h-3" /> Local Browser Cache (Visible only on this system)
+                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
+                          <HardDrive className="w-3 h-3" /> Uploaded File (Stored)
                         </span>
                       ) : null}
                     </div>
@@ -5996,7 +6054,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   {/* Primary Image Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-950/60 hover:bg-amber-900/80 border border-amber-700/60 rounded-xl text-xs font-extrabold text-amber-200 transition cursor-pointer shadow-sm">
                     <Upload className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Upload Image 1 File (PNG / JPG / SVG - Blaze Cloud Storage)</span>
+                    <span>Upload Image 1 File (PNG / JPG / SVG - Firebase Cloud Storage)</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -6035,12 +6093,12 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         handleUpdatePage(updated);
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                      placeholder="Paste Custom Domain URL (https://endlesssparkcreativehub.in/...) or Drive, Imgur, direct URL..."
+                      placeholder="Paste Google Drive, Firebase Storage, Imgur, or direct Image URL..."
                     />
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
                       <span className="font-semibold text-amber-300">Supported:</span>
-                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Custom Domain</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Firebase Storage</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Dropbox</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct Image URL</span>
                     </div>
@@ -6092,21 +6150,17 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   {editingPage.secondaryImageUrl && (
                     <div className="text-[10px] flex items-center gap-1.5 flex-wrap">
                       <span className="text-slate-400">Source:</span>
-                      {editingPage.secondaryImageUrl.startsWith('https://endlesssparkcreativehub.in') ? (
-                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
-                          <Globe className="w-3 h-3" /> Custom Domain ID (Multi-System Ready)
-                        </span>
-                      ) : editingPage.secondaryImageUrl.startsWith('http') ? (
+                      {editingPage.secondaryImageUrl.startsWith('http') ? (
                         <span className="px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-700/60 rounded-md font-bold flex items-center gap-1">
-                          <Server className="w-3 h-3" /> Cloud Hosted URL (Multi-System Ready)
+                          <Server className="w-3 h-3" /> Cloud / Google Drive / Firebase URL (Synchronized)
                         </span>
                       ) : editingPage.secondaryImageUrl.startsWith('data:image') ? (
                         <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Cloud Database Synchronized
                         </span>
                       ) : editingPage.secondaryImageUrl.startsWith('idb:') ? (
-                        <span className="px-2 py-0.5 bg-amber-950/80 text-amber-300 border border-amber-700/60 rounded-md font-bold flex items-center gap-1">
-                          <HardDrive className="w-3 h-3" /> Local Browser Cache (Visible only on this system)
+                        <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 rounded-md font-bold flex items-center gap-1">
+                          <HardDrive className="w-3 h-3" /> Uploaded File (Stored)
                         </span>
                       ) : null}
                     </div>
@@ -6115,7 +6169,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   {/* Secondary Image Upload File Button */}
                   <label className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-950/60 hover:bg-blue-900/80 border border-blue-700/60 rounded-xl text-xs font-extrabold text-blue-200 transition cursor-pointer shadow-sm">
                     <Upload className="w-4 h-4 text-blue-400 shrink-0" />
-                    <span>Upload Image 2 File (PNG / JPG / SVG - Blaze Cloud Storage)</span>
+                    <span>Upload Image 2 File (PNG / JPG / SVG - Firebase Cloud Storage)</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -6154,12 +6208,12 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         handleUpdatePage(updated);
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Paste Custom Domain URL (https://endlesssparkcreativehub.in/...) or Drive, Imgur, direct URL..."
+                      placeholder="Paste Google Drive, Firebase Storage, Imgur, or direct Image URL..."
                     />
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 pt-0.5">
                       <span className="font-semibold text-blue-300">Supported:</span>
-                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Custom Domain</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Google Drive</span>
+                      <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Firebase Storage</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Dropbox</span>
                       <span className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-300">Direct Image URL</span>
                     </div>
@@ -6213,6 +6267,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     }}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none"
                   >
+                    <option value="grid-right-video-image">🎬🖼️ Right Side Grid (Video & Image Stacked with Dynamic Swap)</option>
                     <option value="grid-right-2-images">🖼️ Right Side Grid (2 Images Stacked Top & Bottom)</option>
                     <option value="grid-2x2">2x2 Multi-Card Grid Layout (Text + Video + Image + File)</option>
                     <option value="grid-bento">Bento Box Grid Layout (Feature Tiles)</option>
@@ -6221,6 +6276,34 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     <option value="media-top">Media Banner Top, Text Bottom</option>
                     <option value="text-only">Full Page Typography Text Layout</option>
                   </select>
+                </div>
+
+                {/* Dynamic Right-Side Video & Image Grid & Swap Studio Controls */}
+                <div className="p-3.5 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-amber-500/40 rounded-2xl space-y-2.5 shadow-md">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase text-amber-300 flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-amber-400" />
+                      <span>Dynamic Right Side Media Grid</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      {editingPage.mediaSwapOrder === 'image-first' ? '🖼️ Image (Top) / 🎬 Video (Bottom)' : '🎬 Video (Top) / 🖼️ Image (Bottom)'}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-300 leading-normal">
+                    This layout splits the page into content on the left, and a stacked Video + Image grid on the right. You can dynamically swap which media item appears on top at any time.
+                  </p>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMediaSwap(editingPage)}
+                      className="w-full py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 border border-amber-300/40"
+                    >
+                      <ArrowUpDown className="w-4 h-4 text-slate-950" />
+                      <span>Dynamically Swap Positions ({editingPage.mediaSwapOrder === 'image-first' ? 'Switch to 🎬 Video Top' : 'Switch to 🖼️ Image Top'})</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Quick Done Button */}

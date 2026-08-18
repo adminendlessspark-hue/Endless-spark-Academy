@@ -23,7 +23,7 @@ const blogPosts = [
     readTime: '5 min read',
     author: 'Dr. Arul Kumar',
     authorRole: 'Head of Packaging Tech',
-    image: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600',
+    image: '',
     excerpt: 'Exploring biodegradable substrates, water-soluble inks, and active barrier layers that prolong shelf-life without microplastics.',
     content: `
       The packaging industry is undergoing a seismic shift. The convergence of strict environmental regulations and high consumer demand for sustainable products is pushing brands to rethink their packaging architectures. We are moving beyond simple "recyclability" into the era of Eco-Friendly Smart Packaging.
@@ -50,7 +50,7 @@ const blogPosts = [
     readTime: '8 min read',
     author: 'Sarah Jenkins',
     authorRole: 'Senior Print Engineer',
-    image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=600',
+    image: '',
     excerpt: 'A comprehensive guide to flawless trapping, bleed allowances, ink-density limits (TAC/TIL), and custom ICC color-profile conversions.',
     content: `
       In high-speed offset and gravure printing, a single error in file preparation can ruin thousands of meters of expensive substrate. Prepress engineering is the crucial shield that ensures what you see on screen matches the final physical printed surface perfectly.
@@ -79,7 +79,7 @@ const blogPosts = [
     readTime: '6 min read',
     author: 'Rajasekar V',
     authorRole: 'Brand & Finishes Consultant',
-    image: 'https://images.unsplash.com/photo-1507208773393-40d9fc670acf?auto=format&fit=crop&q=80&w=600',
+    image: '',
     excerpt: 'How digital cold foil inline application elevates packaging luxury, optimizes production costs, and delivers breathtaking metallic textures.',
     content: `
       In a crowded retail environment, products have less than two seconds to capture a customer's eye. Packaging finishes have become the ultimate differentiator, and holographic cold foil is leading the revolution in luxury brand finishing.
@@ -99,13 +99,7 @@ const blogPosts = [
   }
 ];
 
-const UNSPLASH_IMAGES = [
-  { url: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600', label: 'Sustainable Package' },
-  { url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=600', label: 'Prepress Canvas' },
-  { url: 'https://images.unsplash.com/photo-1507208773393-40d9fc670acf?auto=format&fit=crop&q=80&w=600', label: 'Brand Foils' },
-  { url: 'https://images.unsplash.com/photo-1512418491510-1aa49a8de846?auto=format&fit=crop&q=80&w=600', label: 'Color Retouching' },
-  { url: 'https://images.unsplash.com/photo-1504274066654-8fe55b554830?auto=format&fit=crop&q=80&w=600', label: 'Design Agency Work' }
-];
+const UNSPLASH_IMAGES: { url: string; label: string }[] = [];
 
 const getCategoryColor = (category: string) => {
   if (category === 'Sustainable Design') return 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100';
@@ -144,7 +138,7 @@ export default function PrintingBlog() {
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('Sustainable Design');
   const [newReadTime, setNewReadTime] = useState('5 min read');
-  const [newImage, setNewImage] = useState('https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600');
+  const [newImage, setNewImage] = useState('');
   const [newExcerpt, setNewExcerpt] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newWidgetType, setNewWidgetType] = useState('none');
@@ -293,7 +287,7 @@ export default function PrintingBlog() {
     setNewTitle(post.title || '');
     setNewCategory(post.category || 'Sustainable Design');
     setNewReadTime(post.readTime || '5 min read');
-    setNewImage(post.image || 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600');
+    setNewImage(post.image || '');
     setNewExcerpt(post.excerpt || '');
     setNewContent(post.content || '');
     setNewWidgetType(post.widgetType || 'none');
@@ -307,7 +301,7 @@ export default function PrintingBlog() {
     setNewTitle('');
     setNewCategory('Sustainable Design');
     setNewReadTime('5 min read');
-    setNewImage('https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600');
+    setNewImage('');
     setNewExcerpt('');
     setNewContent('');
     setNewWidgetType('none');
@@ -1157,13 +1151,17 @@ export default function PrintingBlog() {
                   }`}
                   onClick={() => setSelectedPost(post)}
                 >
-                  <div className="h-48 w-full overflow-hidden relative">
-                    <img 
-                      src={post.image} 
-                      alt={post.title} 
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      referrerPolicy="no-referrer"
-                    />
+                  <div className="h-48 w-full overflow-hidden relative bg-gradient-to-tr from-slate-900 via-pink-950/40 to-slate-900 flex items-center justify-center">
+                    {post.image ? (
+                      <img 
+                        src={post.image} 
+                        alt={post.title} 
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <BookOpen className="w-10 h-10 text-pink-400/40" />
+                    )}
                     <div className="absolute top-4 left-4 flex flex-col gap-1.5 items-start">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${post.categoryColor || getCategoryColor(post.category)} shadow-sm`}>
                         {post.category}
@@ -1301,13 +1299,15 @@ export default function PrintingBlog() {
 
               <div className="overflow-y-auto flex-grow">
                 {/* Visual Cover */}
-                <div className="h-56 sm:h-72 w-full relative">
-                  <img 
-                    src={selectedPost.image} 
-                    alt={selectedPost.title} 
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
+                <div className="h-56 sm:h-72 w-full relative bg-gradient-to-tr from-slate-900 via-pink-950/60 to-slate-900 flex items-center justify-center">
+                  {selectedPost.image && (
+                    <img 
+                      src={selectedPost.image} 
+                      alt={selectedPost.title} 
+                      className="w-full h-full object-cover absolute inset-0"
+                      referrerPolicy="no-referrer"
+                    />
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
                   
                   <div className="absolute bottom-6 left-6 right-6 text-white">

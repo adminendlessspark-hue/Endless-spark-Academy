@@ -36,94 +36,9 @@ const safeDirname = typeof __dirname !== "undefined" ? __dirname : (typeof impor
 
 const localUploadsDir = "/tmp/uploads_fallback";
 
-// Helper to seed missing course modules assignment PDF if it doesn't exist
+// Helper to seed missing course modules assignment PDF if needed (disabled to ensure all media is cloud-managed in Firebase)
 function ensureAssignmentPdfExists() {
-  try {
-    const targetDir = path.join(localUploadsDir, "course_modules/assignment_papers");
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
-    const seedFiles = [
-      "1780421409366_Color_Fundamental.pdf",
-      "1785339414356_Color_Fundamental.pdf"
-    ];
-
-    for (const fileName of seedFiles) {
-      const targetFile = path.join(targetDir, fileName);
-      if (!fs.existsSync(targetFile) || checkIsFallbackPdf(targetFile)) {
-        console.log("Seeding course assignment PDF file:", targetFile);
-        const doc = new jsPDF();
-        
-        // Header banner
-        doc.setFillColor(30, 41, 59); // slate-800
-        doc.rect(0, 0, 210, 15, "F");
-        
-        doc.setTextColor(255, 255, 255);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
-        doc.text("ENDLESS SPARK ACADEMY  |  COURSE MODULE ASSIGNMENT", 15, 10);
-        
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(22);
-        doc.text("Assignment: Fundamentals of Colour", 15, 35);
-        
-        doc.setDrawColor(226, 232, 240); // border-slate-200
-        doc.line(15, 42, 195, 42);
-        
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
-        doc.text("Topic Introduction & Learning Objectives", 15, 53);
-        
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(10);
-        doc.setTextColor(51, 65, 85);
-        const introLines = [
-          "Colour is one of the most fundamental elements in design. It can evoke emotions, direct raw focus,",
-          "establish brand identity, and create visual hierarchy across digital and print media.",
-          "This module introduces the core systems of colour organization, contrast principles, and real-world",
-          "prepress reproduction applications."
-        ];
-        let y = 61;
-        introLines.forEach(line => {
-          doc.text(line, 15, y);
-          y += 6;
-        });
-        
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
-        doc.text("Practical Tasks & Deliverables:", 15, 92);
-        
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(10);
-        const tasks = [
-          "1. Review the introductory lecture on additive vs subtractive colour models (RGB vs CMYK).",
-          "2. Analyze how complementary, analogous, and triadic colour schemes create effective contrast.",
-          "3. Complete the digital worksheet matching primary colour mixes in paint, light, and ink.",
-          "4. Choose two contrasting warm and cool tones, and design a balanced visual composition.",
-          "5. Save your finalized design as a print-ready PDF and submit it via your student dashboard."
-        ];
-        y = 100;
-        tasks.forEach(task => {
-          doc.text(task, 15, y);
-          y += 7.5;
-        });
-        
-        // Footer marker
-        doc.setDrawColor(226, 232, 240);
-        doc.line(15, 275, 195, 275);
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(8);
-        doc.setTextColor(148, 163, 184);
-        doc.text("Endless Spark School of Printing & Packaging - Student Academic Assignment Paper", 15, 282);
-
-        const arrayBuffer = doc.output("arraybuffer");
-        fs.writeFileSync(targetFile, Buffer.from(arrayBuffer));
-        console.log("Successfully seeded assignment PDF file:", targetFile);
-      }
-    }
-  } catch (err) {
-    console.warn("Could not seed assignment PDF:", err);
-  }
+  // Purged to ensure all media files are uploaded and served exclusively via Firebase
 }
 
 // Helper to dynamically generate and seed fallback files (images, PDFs, ZIP archives) locally on disk
@@ -421,8 +336,6 @@ function getStorageBucketNames(): string[] {
 function checkIsFallbackPdf(filePathOnDisk: string): boolean {
   try {
     if (!fs.existsSync(filePathOnDisk)) return false;
-    const stat = fs.statSync(filePathOnDisk);
-    if (stat.size > 150000) return false; // Real uploaded PDFs are typically larger than 150KB
     const buffer = fs.readFileSync(filePathOnDisk, { encoding: 'utf8', flag: 'r' });
     if (buffer.includes("Study Resource Fallback") || buffer.includes("Academy Administration Portal - Secure PDF Viewer Fallback Layer")) {
       return true;
@@ -975,20 +888,57 @@ async function startServer() {
     return obj;
   };
 
+  // Helper to query Firestore documents via REST API as a robust fallback
+  async function fetchFirestoreRest(collection: string): Promise<any[]> {
+    try {
+      if (!firebaseConfig.apiKey || !firebaseConfig.projectId) return [];
+      const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
+      const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${dbId}/documents/${collection}?key=${firebaseConfig.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      if (!data.documents || !Array.isArray(data.documents)) return [];
+      
+      return data.documents.map((doc: any) => {
+        const id = doc.name ? doc.name.split("/").pop() : "";
+        const fields = doc.fields || {};
+        const parsed: any = { id };
+        for (const [key, val] of Object.entries<any>(fields)) {
+          if (val.stringValue !== undefined) parsed[key] = val.stringValue;
+          else if (val.integerValue !== undefined) parsed[key] = parseInt(val.integerValue, 10);
+          else if (val.doubleValue !== undefined) parsed[key] = parseFloat(val.doubleValue);
+          else if (val.booleanValue !== undefined) parsed[key] = val.booleanValue;
+          else if (val.mapValue !== undefined) parsed[key] = val.mapValue.fields;
+          else if (val.arrayValue !== undefined) parsed[key] = val.arrayValue.values;
+          else parsed[key] = Object.values(val)[0];
+        }
+        return parsed;
+      });
+    } catch {
+      return [];
+    }
+  }
+
   // GET /api/flipbooks - Load all saved flipbooks from Firestore with disk backup
   app.get("/api/flipbooks", async (req: any, res: any) => {
     try {
-      const db = getDb();
       let materials: any[] = [];
       
-      // 1. Try fetching from Firestore
+      // 1. Try fetching from Firestore Admin SDK or REST fallback
       try {
+        const db = getDb();
         const snap = await db.collection("course_flipbooks").get();
         if (!snap.empty) {
           materials = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
         }
       } catch (fsErr: any) {
-        console.warn("Backend: Firestore course_flipbooks get error:", fsErr?.message || fsErr);
+        console.log("Backend: Firestore Admin SDK get skipped, using REST & local disk store:", fsErr?.message || fsErr);
+        try {
+          const restMaterials = await fetchFirestoreRest("course_flipbooks");
+          if (restMaterials && restMaterials.length > 0) {
+            materials = restMaterials;
+          }
+        } catch (_) {}
       }
 
       // 2. Merge with disk backups for any missing materials
@@ -1919,7 +1869,7 @@ async function startServer() {
     }
   });
 
-  // API Route for file upload to bypass client-side CORS and persist files to Firebase Storage (Blaze Plan unlimited)
+  // API Route for file upload to persist files directly to Firebase Cloud Storage (Blaze Plan paid version - no minimum or maximum limit restrictions)
   const handleFileUploadRoute = async (req: any, res: any) => {
     if (!req.file) {
       console.error("Backend: Upload attempt with no file in request");
@@ -1929,15 +1879,14 @@ async function startServer() {
     const { originalname, size, mimetype, path: tempPath } = req.file;
     const requestedPath = (req.query.path as string) || "templates";
     
-    console.log(`Backend: Processing upload: ${originalname} (${size} bytes) into folder: ${requestedPath}`);
+    console.log(`Backend: Processing Firebase Cloud Storage upload: ${originalname} (${size} bytes) into folder: ${requestedPath}`);
     
     try {
       const bucketNamesToTry = getStorageBucketNames();
-      
-      console.log(`Backend: Initializing storage. Project: ${firebaseConfig.projectId}. Buckets to try: ${bucketNamesToTry.join(', ')}`);
+      console.log(`Backend: Initializing Firebase storage for project: ${firebaseConfig.projectId}. Buckets: ${bucketNamesToTry.join(', ')}`);
       
       const fileName = `${requestedPath}/${Date.now()}_${originalname.replace(/\s+/g, '_')}`;
-      const useResumable = size > 50 * 1024 * 1024; // 50MB for resumable
+      const useResumable = size > 50 * 1024 * 1024; // 50MB for resumable chunking
 
       let uploadSuccess = false;
       let lastError: any = null;
@@ -1945,23 +1894,20 @@ async function startServer() {
       let storageBucket: any = null;
       let file: any = null;
       let url = "";
-      let isLocalUploaded = false;
 
       for (const currentBucketName of bucketNamesToTry) {
         try {
-          console.log(`Backend: Trying bucket: ${currentBucketName}`);
+          console.log(`Backend: Uploading to Firebase bucket: ${currentBucketName}`);
           const currentBucket = admin.storage().bucket(currentBucketName);
           const currentFile = currentBucket.file(fileName);
           
           if (size < 1024 * 1024) {
-            console.log(`Backend: Using file.save() for small file on bucket: ${currentBucketName}`);
             const fileBuffer = fs.readFileSync(tempPath);
             await currentFile.save(fileBuffer, {
               metadata: { contentType: mimetype || 'application/octet-stream' },
               resumable: false
             });
           } else {
-            console.log(`Backend: Using bucket.upload() (resumable: ${useResumable}) on bucket: ${currentBucketName}`);
             await currentBucket.upload(tempPath, {
               destination: fileName,
               resumable: useResumable,
@@ -1969,116 +1915,75 @@ async function startServer() {
             });
           }
           
-          // Successful upload! Keep these handles
           storageBucket = currentBucket;
           file = currentFile;
           finalBucketName = currentBucketName;
           uploadSuccess = true;
-          console.log(`Backend: Upload successful with bucket ${currentBucketName}`);
+          console.log(`Backend: Firebase Cloud Storage upload successful to bucket ${currentBucketName}`);
           break;
         } catch (uploadErr: any) {
-          console.log(`Backend: Cloud Storage bucket ${currentBucketName} not available or accessible (${uploadErr?.message || uploadErr}), checking next fallback...`);
+          console.log(`Backend: Firebase bucket ${currentBucketName} attempt: ${uploadErr?.message || uploadErr}`);
           lastError = uploadErr;
         }
       }
 
-      if (!uploadSuccess) {
-        console.log("Backend: Cloud Storage unavailable, falling back to local filesystem storage...");
-        
-        try {
-          const relativeDest = `uploads/${requestedPath}`;
-          const localDestDir = path.join(localUploadsDir, requestedPath);
-          if (!fs.existsSync(localDestDir)) {
-            fs.mkdirSync(localDestDir, { recursive: true });
-          }
-          const sanitizedOriginalName = originalname.replace(/[^a-zA-Z0-9_.-]/g, '_');
-          const localFileName = `${Date.now()}_${sanitizedOriginalName}`;
-          const localFilePath = path.join(localDestDir, localFileName);
-          
-          try {
-            fs.copyFileSync(tempPath, localFilePath);
-          } catch (copyErr) {
-            // Fallback to read/write sync if copyFileSync fails across filesystems
-            const fileData = fs.readFileSync(tempPath);
-            fs.writeFileSync(localFilePath, fileData);
-          }
-
-          url = `/${relativeDest}/${localFileName}`;
-          console.log("Backend: Successfully saved upload to local fallback path:", url);
-          isLocalUploaded = true;
-          uploadSuccess = true;
-        } catch (localSaveErr: any) {
-          console.error("Backend: Local fallback storage failed:", localSaveErr);
-          
-          let customMessage = localSaveErr?.message || lastError?.message || "Storage upload failed.";
-          const errLower = customMessage.toLowerCase();
-          if (errLower.includes("not found") || errLower.includes("does not exist") || errLower.includes("404")) {
-            customMessage = "Firebase Storage or upload directory is not accessible. Please check server permissions.";
-          }
-          
-          throw new Error(customMessage);
-        }
-      }
-
-      // Cleanup temp file
+      // Cleanup local temp file immediately
       try {
         if (fs.existsSync(tempPath)) {
           fs.unlinkSync(tempPath);
-          console.log("Temporary file cleaned up.");
         }
       } catch (cleanErr) {
-        console.warn("Could not delete temporary file:", cleanErr);
+        console.warn("Could not delete temp file:", cleanErr);
       }
 
-      // Attempt GCS access URL generation only if NOT locally saved
-      if (!isLocalUploaded) {
-        try {
-          console.log("Generating GCS access URL...");
-          // Try to make it public first
-          try {
-            await file.makePublic();
-            url = `https://storage.googleapis.com/${finalBucketName}/${fileName}`;
-            console.log("Backend: GCS file made public successfully.");
-          } catch (pubErr) {
-            console.warn("Backend: Could not make GCS public, using signed URL or fallback media URL...");
-            try {
-              const [signedUrl] = await storageBucket.file(fileName).getSignedUrl({
-                action: "read",
-                expires: "03-09-2491", 
-              });
-              url = signedUrl;
-            } catch (signedErr) {
-              url = `https://firebasestorage.googleapis.com/v0/b/${finalBucketName}/o/${encodeURIComponent(fileName)}?alt=media`;
-            }
-          }
-        } catch (urlErr: any) {
-          console.error("Backend: URL generation failed:", urlErr);
-          url = `https://firebasestorage.googleapis.com/v0/b/${finalBucketName}/o/${encodeURIComponent(fileName)}?alt=media`;
-        }
+      if (!uploadSuccess || !file) {
+        console.error("Backend: Firebase Cloud Storage upload failed on all buckets:", lastError);
+        throw new Error(lastError?.message || "Failed to upload file to Firebase Cloud Storage. Please verify Firebase Storage rules and bucket configuration.");
       }
-      
-      console.log("Upload process complete. Final URL:", url);
-      
-      // Persist backup copy into Firestore uploaded_files collection
+
+      // Generate accessible Firebase Cloud Storage URL
       try {
-        let fileBuf: Buffer | null = null;
-        if (isLocalUploaded && url.startsWith("/uploads/")) {
-          const filePathOnDisk = path.join(localUploadsDir, url.substring("/uploads/".length));
-          if (fs.existsSync(filePathOnDisk)) fileBuf = fs.readFileSync(filePathOnDisk);
+        try {
+          await file.makePublic();
+          url = `https://storage.googleapis.com/${finalBucketName}/${fileName}`;
+        } catch (pubErr) {
+          try {
+            const [signedUrl] = await storageBucket.file(fileName).getSignedUrl({
+              action: "read",
+              expires: "03-09-2491", 
+            });
+            url = signedUrl;
+          } catch (signedErr) {
+            url = `https://firebasestorage.googleapis.com/v0/b/${finalBucketName}/o/${encodeURIComponent(fileName)}?alt=media`;
+          }
         }
-        if (fileBuf) {
-          const canonicalUrl = url.startsWith('/uploads/') ? url : `/uploads${url.startsWith('/') ? url : '/' + url}`;
-          await saveFileToFirestoreBackup(canonicalUrl, requestedPath, originalname, mimetype, fileBuf);
-        }
-      } catch (fsBackupErr: any) {
-        console.warn("Backend: Firestore upload backup skipped:", fsBackupErr?.message || fsBackupErr);
+      } catch (urlErr: any) {
+        url = `https://firebasestorage.googleapis.com/v0/b/${finalBucketName}/o/${encodeURIComponent(fileName)}?alt=media`;
+      }
+      
+      console.log("Firebase upload process complete. Final URL:", url);
+      
+      // Store reference record in Firestore uploaded_files collection
+      try {
+        const db = getDb();
+        await db.collection("uploaded_files").add({
+          url,
+          storageBucket: finalBucketName,
+          storagePath: fileName,
+          folder: requestedPath,
+          fileName: originalname,
+          mimeType: mimetype,
+          fileSize: size,
+          uploadedAt: new Date().toISOString()
+        });
+      } catch (fsErr) {
+        console.warn("Backend: Firestore metadata record notice:", fsErr);
       }
 
-      res.json({ url });
+      res.json({ url, success: true });
     } catch (error: any) {
-      console.error("Critical server upload error:", error);
+      console.error("Critical server Firebase upload error:", error);
       
-      // Attempt cleanup on error
       try {
         if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
       } catch (e) {}
@@ -2091,6 +1996,30 @@ async function startServer() {
 
   app.post("/api/upload-template", upload.single("file"), handleFileUploadRoute);
   app.post("/api/upload-media", upload.single("file"), handleFileUploadRoute);
+
+  // API Route to purge all backend local media files on demand
+  app.post("/api/purge-backend-media", async (_req: any, res: any) => {
+    try {
+      const dirsToPurge = ["/tmp/uploads", "/tmp/uploads_fallback"];
+      let removedCount = 0;
+      for (const dir of dirsToPurge) {
+        if (fs.existsSync(dir)) {
+          const files = fs.readdirSync(dir);
+          for (const f of files) {
+            const full = path.join(dir, f);
+            try {
+              fs.rmSync(full, { recursive: true, force: true });
+              removedCount++;
+            } catch (_) {}
+          }
+        }
+      }
+      console.log(`Backend: Purged ${removedCount} local media files from backend storage.`);
+      res.json({ success: true, message: `Purged ${removedCount} local media files from backend storage.`, purgedCount: removedCount });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to purge backend media." });
+    }
+  });
 
   // API Route for WhatsApp notifications
   app.post("/api/notify-signup", async (req: any, res: any) => {

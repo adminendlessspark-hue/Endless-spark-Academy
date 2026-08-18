@@ -21,7 +21,7 @@ const packagingBlogPosts = [
     readTime: '5 min read',
     author: 'Dr. Arul Kumar',
     authorRole: 'Head of Packaging Tech',
-    image: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=600',
+    image: '',
     excerpt: 'Exploring biodegradable substrates, water-soluble inks, and active barrier layers that prolong shelf-life without microplastics.',
     content: `
       The packaging industry is undergoing a seismic shift. The convergence of strict environmental regulations and high consumer demand for sustainable products is pushing brands to rethink their packaging architectures. We are moving beyond simple "recyclability" into the era of Eco-Friendly Smart Packaging.
@@ -48,7 +48,7 @@ const packagingBlogPosts = [
     readTime: '8 min read',
     author: 'Sarah Jenkins',
     authorRole: 'Senior Print Engineer',
-    image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=600',
+    image: '',
     excerpt: 'A comprehensive guide to flawless trapping, bleed allowances, ink-density limits (TAC/TIL), and custom ICC color-profile conversions.',
     content: `
       In high-speed offset and gravure printing, a single error in file preparation can ruin thousands of meters of expensive substrate. Prepress engineering is the crucial shield that ensures what you see on screen matches the final physical printed surface perfectly.
@@ -77,7 +77,7 @@ const packagingBlogPosts = [
     readTime: '6 min read',
     author: 'Rajasekar V',
     authorRole: 'Brand & Finishes Consultant',
-    image: 'https://images.unsplash.com/photo-1507208773393-40d9fc670acf?auto=format&fit=crop&q=80&w=600',
+    image: '',
     excerpt: 'How digital cold foil inline application elevates packaging luxury, optimizes production costs, and delivers breathtaking metallic textures.',
     content: `
       In a crowded retail environment, products have less than two seconds to capture a customer's eye. Packaging finishes have become the ultimate differentiator, and holographic cold foil is leading the revolution in luxury brand finishing.

@@ -451,53 +451,23 @@ export const SVG_DIAGRAMS = {
   `)}`
 };
 
-// Topic-aware fallback media assets to guarantee uninterrupted visual media and video playback
-export const FALLBACK_SAMPLE_VIDEOS = [
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
-];
+// Fallback media asset arrays cleared so no default placeholder media is injected
+export const FALLBACK_SAMPLE_VIDEOS: string[] = [];
 
 export const FALLBACK_SAMPLE_IMAGES: Record<string, string> = {
-  color: SVG_DIAGRAMS.colorWheel,
-  spectrum: SVG_DIAGRAMS.spectrum,
-  cmyk: SVG_DIAGRAMS.cmykRgb,
-  printing: SVG_DIAGRAMS.offsetPress,
-  paper: SVG_DIAGRAMS.paperGsm,
-  packaging: SVG_DIAGRAMS.packagingDieline,
-  preflight: SVG_DIAGRAMS.prepressPreflight,
-  design: SVG_DIAGRAMS.colorWheel,
-  default: SVG_DIAGRAMS.colorWheel
+  color: '',
+  spectrum: '',
+  cmyk: '',
+  printing: '',
+  paper: '',
+  packaging: '',
+  preflight: '',
+  design: '',
+  default: ''
 };
 
-export function getFallbackImageForTopic(query?: string, pageTitle?: string, subtitle?: string, caption?: string): string {
-  const combined = `${query || ''} ${pageTitle || ''} ${subtitle || ''} ${caption || ''}`.toLowerCase();
-  
-  if (combined.includes('wheel') || combined.includes('primary') || combined.includes('secondary') || combined.includes('tertiary') || combined.includes('harmony') || combined.includes('நிறச் சக்கரம்') || combined.includes(' roda warna')) {
-    return SVG_DIAGRAMS.colorWheel;
-  }
-  if (combined.includes('spectrum') || combined.includes('wavelength') || combined.includes('prism') || combined.includes('visible light') || combined.includes('nanometer') || combined.includes('ஒளி') || combined.includes('spektrum')) {
-    return SVG_DIAGRAMS.spectrum;
-  }
-  if (combined.includes('cmyk') || combined.includes('rgb') || combined.includes('additive') || combined.includes('subtractive') || combined.includes('gamut') || combined.includes('pigment')) {
-    return SVG_DIAGRAMS.cmykRgb;
-  }
-  if (combined.includes('press') || combined.includes('offset') || combined.includes('litho') || combined.includes('cylinder') || combined.includes('blanket') || combined.includes('அச்சு இயந்திரம்') || combined.includes('cetak')) {
-    return SVG_DIAGRAMS.offsetPress;
-  }
-  if (combined.includes('dieline') || combined.includes('box') || combined.includes('carton') || combined.includes('packaging') || combined.includes('crease') || combined.includes('bleed') || combined.includes('பொருளடக்கம்')) {
-    return SVG_DIAGRAMS.packagingDieline;
-  }
-  if (combined.includes('paper') || combined.includes('gsm') || combined.includes('caliper') || combined.includes('grain') || combined.includes('substrate') || combined.includes('தாள்') || combined.includes('kertas')) {
-    return SVG_DIAGRAMS.paperGsm;
-  }
-  if (combined.includes('preflight') || combined.includes('prepress') || combined.includes('resolution') || combined.includes('dpi') || combined.includes('font') || combined.includes('trapping')) {
-    return SVG_DIAGRAMS.prepressPreflight;
-  }
-  if (combined.includes('colour') || combined.includes('color') || combined.includes('hue') || combined.includes('நிறம்') || combined.includes('வண்ணம்') || combined.includes('warna')) {
-    return SVG_DIAGRAMS.colorWheel;
-  }
-  return SVG_DIAGRAMS.colorWheel;
+export function getFallbackImageForTopic(_query?: string, _pageTitle?: string, _subtitle?: string, _caption?: string): string {
+  return '';
 }
 
 function openDB(dbName = IDB_NAME_V2): Promise<IDBDatabase> {

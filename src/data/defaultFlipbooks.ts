@@ -1,5 +1,4 @@
-import { FlipbookMaterial } from '../components/InteractiveFlipbookStudio';
-import { SVG_DIAGRAMS } from '../utils/mediaStore';
+import { FlipbookMaterial } from '../types';
 
 export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
   {
@@ -9,7 +8,7 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
     courseName: 'Diploma in Production Art Engineer',
     courseCategory: 'production-art-engineer',
     author: 'Endless School of Printing and Packaging',
-    coverImageUrl: SVG_DIAGRAMS.colorWheel,
+    coverImageUrl: '',
     updatedAt: new Date().toISOString(),
     pages: [
       {
@@ -75,12 +74,12 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 <strong>Kekuatan Warna (Brightness):</strong> Berapa pekat atau pucat rupa sesuatu warna.</p>`
           }
         },
-        mediaType: 'both',
+        mediaType: 'image',
         layoutStyle: 'grid-2x2',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        videoCaption: 'Fundamental of colour',
-        imageUrl: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'WHAT IS COLOUR? - Electromagnetic Light Spectrum',
+        videoUrl: '',
+        videoCaption: '',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Key Takeaway: Color does not exist on surfaces; it is a neurological sensation decoded by the human brain from reflected photons.',
         bgTheme: 'classic-paper'
       },
@@ -127,8 +126,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
         },
         mediaType: 'image',
         layoutStyle: 'grid-bento',
-        imageUrl: 'https://images.unsplash.com/photo-1507499739999-097706ad8914?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'Visible Light Dispersion: Refraction of White Light through a Glass Prism',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Human eyes are most sensitive to green light (~555 nm in daylight photopic vision).',
         bgTheme: 'clean-white'
       },
@@ -154,8 +153,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 </ol>`,
         mediaType: 'image',
         layoutStyle: 'split-right',
-        imageUrl: 'https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'RGB Additive Light Color Synthesis vs CMYK Subtractive Ink Overprints',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Never send RGB images directly to a commercial platesetter without proper ICC color conversion.',
         bgTheme: 'classic-paper'
       },
@@ -182,8 +181,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 <p>Vibrant saturated electric greens, bright oranges, and neon blues visible in RGB cannot be reproduced in standard four-color process CMYK printing and will be compressed during separation.</p>`,
         mediaType: 'image',
         layoutStyle: 'grid-bento',
-        imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'CIE 1931 Chromaticity Diagram showing sRGB, Adobe RGB, and CMYK Fogra Gamut Boundaries',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Always check "Gamut Warning" in Adobe Photoshop before converting master RGB product assets to CMYK.',
         bgTheme: 'clean-white'
       },
@@ -206,12 +205,14 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
   <li><strong>Yellow:</strong> 0° or 90° (least visible color, placed at 0°)</li>
   <li><strong>Black (Key):</strong> 45° (most visible angle to human eye, placed at highest resolution 45°)</li>
 </ul>`,
-        mediaType: 'video',
-        layoutStyle: 'media-top',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        videoCaption: 'Microscopic 500x View of Offset Rosette Halftone Dots & Screen Angles',
+        mediaType: 'image',
+        layoutStyle: 'grid-bento',
+        videoUrl: '',
+        videoCaption: '',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'A proper 30-degree angle separation between the dominant colors (C, M, K) produces a clean, pleasing Rosette pattern.',
-        bgTheme: 'dark-studio'
+        bgTheme: 'clean-white'
       },
       {
         id: 'pa-m1-p6',
@@ -234,8 +235,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 <p>The exact same ink formulation will look significantly darker and more muted on porous uncoated stock due to ink absorption into paper fibers.</p>`,
         mediaType: 'image',
         layoutStyle: 'grid-2x2',
-        imageUrl: 'https://images.unsplash.com/photo-1525909002-1b05e0c869d8?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'Pantone Formula Guide Color Swatches & Precision Ink Mixing Formulations',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Never leave duplicate spot colors with different naming (e.g., "PANTONE 185 C" vs "PANTONE 185 CVC") in a production file.',
         bgTheme: 'classic-paper'
       },
@@ -261,9 +262,11 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 • Flexographic Corrugated: <strong>0.50 pt – 1.0 pt (0.18 mm – 0.35 mm)</strong><br/>
 • Screen Printing: <strong>1.0 pt – 2.0 pt</strong></p>`,
         mediaType: 'image',
-        layoutStyle: 'split-left',
-        imageUrl: 'https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'Diagram of Trapping: Spread vs Choke and Knockout Misregistration',
+        layoutStyle: 'grid-bento',
+        videoUrl: '',
+        videoCaption: '',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Rich Black formula for large backgrounds: 60% Cyan, 40% Magenta, 30% Yellow, 100% Black.',
         bgTheme: 'clean-white'
       },
@@ -289,8 +292,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 <p>Dot gain is the phenomenon where printed halftone dots expand in physical size when liquid ink hits the porous substrate. A 50% dot on the digital plate may measure 68% on the printed sheet (an 18% TVI).</p>`,
         mediaType: 'image',
         layoutStyle: 'grid-bento',
-        imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'Tone Value Increase (TVI) Calibration Curve across 0% to 100% Dot Tonal Range',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Prepress RIP calibration curves compensate for known press dot gain before laser-exposing CTP plates.',
         bgTheme: 'classic-paper'
       },
@@ -315,8 +318,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 <p>Metamerism occurs when two different ink samples appear identical under D50 daylight illumination, but visibly mismatch when viewed under retail fluorescent or LED light.</p>`,
         mediaType: 'image',
         layoutStyle: 'split-right',
-        imageUrl: 'https://images.unsplash.com/photo-1507499739999-097706ad8914?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'ISO 3664 Compliant D50 Color Viewing Booth with Neutral 50% Gray Interior Surrounds',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Never evaluate press color proofs under standard office fluorescent or uncalibrated room lighting.',
         bgTheme: 'clean-white'
       },
@@ -345,8 +348,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 </ul>`,
         mediaType: 'image',
         layoutStyle: 'grid-2x2',
-        imageUrl: 'https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'Handheld X-Rite eXact Spectrophotometer Measuring CIE L*a*b* Coordinates & Delta-E',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'ISO 12647-2 specifies a maximum ΔE00 of 3.5 for CMYK solid primary inks on production press runs.',
         bgTheme: 'classic-paper'
       },
@@ -369,8 +372,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 </ol>`,
         mediaType: 'image',
         layoutStyle: 'grid-bento',
-        imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'ICC Profile Conversion Pipeline via Color Management Module (CMM) Profile Connection Space',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Use "Relative Colorimetric with Black Point Compensation" as your default prepress conversion setting in Adobe Creative Cloud.',
         bgTheme: 'clean-white'
       },
@@ -392,12 +395,14 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
   <li><strong>Overprint Black Check:</strong> Verify black body text shows 0% knockout on underlying color plates.</li>
   <li><strong>RGB Object Audit:</strong> Search for unseparated RGB images or vector fills using the Object Inspector.</li>
 </ul>`,
-        mediaType: 'video',
-        layoutStyle: 'media-top',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        videoCaption: 'Step-by-Step Walkthrough: Adobe Acrobat Pro Output Preview Plate Inspector',
+        mediaType: 'image',
+        layoutStyle: 'grid-bento',
+        videoUrl: '',
+        videoCaption: '',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Always certify PDF/X-4:2010 compliance to preserve transparency integrity and device-independent color definitions.',
-        bgTheme: 'dark-studio'
+        bgTheme: 'clean-white'
       },
       {
         id: 'pa-m1-p13',
@@ -421,8 +426,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 <p>UCR and GCR algorithms replace redundant overlapping CMY chromatic components in neutral shadows with equivalent black ink, dramatically saving expensive colored inks and stabilizing press neutral balance.</p>`,
         mediaType: 'image',
         layoutStyle: 'split-left',
-        imageUrl: 'https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'Acrobat Total Area Coverage Warning Highlighting Areas Exceeding 300% in Neon Green',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Never allow TAC to exceed 320% on commercial sheetfed offset presses.',
         bgTheme: 'classic-paper'
       },
@@ -444,8 +449,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 </ul>`,
         mediaType: 'image',
         layoutStyle: 'grid-bento',
-        imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'Microscopic Comparison: Conventional AM Halftone Rosette vs Random Stochastic FM Screening',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Stochastic FM screening requires pristine plate exposure and highly consistent press temperature control.',
         bgTheme: 'clean-white'
       },
@@ -472,8 +477,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 <p>Soft proofing requires hardware-calibrated wide-gamut monitors (e.g., EIZO ColorEdge) with periodic sensor calibration to match D50 ambient light conditions.</p>`,
         mediaType: 'image',
         layoutStyle: 'split-right',
-        imageUrl: 'https://images.unsplash.com/photo-1525909002-1b05e0c869d8?auto=format&fit=crop&w=800&q=80',
-        imageCaption: 'Certified Contract Proof with Spectrophotometer Pass/Fail Inspection Label and Fogra Wedge',
+        imageUrl: '',
+        imageCaption: '',
         calloutText: 'Never sign off on an offset press run without an ISO 12647-7 certified contract proof on the press console.',
         bgTheme: 'classic-paper'
       },
@@ -496,14 +501,16 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
   <li><strong>Barcode Verification:</strong> Barcodes printed in 100% solid Black on white background at minimum 80% magnification (Grade A / ISO 15416).</li>
   <li><strong>Contract Proof Sign-Off:</strong> Client and QC Lead physical signatures recorded on certified Fogra proof.</li>
 </ol>`,
-        mediaType: 'video',
-        layoutStyle: 'media-top',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        videoCaption: 'Faculty Summary: Professional Certification & Prepress Engineering Best Practices',
-        calloutText: 'Congratulations! You have completed Module 1: Fundamentals of Colour. Download the exercise pack below to practice in Adobe Illustrator and Acrobat Pro.',
-        bgTheme: 'dark-studio',
-        exerciseTitle: 'Module 1 Hands-on Color Preflight Lab Assets',
-        exerciseFilePath: 'https://storage.googleapis.com/faculty-assets/exercises/module1-color-lab.zip'
+        mediaType: 'image',
+        layoutStyle: 'grid-bento',
+        videoUrl: '',
+        videoCaption: '',
+        imageUrl: '',
+        imageCaption: '',
+        calloutText: 'Congratulations! You have completed Module 1: Fundamentals of Colour. Upload your custom course media pack via the E-book Studio.',
+        bgTheme: 'clean-white',
+        exerciseTitle: '',
+        exerciseFilePath: ''
       }
     ]
   },
@@ -514,7 +521,7 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
     courseName: 'Diploma in Packaging Engineer',
     courseCategory: 'packaging-engineer',
     author: 'Endless School of Printing and Packaging',
-    coverImageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80',
+    coverImageUrl: '',
     updatedAt: new Date().toISOString(),
     pages: [
       {
@@ -556,11 +563,11 @@ Pertimbangan struktur utama meliputi:
             calloutText: ''
           }
         },
-        mediaType: 'both',
-        imageUrl: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1000&q=80',
-        imageCaption: 'Fig 1.1: Corrugated Board Flute Profile Architecture & Crease Scores',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        videoCaption: 'Video Tutorial: Folding Carton Creasing & Die-cutting Demonstration',
+        mediaType: 'image',
+        imageUrl: '',
+        imageCaption: '',
+        videoUrl: '',
+        videoCaption: '',
         layoutStyle: 'grid-2x2',
         calloutText: '',
         bgTheme: 'classic-paper',
@@ -606,12 +613,14 @@ Peraturan Asas Prasemak:
 • படத் தெளிவுத்திறன்: 100% பொருத்துதல் அளவில் சரியாக 300 DPI.
 • ட்ராப்பிங் தூரம்: பதிவு நகர்வினால் ஏற்படும் வெள்ளை இடைவெளிகளைத் தடுக்க ஃப்ளெக்ஸோகிராஃபிக் அச்சகங்களுக்கு 0.15 மிமீ - 0.3 மிமீ.`,
             calloutText: '',
-            imageCaption: 'படம் 2.1: அடோப் அக்ரோபேட் புரோ DC இல் முன்-பரிசோதனை கண்டறிதல் குழு'
+            imageCaption: ''
           }
         },
         mediaType: 'image',
-        imageUrl: 'https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?auto=format&fit=crop&w=1000&q=80',
-        imageCaption: 'Fig 2.1: Preflight Diagnostic Panel in Adobe Acrobat Pro DC',
+        imageUrl: '',
+        imageCaption: '',
+        videoUrl: '',
+        videoCaption: '',
         layoutStyle: 'grid-bento',
         calloutText: '',
         bgTheme: 'clean-white',
@@ -660,15 +669,17 @@ Langkah Semakan:
 3. "3மிமீ ப்ளீட் பாக்ஸ் விரிவாக்கத்தைச் சேர்" ஸ்கிரிப்டைச் செயல்படுத்தவும்.
 4. தட்டு வெளியீட்டிற்கு உயர் தெளிவுத்திறன் கொண்ட PDF/X-4 PDF ஐ ஏற்றுமதி செய்யவும்.`,
             calloutText: '',
-            videoCaption: 'வீடியோ விரிவுரை: ஆசிரியரின் பின்னணி குரலுடன் பிரீஃப்ளைட்டிங் மாஸ்டர்கிளாஸ்'
+            videoCaption: ''
           }
         },
-        mediaType: 'video',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        videoCaption: 'Video Lecture: Preflighting Masterclass with Faculty Voiceover',
-        layoutStyle: 'media-top',
+        mediaType: 'image',
+        videoUrl: '',
+        videoCaption: '',
+        imageUrl: '',
+        imageCaption: '',
+        layoutStyle: 'grid-bento',
         calloutText: '',
-        bgTheme: 'dark-studio',
+        bgTheme: 'clean-white',
         courseModuleId: 'mod-3',
         exerciseFilePath: '',
         exerciseTitle: ''

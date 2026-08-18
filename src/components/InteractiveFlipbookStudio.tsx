@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, ArrowUpDown, Play, Pause, 
+  BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, Play, Pause, 
   Maximize2, Minimize2, Languages, RefreshCw, Layout, Image, Video, Sparkles, 
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Save, Copy, Check, Download, Share2, Layers, 
   Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, CheckCircle2, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
@@ -14,12 +14,62 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { formatCourseName } from '../utils';
-import { CourseModule, FlipbookPage, FlipbookMaterial } from '../types';
+import { CourseModule } from '../types';
 import { saveMediaToIDB, getMediaFromIDB, fileToDataUrl, getFallbackImageForTopic, FALLBACK_SAMPLE_VIDEOS } from '../utils/mediaStore';
 import { generateGeminiContent } from '../services/gemini';
-import { DEFAULT_FLIPBOOKS } from '../data/defaultFlipbooks';
 
-export type { FlipbookPage, FlipbookMaterial };
+export interface FlipbookPage {
+  id: string;
+  pageNumber: number;
+  title: string;
+  subtitle?: string;
+  content: string;
+  isCustomEdited?: boolean;
+  contentFontFamily?: string;
+  contentFontSize?: string;
+  contentTextColor?: string;
+  contentFontStyle?: string;
+  contentTextAlign?: 'left' | 'center' | 'right' | 'justify';
+  pageBackgroundColor?: string;
+  translations?: Record<string, { 
+    title?: string; 
+    subtitle?: string; 
+    content?: string; 
+    calloutText?: string; 
+    imageCaption?: string; 
+    secondaryImageCaption?: string; 
+    videoCaption?: string; 
+    videoTranscription?: string 
+  }>;
+  mediaType?: 'none' | 'image' | 'video' | 'both';
+  imageUrl?: string;
+  imageCaption?: string;
+  secondaryImageUrl?: string;
+  secondaryImageCaption?: string;
+  videoUrl?: string;
+  videoCaption?: string;
+  videoTranscription?: string;
+  layoutStyle?: 'split-left' | 'split-right' | 'media-top' | 'media-bottom' | 'text-only' | 'media-hero' | 'grid-2x2' | 'grid-bento' | 'grid-right-2-images' | 'grid-2-images';
+  calloutText?: string;
+  bgTheme?: 'classic-paper' | 'dark-studio' | 'clean-white' | 'blueprint' | 'golden-aged';
+  courseName?: string;
+  courseModuleId?: string;
+  courseModuleName?: string;
+  exerciseFilePath?: string;
+  exerciseTitle?: string;
+}
+
+export interface FlipbookMaterial {
+  id: string;
+  title: string;
+  description: string;
+  courseName?: string;
+  courseCategory: string;
+  author: string;
+  coverImageUrl?: string;
+  pages: FlipbookPage[];
+  updatedAt: string;
+}
 
 // Course Modules List for Exercise Linking
 export const COURSE_MODULES: { id: string; name: string; code: string }[] = [];
@@ -528,6 +578,8 @@ export function autoTranslateText(text: string, targetLangCode: string): string 
   return translatedParts.join('');
 }
 
+import { DEFAULT_FLIPBOOKS } from '../data/defaultFlipbooks';
+
 export interface InteractiveFlipbookStudioProps {
   initialMaterial?: FlipbookMaterial;
   courseCategory?: string;
@@ -591,19 +643,17 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
     const set = new Set<string>();
     set.add('All Course Titles');
-    (configuredCourses || []).forEach(c => {
-      if (c?.title) set.add(c.title);
-    });
-    (dbModules || []).forEach(mod => {
-      if (mod?.category) {
-        const matchedConfig = (configuredCourses || []).find(c => c?.courseId === mod.category);
+    configuredCourses.forEach(c => set.add(c.title));
+    dbModules.forEach(mod => {
+      if (mod.category) {
+        const matchedConfig = configuredCourses.find(c => c.courseId === mod.category);
         set.add(matchedConfig ? matchedConfig.title : formatCourseName(mod.category));
       }
     });
-    (DEFAULT_FLIPBOOKS || []).forEach(m => {
-      if (m?.courseName) set.add(m.courseName);
-      if (m?.courseCategory) {
-        const matchedConfig = (configuredCourses || []).find(c => c?.courseId === m.courseCategory);
+    DEFAULT_FLIPBOOKS.forEach(m => {
+      if (m.courseName) set.add(m.courseName);
+      if (m.courseCategory) {
+        const matchedConfig = configuredCourses.find(c => c.courseId === m.courseCategory);
         set.add(matchedConfig ? matchedConfig.title : formatCourseName(m.courseCategory));
       }
     });
@@ -630,16 +680,8 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [viewMode, setViewMode] = useState<'flipbook' | 'presentation' | 'editor' | 'grid-overview' | 'settings'>('flipbook');
   
   // Materials List & Active Material
-  const [materials, setMaterials] = useState<FlipbookMaterial[]>(() => DEFAULT_FLIPBOOKS || []);
-  const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(() => initialMaterial || (DEFAULT_FLIPBOOKS && DEFAULT_FLIPBOOKS[0]) || {
-    id: 'default-fallback',
-    title: 'Diploma in Production Art Engineer',
-    description: 'Faculty master curriculum handbook',
-    courseCategory: 'production-art-engineer',
-    author: 'Endless School of Printing and Packaging',
-    pages: [],
-    updatedAt: new Date().toISOString()
-  });
+  const [materials, setMaterials] = useState<FlipbookMaterial[]>(DEFAULT_FLIPBOOKS);
+  const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(initialMaterial || DEFAULT_FLIPBOOKS[0]);
 
   // Resolve student assigned native language
   const studentAssignedNativeLang = React.useMemo(() => {
@@ -902,20 +944,19 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
   // Auto Page Turn Slideshow Effect
   useEffect(() => {
-    const pageCount = activeMaterial?.pages?.length || 0;
-    if (!isAutoFlipping || autoFlipInterval <= 0 || pageCount === 0) return;
+    if (!isAutoFlipping || autoFlipInterval <= 0) return;
     const timer = setInterval(() => {
-      setCurrentPageIndex(prev => (prev < pageCount - 1 ? prev + 1 : 0));
+      setCurrentPageIndex(prev => (prev < activeMaterial.pages.length - 1 ? prev + 1 : 0));
     }, autoFlipInterval * 1000);
     return () => clearInterval(timer);
-  }, [isAutoFlipping, autoFlipInterval, activeMaterial?.pages?.length]);
+  }, [isAutoFlipping, autoFlipInterval, activeMaterial.pages.length]);
 
   // TTS Auto-Read Page Narration Effect
   useEffect(() => {
     if (!ttsAutoRead) return;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const currentPageObj = activeMaterial?.pages?.[currentPageIndex];
+      const currentPageObj = activeMaterial.pages[currentPageIndex];
       if (currentPageObj) {
         const textToRead = `${currentPageObj.title}. ${stripHtml(currentPageObj.content || '')}`;
         const utterance = new SpeechSynthesisUtterance(textToRead);
@@ -923,7 +964,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         window.speechSynthesis.speak(utterance);
       }
     }
-  }, [currentPageIndex, ttsAutoRead, ttsRate, activeMaterial?.pages]);
+  }, [currentPageIndex, ttsAutoRead, ttsRate, activeMaterial.pages]);
 
   // "How to Create E-Books" Modal Guide State
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
@@ -1084,13 +1125,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   }, [filteredMaterials, activeMaterial?.id]);
 
   // Current Active Page
-  const currentPage = activeMaterial?.pages?.[currentPageIndex] || activeMaterial?.pages?.[0] || {
-    id: 'placeholder-p1',
-    pageNumber: 1,
-    title: 'Fundamental of colour',
-    content: '<p>Loading curriculum contents...</p>',
-    bgTheme: 'classic-paper' as const
-  };
+  const currentPage = activeMaterial.pages[currentPageIndex] || activeMaterial.pages[0];
 
   // Language translated strings generator
   const getTranslatedPage = (page: FlipbookPage, langCode: string) => {
@@ -3298,38 +3333,6 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     handleSaveMaterial(updatedMat);
   };
 
-  // Dynamic Right-Side Video & Image Swap Helper (Toggles vertical order: Video Top / Image Bottom <-> Image Top / Video Bottom)
-  const handleToggleMediaSwap = (targetPage?: FlipbookPage) => {
-    const pageToSwap = targetPage || editingPage || activeMaterial?.pages?.[currentPageIndex];
-    if (!pageToSwap) return;
-
-    const currentOrder = pageToSwap.mediaSwapOrder || 'video-first';
-    const newOrder: 'video-first' | 'image-first' = currentOrder === 'video-first' ? 'image-first' : 'video-first';
-
-    const updatedPage: FlipbookPage = {
-      ...pageToSwap,
-      mediaSwapOrder: newOrder,
-      layoutStyle: (pageToSwap.layoutStyle === 'grid-right-video-image' || pageToSwap.layoutStyle === 'grid-right-media-swap')
-        ? pageToSwap.layoutStyle
-        : 'grid-right-video-image'
-    };
-
-    if (editingPage && editingPage.id === pageToSwap.id) {
-      setEditingPage(updatedPage);
-    }
-
-    handleUpdatePage(updatedPage);
-
-    // Save material with updated swap state
-    const updatedPages = activeMaterial.pages.map(p => p.id === updatedPage.id ? updatedPage : p);
-    const updatedMat = { ...activeMaterial, pages: updatedPages };
-    setActiveMaterial(updatedMat);
-    handleSaveMaterial(updatedMat, true);
-
-    setSaveMessage(`Dynamic Right-Side Media Swapped: ${newOrder === 'image-first' ? '🖼️ Image (Top) / 🎬 Video (Bottom)' : '🎬 Video (Top) / 🖼️ Image (Bottom)'}`);
-    setTimeout(() => setSaveMessage(''), 2500);
-  };
-
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -3893,111 +3896,8 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                         <span>Layout: {displayPage.layoutStyle || 'split-left'}</span>
                       </div>
 
-                      {/* IF LAYOUT IS DYNAMIC SWAP VIDEO & IMAGE GRID (Stacked Top & Bottom with Dynamic Swapping) */}
-                      {(displayPage.layoutStyle === 'grid-right-video-image' || displayPage.layoutStyle === 'grid-right-media-swap') ? (
-                        <div className="space-y-3.5">
-                          {/* Render Stacked Cards according to mediaSwapOrder */}
-                          <div className="flex flex-col gap-3.5">
-                            {/* Card 1 (Top Card) */}
-                            {displayPage.mediaSwapOrder === 'image-first' ? (
-                              /* 1. IMAGE CARD (Top) */
-                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-amber-500/40 shadow-lg flex flex-col justify-between space-y-2">
-                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
-                                  <span className="text-[11px] font-extrabold uppercase text-amber-300 flex items-center gap-1.5">
-                                    <Image className="w-3.5 h-3.5 text-amber-400" />
-                                    <span>{displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
-                                  </span>
-                                </div>
-                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[190px] max-h-[300px] flex items-center justify-center p-2">
-                                  <SafeImage 
-                                    src={displayPage.imageUrl || 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80'} 
-                                    alt={displayPage.imageCaption || displayPage.title || 'Diagram'} 
-                                    title={displayPage.title}
-                                    subtitle={displayPage.subtitle}
-                                    caption={displayPage.imageCaption}
-                                    className="max-h-[280px] w-full object-contain cursor-pointer" 
-                                    onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
-                                  />
-                                </div>
-                                {displayPage.imageCaption && (
-                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-amber-200 dark:text-amber-300 pt-0.5">
-                                    <Link className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                    <span>{displayPage.imageCaption}</span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              /* 1. VIDEO CARD (Top) */
-                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-pink-500/40 shadow-lg flex flex-col justify-between space-y-2">
-                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
-                                  <span className="text-[11px] font-extrabold uppercase text-pink-300 flex items-center gap-1.5">
-                                    <Video className="w-3.5 h-3.5 text-pink-400" />
-                                    <span>{displayPage.videoCaption || 'Demonstration Video'}</span>
-                                  </span>
-                                </div>
-                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-black aspect-video min-h-[190px] max-h-[300px]">
-                                  {renderVideoPlayer(displayPage.videoUrl || FALLBACK_SAMPLE_VIDEOS[0]?.url, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
-                                </div>
-                                {displayPage.videoCaption && (
-                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-pink-200 dark:text-pink-300 pt-0.5">
-                                    <Link className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                                    <span>{displayPage.videoCaption}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Card 2 (Bottom Card) */}
-                            {displayPage.mediaSwapOrder === 'image-first' ? (
-                              /* 2. VIDEO CARD (Bottom) */
-                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-pink-500/40 shadow-lg flex flex-col justify-between space-y-2">
-                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
-                                  <span className="text-[11px] font-extrabold uppercase text-pink-300 flex items-center gap-1.5">
-                                    <Video className="w-3.5 h-3.5 text-pink-400" />
-                                    <span>{displayPage.videoCaption || 'Demonstration Video'}</span>
-                                  </span>
-                                </div>
-                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-black aspect-video min-h-[190px] max-h-[300px]">
-                                  {renderVideoPlayer(displayPage.videoUrl || FALLBACK_SAMPLE_VIDEOS[0]?.url, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
-                                </div>
-                                {displayPage.videoCaption && (
-                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-pink-200 dark:text-pink-300 pt-0.5">
-                                    <Link className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                                    <span>{displayPage.videoCaption}</span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              /* 2. IMAGE CARD (Bottom) */
-                              <div className="p-3 rounded-2xl bg-slate-900/95 border border-amber-500/40 shadow-lg flex flex-col justify-between space-y-2">
-                                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
-                                  <span className="text-[11px] font-extrabold uppercase text-amber-300 flex items-center gap-1.5">
-                                    <Image className="w-3.5 h-3.5 text-amber-400" />
-                                    <span>{displayPage.imageCaption || displayPage.title || 'Technical Diagram'}</span>
-                                  </span>
-                                </div>
-                                <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[190px] max-h-[300px] flex items-center justify-center p-2">
-                                  <SafeImage 
-                                    src={displayPage.imageUrl || 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80'} 
-                                    alt={displayPage.imageCaption || displayPage.title || 'Diagram'} 
-                                    title={displayPage.title}
-                                    subtitle={displayPage.subtitle}
-                                    caption={displayPage.imageCaption}
-                                    className="max-h-[280px] w-full object-contain cursor-pointer" 
-                                    onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
-                                  />
-                                </div>
-                                {displayPage.imageCaption && (
-                                  <div className="flex items-center gap-1.5 text-left text-xs font-semibold text-amber-200 dark:text-amber-300 pt-0.5">
-                                    <Link className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                    <span>{displayPage.imageCaption}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : (displayPage.layoutStyle === 'grid-right-2-images' || displayPage.layoutStyle === 'grid-2-images') ? (
+                      {/* IF LAYOUT IS 2-IMAGES GRID (Stacked Top & Bottom) */}
+                      {(displayPage.layoutStyle === 'grid-right-2-images' || displayPage.layoutStyle === 'grid-2-images') ? (
                         <div className="space-y-4">
                           <div className="flex flex-col gap-4">
                             {/* Image #1 (Top) */}
@@ -4433,58 +4333,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
                 {/* Right Media Column */}
                 <div className="md:col-span-5 space-y-3">
-                  {(displayPage.layoutStyle === 'grid-right-video-image' || displayPage.layoutStyle === 'grid-right-media-swap' || (displayPage.videoUrl && displayPage.imageUrl)) ? (
-                    <div className="space-y-3">
-                      {/* Stacked Content according to mediaSwapOrder */}
-                      {displayPage.mediaSwapOrder === 'image-first' ? (
-                        <>
-                          {/* Image Top */}
-                          {displayPage.imageUrl && (
-                            <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[180px] max-h-[260px] flex items-center justify-center p-2">
-                              <SafeImage 
-                                src={displayPage.imageUrl} 
-                                alt={displayPage.title || 'Slide Visual'} 
-                                title={displayPage.title}
-                                subtitle={displayPage.subtitle}
-                                caption={displayPage.imageCaption}
-                                className="max-h-[240px] w-full object-contain rounded-lg cursor-pointer" 
-                                onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
-                              />
-                            </div>
-                          )}
-                          {/* Video Bottom */}
-                          {displayPage.videoUrl && (
-                            <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[180px] max-h-[260px] shadow-xl">
-                              {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {/* Video Top */}
-                          {displayPage.videoUrl && (
-                            <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[180px] max-h-[260px] shadow-xl">
-                              {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
-                            </div>
-                          )}
-                          {/* Image Bottom */}
-                          {displayPage.imageUrl && (
-                            <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 min-h-[180px] max-h-[260px] flex items-center justify-center p-2">
-                              <SafeImage 
-                                src={displayPage.imageUrl} 
-                                alt={displayPage.title || 'Slide Visual'} 
-                                title={displayPage.title}
-                                subtitle={displayPage.subtitle}
-                                caption={displayPage.imageCaption}
-                                className="max-h-[240px] w-full object-contain rounded-lg cursor-pointer" 
-                                onEnlarge={(src, alt) => setLightboxMedia({ src, alt, type: 'image' })}
-                              />
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ) : displayPage.videoUrl ? (
+                  {displayPage.videoUrl ? (
                     <div className="rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black aspect-video min-h-[280px] shadow-xl">
                       {renderVideoPlayer(displayPage.videoUrl, displayPage.videoCaption, displayPage.videoTranscription, displayPage)}
                     </div>
@@ -6364,7 +6213,6 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     }}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none"
                   >
-                    <option value="grid-right-video-image">🎬🖼️ Right Side Grid (Video & Image Stacked with Dynamic Swap)</option>
                     <option value="grid-right-2-images">🖼️ Right Side Grid (2 Images Stacked Top & Bottom)</option>
                     <option value="grid-2x2">2x2 Multi-Card Grid Layout (Text + Video + Image + File)</option>
                     <option value="grid-bento">Bento Box Grid Layout (Feature Tiles)</option>
@@ -6373,34 +6221,6 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                     <option value="media-top">Media Banner Top, Text Bottom</option>
                     <option value="text-only">Full Page Typography Text Layout</option>
                   </select>
-                </div>
-
-                {/* Dynamic Right-Side Video & Image Grid & Swap Studio Controls */}
-                <div className="p-3.5 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-amber-500/40 rounded-2xl space-y-2.5 shadow-md">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase text-amber-300 flex items-center gap-1.5">
-                      <Layers className="w-4 h-4 text-amber-400" />
-                      <span>Dynamic Right Side Media Grid</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      {editingPage.mediaSwapOrder === 'image-first' ? '🖼️ Image (Top) / 🎬 Video (Bottom)' : '🎬 Video (Top) / 🖼️ Image (Bottom)'}
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-slate-300 leading-normal">
-                    This layout splits the page into content on the left, and a stacked Video + Image grid on the right. You can dynamically swap which media item appears on top at any time.
-                  </p>
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleMediaSwap(editingPage)}
-                      className="w-full py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 border border-amber-300/40"
-                    >
-                      <ArrowUpDown className="w-4 h-4 text-slate-950" />
-                      <span>Dynamically Swap Positions ({editingPage.mediaSwapOrder === 'image-first' ? 'Switch to 🎬 Video Top' : 'Switch to 🖼️ Image Top'})</span>
-                    </button>
-                  </div>
                 </div>
 
                 {/* Quick Done Button */}

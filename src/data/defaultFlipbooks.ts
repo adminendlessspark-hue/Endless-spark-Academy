@@ -1,4 +1,4 @@
-import { FlipbookMaterial } from '../types';
+import { FlipbookMaterial } from '../components/InteractiveFlipbookStudio';
 import { SVG_DIAGRAMS } from '../utils/mediaStore';
 
 export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
@@ -260,11 +260,8 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
 <p>• Sheetfed Offset: <strong>0.10 pt – 0.25 pt (0.04 mm – 0.08 mm)</strong><br/>
 • Flexographic Corrugated: <strong>0.50 pt – 1.0 pt (0.18 mm – 0.35 mm)</strong><br/>
 • Screen Printing: <strong>1.0 pt – 2.0 pt</strong></p>`,
-        mediaType: 'both',
-        layoutStyle: 'grid-right-video-image',
-        mediaSwapOrder: 'video-first',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        videoCaption: 'Live Prepress Demonstration: Trapping Chokes & Spreads Setup in Adobe Illustrator',
+        mediaType: 'image',
+        layoutStyle: 'split-left',
         imageUrl: 'https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?auto=format&fit=crop&w=800&q=80',
         imageCaption: 'Diagram of Trapping: Spread vs Choke and Knockout Misregistration',
         calloutText: 'Rich Black formula for large backgrounds: 60% Cyan, 40% Magenta, 30% Yellow, 100% Black.',

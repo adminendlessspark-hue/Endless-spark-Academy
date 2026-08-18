@@ -975,57 +975,20 @@ async function startServer() {
     return obj;
   };
 
-  // Helper to query Firestore documents via REST API as a robust fallback
-  async function fetchFirestoreRest(collection: string): Promise<any[]> {
-    try {
-      if (!firebaseConfig.apiKey || !firebaseConfig.projectId) return [];
-      const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
-      const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${dbId}/documents/${collection}?key=${firebaseConfig.apiKey}`;
-      const res = await fetch(url);
-      if (!res.ok) return [];
-      const data: any = await res.json();
-      if (!data.documents || !Array.isArray(data.documents)) return [];
-      
-      return data.documents.map((doc: any) => {
-        const id = doc.name ? doc.name.split("/").pop() : "";
-        const fields = doc.fields || {};
-        const parsed: any = { id };
-        for (const [key, val] of Object.entries<any>(fields)) {
-          if (val.stringValue !== undefined) parsed[key] = val.stringValue;
-          else if (val.integerValue !== undefined) parsed[key] = parseInt(val.integerValue, 10);
-          else if (val.doubleValue !== undefined) parsed[key] = parseFloat(val.doubleValue);
-          else if (val.booleanValue !== undefined) parsed[key] = val.booleanValue;
-          else if (val.mapValue !== undefined) parsed[key] = val.mapValue.fields;
-          else if (val.arrayValue !== undefined) parsed[key] = val.arrayValue.values;
-          else parsed[key] = Object.values(val)[0];
-        }
-        return parsed;
-      });
-    } catch {
-      return [];
-    }
-  }
-
   // GET /api/flipbooks - Load all saved flipbooks from Firestore with disk backup
   app.get("/api/flipbooks", async (req: any, res: any) => {
     try {
+      const db = getDb();
       let materials: any[] = [];
       
-      // 1. Try fetching from Firestore Admin SDK or REST fallback
+      // 1. Try fetching from Firestore
       try {
-        const db = getDb();
         const snap = await db.collection("course_flipbooks").get();
         if (!snap.empty) {
           materials = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
         }
       } catch (fsErr: any) {
-        console.log("Backend: Firestore Admin SDK get skipped, using REST & local disk store:", fsErr?.message || fsErr);
-        try {
-          const restMaterials = await fetchFirestoreRest("course_flipbooks");
-          if (restMaterials && restMaterials.length > 0) {
-            materials = restMaterials;
-          }
-        } catch (_) {}
+        console.warn("Backend: Firestore course_flipbooks get error:", fsErr?.message || fsErr);
       }
 
       // 2. Merge with disk backups for any missing materials

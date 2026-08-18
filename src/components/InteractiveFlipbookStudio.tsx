@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   BookOpen, Tv, Edit3, Plus, Trash2, ArrowLeft, ArrowRight, ArrowLeftRight, ArrowUpDown, Play, Pause, 
   Maximize2, Minimize2, Languages, RefreshCw, Layout, Image, Video, Sparkles, 
@@ -6,7 +7,8 @@ import {
   Eye, Volume2, VolumeX, Edit, FileText, CheckCircle, CheckCircle2, Info, HelpCircle, Palette, MousePointer, PenTool, RotateCcw, Type,
   Bold, Italic, Underline, Highlighter, Eraser, Wand2, GripVertical, Move,
   Grid, List, FileCheck, FolderArchive, ExternalLink, Link, X, BookMarked, DownloadCloud, Upload, Film, GraduationCap,
-  MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock, Globe, Server, HardDrive, AlertCircle, Loader2
+  MessageSquare, Captions, Subtitles, FileAudio, Settings, Sliders, Moon, Sun, Clock, Globe, Server, HardDrive, AlertCircle, Loader2,
+  Library, Search, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -610,20 +612,64 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     }
   }, [isStudent, studentAssignedCourseTitles, user, studentAssignedTitle, selectedCourseFilter]);
 
-  // Mode States: 'flipbook' (3D Book View), 'presentation' (PowerPoint Slide Mode), 'editor' (Faculty Creation/Editing), 'grid-overview' (Grid Overview), 'settings' (Settings Studio Tab)
-  const [viewMode, setViewMode] = useState<'flipbook' | 'presentation' | 'editor' | 'grid-overview' | 'settings'>('flipbook');
+  // URL search params support (e.g. ?id=... or ?mode=...)
+  const [searchParams] = useSearchParams();
+
+  // Mode States: 'library' (Bookshelf / All E-Books View), 'flipbook' (3D Book View), 'presentation' (PowerPoint Slide Mode), 'editor' (Faculty Creation/Editing), 'grid-overview' (Grid Overview), 'settings' (Settings Studio Tab)
+  const [viewMode, setViewMode] = useState<'library' | 'flipbook' | 'presentation' | 'editor' | 'grid-overview' | 'settings'>(() => {
+    const requestedMode = searchParams.get('mode');
+    if (requestedMode && ['library', 'flipbook', 'presentation', 'editor', 'grid-overview', 'settings'].includes(requestedMode)) {
+      return requestedMode as any;
+    }
+    return 'library';
+  });
   
+  // Dedicated Library / Bookshelf Tab States
+  const [librarySearchQuery, setLibrarySearchQuery] = useState<string>('');
+  const [libraryCategoryFilter, setLibraryCategoryFilter] = useState<string>('all');
+  const [materialToDelete, setMaterialToDelete] = useState<FlipbookMaterial | null>(null);
+
   // Materials List & Active Material
   const [materials, setMaterials] = useState<FlipbookMaterial[]>(() => DEFAULT_FLIPBOOKS || []);
-  const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(() => initialMaterial || (DEFAULT_FLIPBOOKS && DEFAULT_FLIPBOOKS[0]) || {
-    id: 'default-fallback',
-    title: 'Diploma in Production Art Engineer',
-    description: 'Faculty master curriculum handbook',
-    courseCategory: 'production-art-engineer',
-    author: 'Endless School of Printing and Packaging',
-    pages: [],
-    updatedAt: new Date().toISOString()
+  const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(() => {
+    const requestedId = searchParams.get('id') || searchParams.get('bookId') || searchParams.get('materialId');
+    if (requestedId && DEFAULT_FLIPBOOKS) {
+      const match = DEFAULT_FLIPBOOKS.find(d => d.id === requestedId);
+      if (match) return match;
+    }
+    return initialMaterial || (DEFAULT_FLIPBOOKS && DEFAULT_FLIPBOOKS[0]) || {
+      id: 'default-fallback',
+      title: 'Diploma in Production Art Engineer',
+      description: 'Faculty master curriculum handbook',
+      courseCategory: 'production-art-engineer',
+      author: 'Endless School of Printing and Packaging',
+      pages: [],
+      updatedAt: new Date().toISOString()
+    };
   });
+
+  // Select Book Helper that updates activeMaterial, page index, course filter, and view mode safely
+  const handleSelectBook = (
+    book: FlipbookMaterial,
+    targetMode: 'library' | 'flipbook' | 'presentation' | 'editor' | 'grid-overview' | 'settings' = 'flipbook',
+    targetPage: number = 0
+  ) => {
+    if (!book) return;
+    setActiveMaterial(book);
+    setCurrentPageIndex(targetPage);
+    if (book.courseName) {
+      setSelectedCourseFilter(book.courseName);
+    } else {
+      setSelectedCourseFilter('All Course Titles');
+    }
+    setSelectedModuleFilter('All Modules');
+    if (targetMode === 'editor') {
+      if (book.pages && book.pages.length > 0) {
+        setEditingPage(book.pages[targetPage] || book.pages[0]);
+      }
+    }
+    setViewMode(targetMode);
+  };
 
   // Resolve student assigned native language
   const studentAssignedNativeLang = React.useMemo(() => {
@@ -945,7 +991,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         }
       });
 
-      // Ensure every material's title strictly matches its course title and clean up any placeholder strings
+      // Ensure every material's course and title are clean and distinctive
       const formattedMerged = merged.map(m => {
         let effectiveCourse = m.courseName || m.pages?.[0]?.courseName || '';
         if (!effectiveCourse || effectiveCourse.toLowerCase().includes('new course') || effectiveCourse.toLowerCase().includes('lecture material')) {
@@ -955,6 +1001,10 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
             effectiveCourse = configuredCourses[0]?.title || 'Diploma in Production Art Engineer';
           }
         }
+
+        const effectiveTitle = (m.title && !m.title.toLowerCase().includes('new course') && !m.title.toLowerCase().includes('lecture material'))
+          ? m.title
+          : (effectiveCourse || 'Curriculum E-Book');
 
         // Keep pages in exact order as saved
         const sortedPages = [...(m.pages || [])].map((p, idx) => ({
@@ -966,7 +1016,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         return {
           ...m,
           courseName: effectiveCourse,
-          title: effectiveCourse,
+          title: effectiveTitle,
           pages: sortedPages
         };
       });
@@ -1006,10 +1056,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         try {
           deletedIds = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
         } catch (_) {}
-        const filteredDefaults = DEFAULT_FLIPBOOKS.filter(d => !deletedIds.includes(d.id)).map(m => ({
-          ...m,
-          title: m.courseName || m.title || 'Diploma in Production Art Engineer'
-        }));
+        const filteredDefaults = DEFAULT_FLIPBOOKS.filter(d => !deletedIds.includes(d.id));
         setMaterials(filteredDefaults);
       }
     );
@@ -1056,16 +1103,17 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     };
   }, [initialMaterial, configuredCourses]);
 
-  // Auto-sync activeMaterial when filtered materials change
+  // Auto-sync activeMaterial if current selection is invalid or deleted
   useEffect(() => {
-    if (filteredMaterials.length > 0) {
-      const isCurrentInFiltered = filteredMaterials.some(m => m.id === activeMaterial?.id);
-      if (!isCurrentInFiltered) {
-        setActiveMaterial(filteredMaterials[0]);
+    if (materials.length > 0) {
+      const isCurrentInMaterials = materials.some(m => m.id === activeMaterial?.id);
+      if (!isCurrentInMaterials) {
+        const fallback = filteredMaterials.length > 0 ? filteredMaterials[0] : materials[0];
+        setActiveMaterial(fallback);
         setCurrentPageIndex(0);
       }
     }
-  }, [filteredMaterials, activeMaterial?.id]);
+  }, [materials, activeMaterial?.id]);
 
   // Current Active Page
   const currentPage = activeMaterial?.pages?.[currentPageIndex] || activeMaterial?.pages?.[0] || {
@@ -3048,6 +3096,28 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
     }
   };
 
+  // Duplicate an existing E-Book / Flipbook Material
+  const handleDuplicateMaterial = (matToDup: FlipbookMaterial) => {
+    const newId = `flipbook-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const duplicated: FlipbookMaterial = {
+      ...matToDup,
+      id: newId,
+      title: `${matToDup.title} (Copy)`,
+      updatedAt: new Date().toISOString(),
+      pages: (matToDup.pages || []).map((p, idx) => ({
+        ...p,
+        id: `${newId}-p${idx + 1}`
+      }))
+    };
+
+    setMaterials(prev => [duplicated, ...prev]);
+    setActiveMaterial(duplicated);
+    setCurrentPageIndex(0);
+    handleSaveMaterial(duplicated);
+    setSaveMessage(`E-Book "${duplicated.title}" duplicated!`);
+    setTimeout(() => setSaveMessage(''), 3500);
+  };
+
   // Update Course Title & E-Book Name across active material and all pages
   const handleUpdateCourseTitle = (newCourseTitle: string) => {
     if (!newCourseTitle) return;
@@ -3441,6 +3511,19 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         {/* Center: View Mode Switcher */}
         <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
           <button
+            onClick={() => setViewMode('library')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              viewMode === 'library'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-indigo-400'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="All E-Books Bookshelf Library"
+          >
+            <Library className="w-4 h-4 text-indigo-300" />
+            <span>All E-Books ({materials.length})</span>
+          </button>
+
+          <button
             onClick={() => setViewMode('flipbook')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
               viewMode === 'flipbook'
@@ -3690,45 +3773,42 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
               onChange={(e) => {
                 const found = materials.find(m => m.id === e.target.value);
                 if (found) {
-                  setActiveMaterial(found);
-                  setCurrentPageIndex(0);
+                  handleSelectBook(found, viewMode === 'library' ? 'flipbook' : viewMode);
                 }
               }}
               className="w-full bg-transparent text-xs font-bold text-emerald-300 focus:outline-none cursor-pointer truncate"
             >
-              {filteredMaterials.map((m) => (
+              {materials.map((m) => (
                 <option key={m.id} value={m.id} className="bg-slate-900 text-slate-200">
-                  {m.courseName || m.title || 'Diploma in Production Art Engineer'}
+                  {m.title || m.courseName || 'Curriculum E-Book'} {m.courseName ? `• ${m.courseName}` : ''} ({m.pages?.length || 0} pgs)
                 </option>
               ))}
-              {filteredMaterials.length === 0 && (
+              {materials.length === 0 && (
                 <option value="" disabled className="bg-slate-900 text-slate-400">
-                  (No E-Books matching filter)
+                  (No E-Books available)
                 </option>
               )}
             </select>
-            {(isAdmin || isElevated || user?.role === 'faculty') && (
-              <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => setViewMode('library')}
+                title="Open All E-Books Bookshelf Library Tab"
+                className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 rounded-lg text-[10px] font-bold shrink-0 transition flex items-center gap-1 cursor-pointer shadow-sm"
+              >
+                <Library className="w-3.5 h-3.5 text-indigo-300" />
+                <span>Bookshelf ({materials.length})</span>
+              </button>
+              {(isAdmin || isElevated || user?.role === 'faculty') && (
                 <button
                   onClick={handleCreateNewMaterial}
                   title="Create New E-Book Material"
-                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold shrink-0 transition flex items-center gap-1 cursor-pointer"
+                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold shrink-0 transition flex items-center gap-1 cursor-pointer shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">New</span>
                 </button>
-                {materials.length > 0 && (
-                  <button
-                    onClick={() => handleDeleteMaterial(activeMaterial.id)}
-                    title="Delete / Remove Current E-Book"
-                    className="px-2 py-1 bg-rose-700 hover:bg-rose-600 text-white rounded-lg text-[10px] font-bold shrink-0 transition flex items-center gap-1 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Delete</span>
-                  </button>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -3741,6 +3821,335 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
           <div className="absolute top-4 z-50 bg-amber-500 text-slate-950 text-xs font-black px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 animate-bounce border-2 border-slate-950">
             <RefreshCw className="w-4 h-4 animate-spin" />
             <span>{translationStatus || `Adapting Page Layout & Translating into ${SUPPORTED_LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage}...`}</span>
+          </div>
+        )}
+
+        {/* MODE 0: ALL E-BOOKS & BOOKSHELF LIBRARY VIEW */}
+        {viewMode === 'library' && (
+          <div className="w-full max-w-7xl mx-auto flex flex-col gap-6 py-2">
+            {/* Library Hero Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+              <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="px-2.5 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                      <Library className="w-3.5 h-3.5 text-indigo-400" />
+                      All Interactive E-Books
+                    </span>
+                    <span className="text-xs text-slate-400 font-semibold">
+                      {materials.length} {materials.length === 1 ? 'Curriculum Book' : 'Curriculum Books'} Available
+                    </span>
+                  </div>
+                  <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
+                    Interactive E-Book & Presentation Bookshelf
+                  </h2>
+                  <p className="text-xs md:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                    Select any comprehensive course material to open in realistic 3D Flipbook, present as interactive PowerPoint slides, or edit pages.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 flex-wrap">
+                  {(isAdmin || isElevated || user?.role === 'faculty') && (
+                    <button
+                      onClick={handleCreateNewMaterial}
+                      className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-950/40"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Create New E-Book</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setIsGuideOpen(true)}
+                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border border-slate-700 shadow-md"
+                  >
+                    <HelpCircle className="w-4 h-4 text-cyan-400" />
+                    <span>E-Book Guide</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Search & Filter Toolbar */}
+              <div className="mt-6 pt-5 border-t border-slate-800/80 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={librarySearchQuery}
+                    onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                    placeholder="Search by book title, module, or topic..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                  />
+                  {librarySearchQuery && (
+                    <button
+                      onClick={() => setLibrarySearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] font-bold text-slate-400 mr-1">Category:</span>
+                  {[
+                    { id: 'all', label: 'All Courses' },
+                    { id: 'production', label: 'Production Art' },
+                    { id: 'packaging', label: 'Packaging Engineer' },
+                    { id: 'general', label: 'General / Other' }
+                  ].map((filterTab) => (
+                    <button
+                      key={filterTab.id}
+                      onClick={() => setLibraryCategoryFilter(filterTab.id)}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        libraryCategoryFilter === filterTab.id
+                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                          : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      }`}
+                    >
+                      {filterTab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Books Cards Grid */}
+            {(() => {
+              const displayList = materials.filter(m => {
+                // Search query match
+                const q = librarySearchQuery.trim().toLowerCase();
+                const titleMatch = !q || (m.title && m.title.toLowerCase().includes(q));
+                const descMatch = !q || (m.description && m.description.toLowerCase().includes(q));
+                const courseMatch = !q || (m.courseName && m.courseName.toLowerCase().includes(q)) || (m.courseCategory && m.courseCategory.toLowerCase().includes(q));
+                const pageMatch = !q || m.pages?.some(p => 
+                  (p.title && p.title.toLowerCase().includes(q)) ||
+                  (p.courseModuleName && p.courseModuleName.toLowerCase().includes(q)) ||
+                  (p.content && p.content.toLowerCase().includes(q))
+                );
+
+                const matchesSearch = titleMatch || descMatch || courseMatch || pageMatch;
+
+                // Category tab match
+                let matchesCategory = true;
+                if (libraryCategoryFilter === 'production') {
+                  const cat = (m.courseCategory || m.courseName || '').toLowerCase();
+                  matchesCategory = cat.includes('production') || cat.includes('art');
+                } else if (libraryCategoryFilter === 'packaging') {
+                  const cat = (m.courseCategory || m.courseName || '').toLowerCase();
+                  matchesCategory = cat.includes('packaging');
+                } else if (libraryCategoryFilter === 'general') {
+                  const cat = (m.courseCategory || m.courseName || '').toLowerCase();
+                  matchesCategory = !cat.includes('production') && !cat.includes('packaging');
+                }
+
+                return matchesSearch && matchesCategory;
+              });
+
+              if (displayList.length === 0) {
+                return (
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center max-w-lg mx-auto mt-6 shadow-xl">
+                    <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4">
+                      <BookOpen className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-base font-bold text-white mb-1">No E-Books Found</h3>
+                    <p className="text-xs text-slate-400 mb-6 max-w-xs">
+                      {librarySearchQuery
+                        ? `No curriculum flipbooks match "${librarySearchQuery}". Try adjusting your keywords.`
+                        : 'No books in this category currently.'}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {librarySearchQuery && (
+                        <button
+                          onClick={() => setLibrarySearchQuery('')}
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                        >
+                          Clear Search
+                        </button>
+                      )}
+                      {(isAdmin || isElevated || user?.role === 'faculty') && (
+                        <button
+                          onClick={handleCreateNewMaterial}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/40"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Create New E-Book</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {displayList.map((book) => {
+                    const isCurrentlyActive = activeMaterial.id === book.id;
+                    const pageCount = book.pages?.length || 0;
+                    const bookCourse = book.courseName || formatCourseName(book.courseCategory) || 'Curriculum Course';
+                    
+                    // Extract unique modules inside this book
+                    const modulesInBook = Array.from(new Set(
+                      book.pages?.map(p => p.courseModuleName).filter(Boolean) as string[]
+                    ));
+
+                    return (
+                      <motion.div
+                        key={book.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`bg-slate-900/90 rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-xl hover:shadow-2xl hover:border-indigo-500/50 relative group ${
+                          isCurrentlyActive 
+                            ? 'border-indigo-500/80 ring-2 ring-indigo-500/20 bg-gradient-to-b from-indigo-950/20 to-slate-900' 
+                            : 'border-slate-800 hover:bg-slate-900'
+                        }`}
+                      >
+                        {/* Book Header & Meta */}
+                        <div className="p-5">
+                          
+                          {/* Top Tag Badges */}
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <span className="px-2.5 py-0.5 bg-slate-800/90 border border-slate-700 text-slate-300 rounded-full text-[10px] font-bold truncate max-w-[170px]">
+                              {bookCourse}
+                            </span>
+                            
+                            <div className="flex items-center gap-1.5">
+                              {isCurrentlyActive && (
+                                <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-full text-[10px] font-extrabold flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  Active
+                                </span>
+                              )}
+                              <span className="px-2 py-0.5 bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 rounded-full text-[10px] font-bold flex items-center gap-1">
+                                <BookOpen className="w-3 h-3 text-indigo-400" />
+                                {pageCount} {pageCount === 1 ? 'Page' : 'Pages'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Visual Cover Header */}
+                          <div 
+                            onClick={() => handleSelectBook(book, 'flipbook')}
+                            className="relative rounded-xl p-4 mb-4 bg-gradient-to-br from-indigo-900/40 via-slate-800 to-slate-900 border border-slate-700/60 shadow-inner flex items-start gap-3 cursor-pointer hover:border-amber-500/50 transition-colors"
+                            title="Click to open this E-Book in 3D Flipbook"
+                          >
+                            <div className="w-10 h-10 rounded-lg bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center text-slate-950 font-black shrink-0 shadow-md">
+                              <BookOpen className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-sm font-extrabold text-white leading-snug line-clamp-2">
+                                {book.title}
+                              </h3>
+                              <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                                {book.description || 'Comprehensive interactive digital course curriculum flipbook and presentation deck.'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Included Modules Chips */}
+                          {modulesInBook.length > 0 && (
+                            <div className="mb-3">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                                Included Modules ({modulesInBook.length}):
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {modulesInBook.slice(0, 3).map((mod, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 bg-slate-950 border border-slate-800 text-slate-300 rounded text-[10px] font-medium truncate max-w-[200px]">
+                                    {mod}
+                                  </span>
+                                ))}
+                                {modulesInBook.length > 3 && (
+                                  <span className="px-1.5 py-0.5 bg-indigo-950/60 border border-indigo-800 text-indigo-300 rounded text-[10px] font-bold">
+                                    +{modulesInBook.length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Author & Timestamp */}
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-800/80">
+                            <span className="truncate max-w-[150px]">By: {book.author || 'Faculty Lead'}</span>
+                            <span>{book.updatedAt ? new Date(book.updatedAt).toLocaleDateString() : 'Active'}</span>
+                          </div>
+                        </div>
+
+                        {/* Bottom Actions Bar */}
+                        <div className="p-3 bg-slate-950/80 border-t border-slate-800 flex flex-col gap-2">
+                          
+                          {/* Primary Reader Modes */}
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <button
+                              onClick={() => handleSelectBook(book, 'flipbook')}
+                              className="py-1.5 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1 transition cursor-pointer shadow-md shadow-amber-950/30"
+                              title="Open in Realistic 3D Flipbook Reader"
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>3D Book</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleSelectBook(book, 'presentation')}
+                              className="py-1.5 px-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-md shadow-purple-950/30"
+                              title="Launch PowerPoint PPT Presentation Mode"
+                            >
+                              <Tv className="w-3.5 h-3.5" />
+                              <span>PPT Slide</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleSelectBook(book, 'grid-overview')}
+                              className="py-1.5 px-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-md shadow-emerald-950/30"
+                              title="View all pages in Grid Layout"
+                            >
+                              <Grid className="w-3.5 h-3.5" />
+                              <span>Grid View</span>
+                            </button>
+                          </div>
+
+                          {/* Faculty Authoring / Admin Action Bar */}
+                          {(isAdmin || isElevated || user?.role === 'faculty') && (
+                            <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-800/60">
+                              <button
+                                onClick={() => handleSelectBook(book, 'editor')}
+                                className="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-500/30 rounded-md text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                                title="Edit this E-Book pages and content"
+                              >
+                                <Edit3 className="w-3 h-3 text-blue-400" />
+                                <span>Edit Pages</span>
+                              </button>
+
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleDuplicateMaterial(book)}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-md text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                                  title="Duplicate this E-Book"
+                                >
+                                  <Copy className="w-3 h-3 text-slate-400" />
+                                  <span>Copy</span>
+                                </button>
+
+                                <button
+                                  onClick={() => setMaterialToDelete(book)}
+                                  className="px-2 py-1 bg-rose-950/50 hover:bg-rose-900/80 text-rose-300 border border-rose-800/50 rounded-md text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                                  title="Safely Delete this E-Book"
+                                >
+                                  <Trash2 className="w-3 h-3 text-rose-400" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -6902,6 +7311,58 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                   className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl cursor-pointer"
                 >
                   Close Zoom
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Safe E-Book Deletion Confirmation Modal */}
+      <AnimatePresence>
+        {materialToDelete && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-900 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl flex flex-col gap-4 text-center"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+
+              <div>
+                <h3 className="text-base font-black text-white">
+                  Delete E-Book Material?
+                </h3>
+                <p className="text-xs text-rose-300 mt-1 font-bold">
+                  "{materialToDelete.title}"
+                </p>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                  This will permanently delete this {materialToDelete.pages?.length || 0}-page curriculum book from the cloud database and library.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setMaterialToDelete(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Cancel & Keep Book
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetId = materialToDelete.id;
+                    setMaterialToDelete(null);
+                    handleDeleteMaterial(targetId);
+                  }}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-lg shadow-rose-950/50 flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Yes, Delete E-Book</span>
                 </button>
               </div>
             </motion.div>

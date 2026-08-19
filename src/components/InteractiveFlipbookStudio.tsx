@@ -762,9 +762,14 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     return Array.from(set);
   }, [dbModules, configuredCourses, selectedCourseFilter, materials, isStudent, user?.completedModules]);
 
-  // Filtered materials matching Course and Module filters
+  // Filtered materials matching Course, Module, and Role Visibility filters
   const filteredMaterials = React.useMemo(() => {
     return materials.filter(m => {
+      // Role-based visibility: Students should only see published/active materials, never drafts
+      if (isStudent && (m as any).status === 'draft') {
+        return false;
+      }
+
       let courseMatch = true;
       if (selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses') {
         const matCourse = m.courseName || formatCourseName(m.courseCategory);
@@ -789,7 +794,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
       return courseMatch && moduleMatch;
     });
-  }, [materials, selectedCourseFilter, selectedModuleFilter]);
+  }, [materials, selectedCourseFilter, selectedModuleFilter, isStudent]);
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
 
   // Multi-language Translation State

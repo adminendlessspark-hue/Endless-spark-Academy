@@ -629,8 +629,9 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [libraryCategoryFilter, setLibraryCategoryFilter] = useState<string>('all');
   const [materialToDelete, setMaterialToDelete] = useState<FlipbookMaterial | null>(null);
 
-  // Materials List & Active Material
-  const [materials, setMaterials] = useState<FlipbookMaterial[]>(() => DEFAULT_FLIPBOOKS || []);
+  // Materials List & Active Material (Single Cloud Source of Truth)
+  const [materials, setMaterials] = useState<FlipbookMaterial[]>([]);
+  const [isLoadingEbooks, setIsLoadingEbooks] = useState<boolean>(true);
   const [activeMaterial, setActiveMaterial] = useState<FlipbookMaterial>(() => {
     const requestedId = searchParams.get('id') || searchParams.get('bookId') || searchParams.get('materialId');
     if (requestedId && DEFAULT_FLIPBOOKS) {
@@ -959,11 +960,55 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [guideStep, setGuideStep] = useState<number>(1);
 
-  // Load Flipbooks from Firestore & Backend API on mount & merge with default curriculum flipbooks
+  // Load Flipbooks strictly from Central Cloud Database (Firestore & Backend API) as single source of truth
   useEffect(() => {
     let isMounted = true;
 
-    const processMergedMaterials = (rawLoaded: FlipbookMaterial[]) => {
+    // 0. Auto-Migration: Scan localStorage for any local-only backups, migrate to cloud DB, then clear local keys
+    const runAutoMigration = async () => {
+      try {
+        let deletedIds: string[] = [];
+        try {
+          deletedIds = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
+        } catch (_) {}
+
+        const keysToMigrate: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('flipbook_backup_')) {
+            keysToMigrate.push(k);
+          }
+        }
+
+        for (const k of keysToMigrate) {
+          try {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const book: FlipbookMaterial = JSON.parse(raw);
+              if (book && book.id && !deletedIds.includes(book.id)) {
+                console.log('Migrating local e-book to cloud database:', book.id);
+                fetch('/api/flipbooks/save', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(book)
+                }).catch(() => {});
+                setDoc(doc(db, 'course_flipbooks', book.id), {
+                  ...book,
+                  updatedAt: new Date().toISOString()
+                }).catch(() => {});
+              }
+            }
+            // Clear local storage key so it does not linger as a divergent source
+            localStorage.removeItem(k);
+          } catch (_) {}
+        }
+      } catch (err) {
+        console.warn('Auto-migration error:', err);
+      }
+    };
+    runAutoMigration();
+
+    const processCloudMaterials = (rawLoaded: FlipbookMaterial[]) => {
       if (!isMounted) return;
       let deletedIds: string[] = [];
       try {
@@ -972,27 +1017,25 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
       // Filter out any explicitly deleted flipbooks
       const cleanLoaded = rawLoaded.filter(m => !deletedIds.includes(m.id));
-      
-      // Merge with DEFAULT_FLIPBOOKS so standard templates are available unless deleted
-      const merged = [...cleanLoaded];
-      DEFAULT_FLIPBOOKS.forEach(def => {
-        if (!deletedIds.includes(def.id) && !merged.some(m => m.id === def.id)) {
-          try {
-            const localBackup = localStorage.getItem(`flipbook_backup_${def.id}`);
-            if (localBackup) {
-              const parsed = JSON.parse(localBackup);
-              if (parsed && parsed.pages && parsed.pages.length > 0) {
-                merged.push(parsed);
-                return;
-              }
-            }
-          } catch (_) {}
-          merged.push(def);
-        }
-      });
+
+      // If cloud database is completely empty on first launch and nothing was deleted, auto-seed the default curriculum book to cloud
+      if (cleanLoaded.length === 0 && rawLoaded.length === 0 && deletedIds.length === 0 && DEFAULT_FLIPBOOKS && DEFAULT_FLIPBOOKS.length > 0) {
+        const seedBook = DEFAULT_FLIPBOOKS[0];
+        setDoc(doc(db, 'course_flipbooks', seedBook.id), {
+          ...seedBook,
+          status: 'active',
+          updatedAt: new Date().toISOString()
+        }).catch(() => {});
+        fetch('/api/flipbooks/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...seedBook, status: 'active' })
+        }).catch(() => {});
+        cleanLoaded.push({ ...seedBook, status: 'active' });
+      }
 
       // Ensure every material's course and title are clean and distinctive
-      const formattedMerged = merged.map(m => {
+      const formattedMerged = cleanLoaded.map(m => {
         let effectiveCourse = m.courseName || m.pages?.[0]?.courseName || '';
         if (!effectiveCourse || effectiveCourse.toLowerCase().includes('new course') || effectiveCourse.toLowerCase().includes('lecture material')) {
           if (m.title && !m.title.toLowerCase().includes('new course') && !m.title.toLowerCase().includes('lecture material')) {
@@ -1015,6 +1058,7 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
         return {
           ...m,
+          status: (m as any).status || 'active',
           courseName: effectiveCourse,
           title: effectiveTitle,
           pages: sortedPages
@@ -1022,84 +1066,72 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       });
 
       setMaterials(formattedMerged);
+      setIsLoadingEbooks(false);
       setActiveMaterial(prevActive => {
-        if (!prevActive) {
-          return initialMaterial || formattedMerged[0];
+        if (!prevActive || prevActive.id === 'default-fallback') {
+          return initialMaterial || formattedMerged[0] || prevActive;
         }
         const matched = formattedMerged.find(m => m.id === prevActive.id);
         return matched || formattedMerged[0] || prevActive;
       });
     };
 
-    // 1. Initial immediate pull from backend API
+    // 1. Initial immediate pull from backend cloud database API
     fetch('/api/flipbooks')
       .then(res => res.json())
       .then(data => {
-        if (data.success && Array.isArray(data.materials) && data.materials.length > 0) {
-          processMergedMaterials(data.materials);
+        if (data.success && Array.isArray(data.materials)) {
+          processCloudMaterials(data.materials);
         }
       })
       .catch(err => console.warn('API flipbooks load note:', err));
 
-    // 2. Real-time Firestore snapshot listener
+    // 2. Real-time Firestore snapshot listener as cloud source of truth
     const unsub = onSnapshot(
       collection(db, 'course_flipbooks'),
       (snapshot) => {
         const loaded = !snapshot.empty 
           ? snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as FlipbookMaterial))
           : [];
-        processMergedMaterials(loaded);
+        processCloudMaterials(loaded);
       },
       (err) => {
         console.warn('Firestore flipbooks load notice:', err.message);
-        let deletedIds: string[] = [];
-        try {
-          deletedIds = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
-        } catch (_) {}
-        const filteredDefaults = DEFAULT_FLIPBOOKS.filter(d => !deletedIds.includes(d.id));
-        setMaterials(filteredDefaults);
+        setIsLoadingEbooks(false);
       }
     );
-
-    // Cross-tab real-time sync listener
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key && e.key.startsWith('flipbook_backup_')) {
-        try {
-          if (e.newValue) {
-            const updatedMat: FlipbookMaterial = JSON.parse(e.newValue);
-            if (updatedMat && updatedMat.id) {
-              setMaterials(prev => {
-                const idx = prev.findIndex(m => m.id === updatedMat.id);
-                if (idx >= 0) {
-                  const next = [...prev];
-                  next[idx] = updatedMat;
-                  return next;
-                }
-                return [...prev, updatedMat];
-              });
-              setActiveMaterial(prev => prev?.id === updatedMat.id ? updatedMat : prev);
-            }
-          }
-        } catch (_) {}
-      }
-    };
 
     const handleCustomSync = (e: any) => {
       if (e.detail?.material) {
         const updatedMat = e.detail.material;
-        setMaterials(prev => prev.map(m => m.id === updatedMat.id ? updatedMat : m));
+        setMaterials(prev => {
+          const idx = prev.findIndex(m => m.id === updatedMat.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = updatedMat;
+            return next;
+          }
+          return [...prev, updatedMat];
+        });
         setActiveMaterial(prev => prev?.id === updatedMat.id ? updatedMat : prev);
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
+    const handleCustomDelete = (e: any) => {
+      if (e.detail?.id) {
+        const deletedId = e.detail.id;
+        setMaterials(prev => prev.filter(m => m.id !== deletedId));
+      }
+    };
+
     window.addEventListener('flipbook_synced', handleCustomSync);
+    window.addEventListener('flipbook_deleted', handleCustomDelete);
 
     return () => {
       isMounted = false;
       unsub();
-      window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('flipbook_synced', handleCustomSync);
+      window.removeEventListener('flipbook_deleted', handleCustomDelete);
     };
   }, [initialMaterial, configuredCourses]);
 
@@ -3039,40 +3071,28 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
   // Delete / Remove an E-Book permanently from Cloud, Server, and Local Session
   const handleDeleteMaterial = async (matIdToDelete: string) => {
-    const targetMat = materials.find(m => m.id === matIdToDelete);
-    const title = targetMat ? (targetMat.courseName || targetMat.title) : 'this E-Book';
-
-    const confirmed = window.confirm(
-      `Are you sure you want to remove the E-Book "${title}"?\n\nThis will delete it from the cloud database and remove it from the E-Book list.`
-    );
-    if (!confirmed) return;
+    if (!matIdToDelete) return;
 
     try {
       setIsSaving(true);
-      // 1. Delete from Server API & Firestore
-      fetch(`/api/flipbooks/${matIdToDelete}`, { method: 'DELETE' }).catch(() => {});
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore delete timeout')), 4000));
-      await Promise.race([
-        deleteDoc(doc(db, 'course_flipbooks', matIdToDelete)),
-        timeoutPromise
-      ]).catch(err => {
-        console.warn('Firestore delete notice:', err);
-      });
 
-      // 2. Track deleted ID in localStorage so templates don't respawn
+      // 1. Immediately record in localStorage so defaults/templates do not re-spawn
       try {
         const deletedIds: string[] = JSON.parse(localStorage.getItem('deleted_flipbook_ids') || '[]');
         if (!deletedIds.includes(matIdToDelete)) {
           deletedIds.push(matIdToDelete);
           localStorage.setItem('deleted_flipbook_ids', JSON.stringify(deletedIds));
         }
+        localStorage.removeItem(`flipbook_backup_${matIdToDelete}`);
+        localStorage.setItem('flipbook_synced_timestamp', Date.now().toString());
+        window.dispatchEvent(new CustomEvent('flipbook_deleted', { detail: { id: matIdToDelete } }));
       } catch (_) {}
 
-      // 3. Remove from materials state
+      // 2. Remove immediately from local materials state
       const remainingMaterials = materials.filter(m => m.id !== matIdToDelete);
       setMaterials(remainingMaterials);
 
-      // 4. Update active material
+      // 3. Update active material if the deleted one was selected
       if (activeMaterial.id === matIdToDelete) {
         if (remainingMaterials.length > 0) {
           setActiveMaterial(remainingMaterials[0]);
@@ -3085,11 +3105,24 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
         }
       }
 
-      setSaveMessage('E-Book removed successfully from Cloud & Server!');
+      // 4. Delete from Server API & Firestore in background with timeout
+      fetch(`/api/flipbooks/${matIdToDelete}`, { method: 'DELETE' }).catch(err => {
+        console.warn('API flipbook delete notice:', err);
+      });
+
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore delete timeout')), 4000));
+      await Promise.race([
+        deleteDoc(doc(db, 'course_flipbooks', matIdToDelete)),
+        timeoutPromise
+      ]).catch(err => {
+        console.warn('Firestore delete notice:', err);
+      });
+
+      setSaveMessage('E-Book deleted successfully from Library and Database!');
       setTimeout(() => setSaveMessage(''), 3500);
     } catch (err) {
       console.error('Error removing flipbook:', err);
-      setSaveMessage('Removed from current session.');
+      setSaveMessage('E-Book deleted from current library.');
       setTimeout(() => setSaveMessage(''), 3000);
     } finally {
       setIsSaving(false);
@@ -3839,7 +3872,11 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                       All Interactive E-Books
                     </span>
                     <span className="text-xs text-slate-400 font-semibold">
-                      {materials.length} {materials.length === 1 ? 'Curriculum Book' : 'Curriculum Books'} Available
+                      {isLoadingEbooks ? (
+                        'Syncing Cloud Database...'
+                      ) : (
+                        `${materials.length} ${materials.length === 1 ? 'Curriculum Book' : 'Curriculum Books'} Available`
+                      )}
                     </span>
                   </div>
                   <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
@@ -3919,7 +3956,22 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
 
             {/* Books Cards Grid */}
             {(() => {
+              if (isLoadingEbooks) {
+                return (
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center max-w-lg mx-auto mt-6 shadow-xl">
+                    <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
+                    <h3 className="text-base font-bold text-white mb-1">Loading Cloud Library...</h3>
+                    <p className="text-xs text-slate-400">Synchronizing real-time e-books across student and admin portals.</p>
+                  </div>
+                );
+              }
+
               const displayList = materials.filter(m => {
+                // Role-based visibility: students only see active/published books
+                if (isStudent && !isAdmin && !isElevated && user?.role !== 'faculty') {
+                  if ((m as any).status === 'draft') return false;
+                }
+
                 // Search query match
                 const q = librarySearchQuery.trim().toLowerCase();
                 const titleMatch = !q || (m.title && m.title.toLowerCase().includes(q));
@@ -5126,7 +5178,7 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                 {(isAdmin || isElevated || user?.role === 'faculty') && (
                   <button
                     type="button"
-                    onClick={() => handleDeleteMaterial(activeMaterial.id)}
+                    onClick={() => setMaterialToDelete(activeMaterial)}
                     className="px-3.5 py-2 bg-rose-700/80 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-900/30 border border-rose-600/50"
                     title="Remove / Delete this E-Book permanently"
                   >

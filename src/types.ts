@@ -773,6 +773,7 @@ export interface FlipbookMaterial {
   courseCategory: string;
   author: string;
   coverImageUrl?: string;
+  status?: 'active' | 'draft' | 'archived';
   pages: FlipbookPage[];
   updatedAt: string;
 }

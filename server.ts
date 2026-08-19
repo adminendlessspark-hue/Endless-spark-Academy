@@ -2021,6 +2021,53 @@ async function startServer() {
     }
   });
 
+  // API Routes for Interactive Flipbooks / E-Books
+  app.get("/api/flipbooks", async (_req: any, res: any) => {
+    try {
+      const db = getDb();
+      const snap = await db.collection("course_flipbooks").get();
+      const materials = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      res.json({ success: true, materials });
+    } catch (err: any) {
+      console.warn("Backend /api/flipbooks fetch notice:", err.message);
+      res.json({ success: false, materials: [] });
+    }
+  });
+
+  app.post("/api/flipbooks/save", async (req: any, res: any) => {
+    try {
+      const mat = req.body;
+      if (!mat || !mat.id) {
+        return res.status(400).json({ error: "Missing flipbook data or id" });
+      }
+      const db = getDb();
+      await db.collection("course_flipbooks").doc(mat.id).set({
+        ...mat,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      res.json({ success: true, id: mat.id });
+    } catch (err: any) {
+      console.error("Backend /api/flipbooks/save error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/flipbooks/:id", async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        return res.status(400).json({ error: "Missing id" });
+      }
+      const db = getDb();
+      await db.collection("course_flipbooks").doc(id).delete();
+      console.log(`Backend: Deleted flipbook ${id} from Firestore`);
+      res.json({ success: true, message: `E-Book ${id} deleted successfully` });
+    } catch (err: any) {
+      console.error("Backend /api/flipbooks delete error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // API Route for WhatsApp notifications
   app.post("/api/notify-signup", async (req: any, res: any) => {
     const { studentName, studentEmail, studentPhone } = req.body;

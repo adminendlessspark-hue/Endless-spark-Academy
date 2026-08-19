@@ -9,6 +9,7 @@ export const DEFAULT_FLIPBOOKS: FlipbookMaterial[] = [
     courseCategory: 'production-art-engineer',
     author: 'Endless School of Printing and Packaging',
     coverImageUrl: '',
+    status: 'active',
     updatedAt: new Date().toISOString(),
     pages: [
       {

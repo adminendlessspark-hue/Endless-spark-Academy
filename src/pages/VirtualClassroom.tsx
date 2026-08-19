@@ -778,9 +778,11 @@ export default function VirtualClassroom() {
               </div>
 
               <ScreenRecorder 
-                title="Live Classroom Session Recorder" 
+                title={`Live Classroom Recorder • Room: ${roomId || 'Live Class'}`} 
+                roomId={roomId}
+                jitsiServer={jitsiServer}
                 onSave={(blob) => {
-                  alert("Recording saved! Click Download in the recorder window to save your video file.");
+                  alert("Recording completed! Click 'Download Video (.webm)' in the preview pane to save your local session video.");
                 }}
               />
             </div>

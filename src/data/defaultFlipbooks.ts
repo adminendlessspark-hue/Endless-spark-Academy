@@ -686,5 +686,102 @@ Langkah Semakan:
         exerciseTitle: ''
       }
     ]
+  },
+  {
+    id: 'material-printing-packaging-cross-courses',
+    title: 'Diploma in Printing and Packaging Cross Courses',
+    description: 'Comprehensive cross-disciplinary masterclass in flexographic plate calibration, offset press chemistry, colorimetry tolerances, and ISO 12647-2 compliance.',
+    courseName: 'Diploma in Printing and Packaging Cross Courses',
+    courseCategory: 'printing-and-packaging-cross-courses',
+    author: 'Endless School of Printing and Packaging',
+    coverImageUrl: '',
+    status: 'active',
+    updatedAt: new Date().toISOString(),
+    pages: [
+      {
+        id: 'pp-cross-p1',
+        pageNumber: 1,
+        title: 'Cross-Disciplinary Printing Technologies',
+        subtitle: 'Offset Lithography, Flexography & Digital Production',
+        courseName: 'Diploma in Printing and Packaging Cross Courses',
+        courseModuleName: 'Module 3: Prepress & Quality Control',
+        content: `<h3><strong>Integrated Printing Technologies</strong></h3>
+<p>Modern production art workflows require a deep understanding of the interactions between different printing methods—offset lithography for high-volume commercial print, flexography for flexible packaging and labels, and digital presses for short-run customization.</p>
+<br/>
+<h3><strong>Core Production Standards:</strong></h3>
+<ul>
+  <li><strong>ISO 12647-2:</strong> Process control for offset lithographic processes.</li>
+  <li><strong>ISO 12647-6:</strong> Flexographic printing parameters, anilox cell volumes, and polymer plate hardness.</li>
+  <li><strong>Colorimetry Delta-E 2000 (ΔE00):</strong> Tolerance thresholds (ΔE00 ≤ 2.0 for brand spot colors, ≤ 3.5 for process CMYK).</li>
+</ul>`,
+        translations: {
+          ms: {
+            title: 'Teknologi Percetakan Rentas Disiplin',
+            subtitle: 'Litografi Ofset, Fleksografi & Pengeluaran Digital',
+            content: `Aliran kerja seni pengeluaran moden memerlukan pemahaman mendalam tentang interaksi antara kaedah percetakan berbeza—litografi ofset untuk cetakan komersial jumlah tinggi, fleksografi untuk pembungkusan fleksibel, dan mesin digital untuk penyesuaian pesanan kecil.
+
+Piawaian Pengeluaran Utama:
+• ISO 12647-2: Kawalan proses untuk litografi ofset.
+• ISO 12647-6: Parameter percetakan fleksografi dan isipadu sel anilox.
+• Kolorimetri Delta-E 2000 (ΔE00): Toleransi warna jenama (ΔE00 ≤ 2.0).`
+          },
+          ta: {
+            title: 'குறுக்கு-ஒழுங்கு அச்சிடும் தொழில்நுட்பங்கள்',
+            subtitle: 'ஆஃப்செட் லித்தோகிராபி, ஃப்ளெக்ஸோகிராபி மற்றும் டிஜிட்டல் உற்பத்தி',
+            content: `நவீன உற்பத்தி கலை பணிப்பாய்வுகளுக்கு பல்வேறு அச்சிடும் முறைகளுக்கு இடையிலான தொடர்புகள் பற்றிய ஆழமான புரிதல் தேவைப்படுகிறது—அதிக அளவிலான வணிக அச்சிடலுக்கான ஆஃப்செட் லித்தோகிராபி, நெகிழ்வான பேக்கேஜிங் மற்றும் லேபிள்களுக்கான ஃப்ளெக்ஸோகிராபி, மற்றும் குறுகிய கால தனிப்பயனாக்கலுக்கான டிஜிட்டல் அச்சகங்கள்.
+
+முக்கிய உற்பத்தி தரநிலைகள்:
+• ISO 12647-2: ஆஃப்செட் செயல்முறை கட்டுப்பாடு.
+• ISO 12647-6: ஃப்ளெக்ஸோகிராஃபிக் அச்சிடும் அளவுருக்கள்.
+• வண்ண அளவீடு Delta-E 2000 (ΔE00): வண்ண சகிப்புத்தன்மை வரம்புகள் (ΔE00 ≤ 2.0).`
+          }
+        },
+        mediaType: 'image',
+        imageUrl: '',
+        imageCaption: '',
+        videoUrl: '',
+        videoCaption: '',
+        layoutStyle: 'grid-2x2',
+        calloutText: 'Core Standard: Cross-process brand consistency demands strict ΔE00 color tolerance audits on certified Fogra proofing substrates.',
+        bgTheme: 'classic-paper'
+      },
+      {
+        id: 'pp-cross-p2',
+        pageNumber: 2,
+        title: 'Ink Rheology, Viscosity & Drying Mechanisms',
+        subtitle: 'Solvent, Water-Based & UV Curing Inks',
+        courseName: 'Diploma in Printing and Packaging Cross Courses',
+        courseModuleName: 'Module 3: Prepress & Quality Control',
+        content: `<h3><strong>Ink Rheology & Fluid Dynamics</strong></h3>
+<p>Ink behavior under high-speed shear stress determines ink transfer efficiency, dot crispness, and trapping quality across both absorbent paperboard and non-porous polymer film substrates.</p>
+<br/>
+<h3><strong>Comparison of Drying Systems:</strong></h3>
+<ul>
+  <li><strong>Oxidation & Absorption:</strong> Traditional mineral/vegetable oil sheetfed offset inks.</li>
+  <li><strong>Evaporation:</strong> Solvent and water-based flexo inks monitored via Zahn/Ford viscosity cups.</li>
+  <li><strong>Free Radical / Cationic UV:</strong> Instant polymerization under UV-LED wavelength lamps (385–395 nm).</li>
+</ul>`,
+        translations: {
+          ms: {
+            title: 'Reologi Dakwat, Kelikatan & Mekanisme Pengeringan',
+            subtitle: 'Dakwat Berasaskan Pelarut, Air & Pengeringan UV',
+            content: `Sifat aliran dakwat di bawah tegasan ricih berkelajuan tinggi menentukan kecekapan pemindahan dakwat dan kualiti titik pada papan kertas dan filem polimer.`
+          },
+          ta: {
+            title: 'மை ரியாலஜி, பாகுத்தன்மை மற்றும் உலர்த்தும் வழிமுறைகள்',
+            subtitle: 'கரைப்பான், நீர் சார்ந்த மற்றும் UV க்யூரிங் மைகள்',
+            content: `அதிவேக வெட்டு அழுத்தத்தின் கீழ் மையின் நடத்தை மை பரிமாற்ற திறன், டாட் மிருதுவான தன்மை மற்றும் தரத்தை தீர்மானிக்கிறது.`
+          }
+        },
+        mediaType: 'image',
+        imageUrl: '',
+        imageCaption: '',
+        videoUrl: '',
+        videoCaption: '',
+        layoutStyle: 'grid-bento',
+        calloutText: 'Faculty QC Tip: Always measure flexo ink viscosity every 30 minutes using a calibrated #2 Zahn Cup.',
+        bgTheme: 'clean-white'
+      }
+    ]
   }
 ];

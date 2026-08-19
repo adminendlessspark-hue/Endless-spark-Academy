@@ -168,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userEmail = (firebaseUser.email || '').toLowerCase();
         const isHardcodedAdmin = ADMIN_EMAILS.some(e => e.toLowerCase() === userEmail);
 
-        // Immediate cache hydration / instant user provision for zero-latency load
+        // Immediate cache hydration / instant user provision for zero-latency initial paint
         const cached = localStorage.getItem(`cached_user_profile_${firebaseUser.uid}`);
         if (cached) {
           try {
@@ -190,9 +190,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsLoading(false);
         }
 
-        // User is signed in, listen to their profile in Firestore in background
+        // Force an immediate direct fetch to sync fresh database state upon auto-fill / saved password login
         const userDocRef = doc(db, 'users', firebaseUser.uid);
-        
+        getDoc(userDocRef).then((freshDoc) => {
+          if (freshDoc.exists()) {
+            const freshData = freshDoc.data() as User;
+            setUser(freshData);
+            localStorage.setItem(`cached_user_profile_${firebaseUser.uid}`, JSON.stringify(freshData));
+          }
+        }).catch((err) => {
+          console.warn('Initial direct profile fetch notice:', err);
+        });
+
+        // Broadcast event to notify all active views (Flipbook Studio, Modules, Bookshelf) to refresh state
+        window.dispatchEvent(new CustomEvent('app:auth-refreshed', { 
+          detail: { uid: firebaseUser.uid, email: userEmail, isHardcodedAdmin } 
+        }));
+
+        // Listen to live profile updates in Firestore in background
         unsubProfile = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const newData = docSnap.data() as User;

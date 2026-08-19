@@ -29,14 +29,17 @@ export const COURSE_MODULES: { id: string; name: string; code: string }[] = [];
 // Supported Native Languages
 export const SUPPORTED_LANGUAGES = [
   { code: 'en', name: 'English', flag: '🇬🇧', isDefault: true },
-  { code: 'ms', name: 'Bahasa Melayu', flag: '🇲🇾' },
   { code: 'ta', name: 'Tamil (தமிழ்)', flag: '🇮🇳' },
-  { code: 'zh', name: 'Chinese (中文)', flag: '🇨🇳' },
   { code: 'hi', name: 'Hindi (हिंदी)', flag: '🇮🇳' },
+  { code: 'ml', name: 'Malayalam (മലയാളം)', flag: '🇮🇳' },
+  { code: 'te', name: 'Telugu (తెలుగు)', flag: '🇮🇳' },
+  { code: 'ms', name: 'Bahasa Melayu', flag: '🇲🇾' },
+  { code: 'zh', name: 'Chinese (中文)', flag: '🇨🇳' },
   { code: 'es', name: 'Spanish (Español)', flag: '🇪🇸' },
   { code: 'fr', name: 'French (Français)', flag: '🇫🇷' },
   { code: 'de', name: 'German (Deutsch)', flag: '🇩🇪' },
   { code: 'ja', name: 'Japanese (日本語)', flag: '🇯🇵' },
+  { code: 'ar', name: 'Arabic (العربية)', flag: '🇸🇦' },
 ];
 
 // Normalize external domain image URLs (Google Drive, Dropbox, Imgur, GitHub, HTTP to HTTPS, etc.)
@@ -568,15 +571,12 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
 
   // All Course Titles list (same as Free ChatGPT Video & Speech Translator)
   const allCourseTitles = React.useMemo(() => {
-    if (isStudent && studentAssignedCourseTitles.length > 0) {
-      if (studentAssignedCourseTitles.length > 1) {
-        return ['All Assigned Courses', ...studentAssignedCourseTitles];
-      }
-      return studentAssignedCourseTitles;
-    }
-
     const set = new Set<string>();
     set.add('All Course Titles');
+    if (isStudent && studentAssignedCourseTitles.length > 1) {
+      set.add('All Assigned Courses');
+    }
+    (studentAssignedCourseTitles || []).forEach(t => set.add(t));
     (configuredCourses || []).forEach(c => {
       if (c?.title) set.add(c.title);
     });
@@ -601,16 +601,12 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     return studentAssignedCourseTitles[0];
   }, [studentAssignedCourseTitles]);
 
-  // Auto-set selectedCourseFilter to student assigned course on load
+  // Set default selectedCourseFilter if empty
   useEffect(() => {
-    if (isStudent && studentAssignedCourseTitles.length > 0) {
-      if (!studentAssignedCourseTitles.includes(selectedCourseFilter) && selectedCourseFilter !== 'All Assigned Courses') {
-        setSelectedCourseFilter(studentAssignedCourseTitles[0]);
-      }
-    } else if (user && studentAssignedTitle && selectedCourseFilter === 'All Course Titles') {
-      setSelectedCourseFilter(studentAssignedTitle);
+    if (!selectedCourseFilter) {
+      setSelectedCourseFilter('All Course Titles');
     }
-  }, [isStudent, studentAssignedCourseTitles, user, studentAssignedTitle, selectedCourseFilter]);
+  }, [selectedCourseFilter]);
 
   // URL search params support (e.g. ?id=... or ?mode=...)
   const [searchParams] = useSearchParams();
@@ -687,23 +683,23 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
     if (lower.includes('tamil') || lower.includes('தமிழ்')) return SUPPORTED_LANGUAGES.find(l => l.code === 'ta');
     if (lower.includes('malay') || lower.includes('melayu') || lower.includes('bahasa')) return SUPPORTED_LANGUAGES.find(l => l.code === 'ms');
     if (lower.includes('hindi') || lower.includes('हिंदी')) return SUPPORTED_LANGUAGES.find(l => l.code === 'hi');
+    if (lower.includes('malayalam') || lower.includes('മലയാളം')) return SUPPORTED_LANGUAGES.find(l => l.code === 'ml');
+    if (lower.includes('telugu') || lower.includes('తెలుగు')) return SUPPORTED_LANGUAGES.find(l => l.code === 'te');
     if (lower.includes('chinese') || lower.includes('mandarin') || lower.includes('中文')) return SUPPORTED_LANGUAGES.find(l => l.code === 'zh');
     if (lower.includes('spanish') || lower.includes('español')) return SUPPORTED_LANGUAGES.find(l => l.code === 'es');
     if (lower.includes('french') || lower.includes('français')) return SUPPORTED_LANGUAGES.find(l => l.code === 'fr');
     if (lower.includes('german') || lower.includes('deutsch')) return SUPPORTED_LANGUAGES.find(l => l.code === 'de');
     if (lower.includes('japanese') || lower.includes('日本語')) return SUPPORTED_LANGUAGES.find(l => l.code === 'ja');
+    if (lower.includes('arabic') || lower.includes('العربية')) return SUPPORTED_LANGUAGES.find(l => l.code === 'ar');
     if (lower.includes('english')) return SUPPORTED_LANGUAGES.find(l => l.code === 'en');
 
     return { code: lower.slice(0, 2), name: raw, flag: '🌐' };
   }, [user]);
 
-  // For students, ONLY show assigned native language in the language selector
+  // Provide all native language options to students and faculty for seamless localization
   const availableLanguages = React.useMemo(() => {
-    if (isStudent && studentAssignedNativeLang) {
-      return [studentAssignedNativeLang];
-    }
     return SUPPORTED_LANGUAGES;
-  }, [isStudent, studentAssignedNativeLang]);
+  }, []);
 
   // Available Modules list based on selected course filter
   // For students: ONLY include completed modules and the single active uncompleted module
@@ -770,8 +766,14 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         return false;
       }
 
+      const isAllCourses = !selectedCourseFilter ||
+        selectedCourseFilter === 'all' ||
+        selectedCourseFilter === 'All Courses' ||
+        selectedCourseFilter === 'All Course Titles' ||
+        selectedCourseFilter === 'All Assigned Courses';
+
       let courseMatch = true;
-      if (selectedCourseFilter !== 'All Course Titles' && selectedCourseFilter !== 'All Assigned Courses') {
+      if (!isAllCourses) {
         const matCourse = m.courseName || formatCourseName(m.courseCategory);
         courseMatch = matCourse === selectedCourseFilter ||
           matCourse.toLowerCase().includes(selectedCourseFilter.toLowerCase()) ||
@@ -783,8 +785,12 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
           ));
       }
 
+      const isAllModules = !selectedModuleFilter ||
+        selectedModuleFilter === 'all' ||
+        selectedModuleFilter === 'All Modules';
+
       let moduleMatch = true;
-      if (selectedModuleFilter !== 'All Modules') {
+      if (!isAllModules) {
         moduleMatch = m.pages.some(p => p.courseModuleName && (
           p.courseModuleName === selectedModuleFilter ||
           p.courseModuleName.toLowerCase().includes(selectedModuleFilter.toLowerCase()) ||
@@ -797,8 +803,12 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   }, [materials, selectedCourseFilter, selectedModuleFilter, isStudent]);
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
 
-  // Multi-language Translation State
+  // Multi-language Translation State with localStorage persistence for seamless student native localization
   const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
+    const saved = localStorage.getItem('student_selected_ebook_language');
+    if (saved && SUPPORTED_LANGUAGES.some(l => l.code === saved)) {
+      return saved;
+    }
     if (user?.role === 'student') {
       const raw = (user as any).nativeLanguage || (user as any).preferredLanguage || '';
       if (raw) {
@@ -806,11 +816,14 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         if (lower.includes('tamil') || lower.includes('தமிழ்')) return 'ta';
         if (lower.includes('malay') || lower.includes('melayu') || lower.includes('bahasa')) return 'ms';
         if (lower.includes('hindi') || lower.includes('हिंदी')) return 'hi';
+        if (lower.includes('malayalam') || lower.includes('മലയാളം')) return 'ml';
+        if (lower.includes('telugu') || lower.includes('తెలుగు')) return 'te';
         if (lower.includes('chinese') || lower.includes('mandarin') || lower.includes('中文')) return 'zh';
         if (lower.includes('spanish') || lower.includes('español')) return 'es';
         if (lower.includes('french') || lower.includes('français')) return 'fr';
         if (lower.includes('german') || lower.includes('deutsch')) return 'de';
         if (lower.includes('japanese') || lower.includes('日本語')) return 'ja';
+        if (lower.includes('arabic') || lower.includes('العربية')) return 'ar';
         const match = SUPPORTED_LANGUAGES.find(l => l.code.toLowerCase() === lower);
         if (match) return match.code;
       }
@@ -820,9 +833,10 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
   const [translationStatus, setTranslationStatus] = useState<string>('');
 
-  // Auto-enforce assigned native language for student when user loads or updates
+  // Auto-enforce native language on initial session only if no preference was previously selected
   useEffect(() => {
-    if (isStudent && studentAssignedNativeLang) {
+    const saved = localStorage.getItem('student_selected_ebook_language');
+    if (!saved && isStudent && studentAssignedNativeLang) {
       setSelectedLanguage(studentAssignedNativeLang.code);
     }
   }, [isStudent, studentAssignedNativeLang]);
@@ -1023,20 +1037,21 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
       // Filter out any explicitly deleted flipbooks
       const cleanLoaded = rawLoaded.filter(m => !deletedIds.includes(m.id));
 
-      // If cloud database is completely empty on first launch and nothing was deleted, auto-seed the default curriculum book to cloud
+      // If cloud database is completely empty on first launch and nothing was deleted, auto-seed all default curriculum master books to cloud
       if (cleanLoaded.length === 0 && rawLoaded.length === 0 && deletedIds.length === 0 && DEFAULT_FLIPBOOKS && DEFAULT_FLIPBOOKS.length > 0) {
-        const seedBook = DEFAULT_FLIPBOOKS[0];
-        setDoc(doc(db, 'course_flipbooks', seedBook.id), {
-          ...seedBook,
-          status: 'active',
-          updatedAt: new Date().toISOString()
-        }).catch(() => {});
-        fetch('/api/flipbooks/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...seedBook, status: 'active' })
-        }).catch(() => {});
-        cleanLoaded.push({ ...seedBook, status: 'active' });
+        DEFAULT_FLIPBOOKS.forEach(seedBook => {
+          setDoc(doc(db, 'course_flipbooks', seedBook.id), {
+            ...seedBook,
+            status: 'active',
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+          fetch('/api/flipbooks/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...seedBook, status: 'active' })
+          }).catch(() => {});
+          cleanLoaded.push({ ...seedBook, status: 'active' });
+        });
       }
 
       // Ensure every material's course and title are clean and distinctive
@@ -1874,18 +1889,35 @@ export default function InteractiveFlipbookStudio({ initialMaterial, courseCateg
         if (mediaCache[key]) {
           setResolvedUrl(mediaCache[key]);
         } else {
+          let isCurrent = true;
+          const fallbackTimer = setTimeout(() => {
+            if (isCurrent && !mediaCache[key]) {
+              console.warn(`IDB resolution timeout for key: ${key}`);
+              setResolvedUrl('');
+            }
+          }, 3000);
+
           getMediaFromIDB(key)
             .then(resolved => {
-              if (resolved) {
-                setResolvedUrl(resolved);
-                setMediaCache(prev => ({ ...prev, [key]: resolved }));
-              } else {
-                setResolvedUrl('');
+              clearTimeout(fallbackTimer);
+              if (isCurrent) {
+                if (resolved) {
+                  setResolvedUrl(resolved);
+                  setMediaCache(prev => ({ ...prev, [key]: resolved }));
+                } else {
+                  setResolvedUrl('');
+                }
               }
             })
             .catch(() => {
-              setResolvedUrl('');
+              clearTimeout(fallbackTimer);
+              if (isCurrent) setResolvedUrl('');
             });
+
+          return () => {
+            isCurrent = false;
+            clearTimeout(fallbackTimer);
+          };
         }
       } else {
         setResolvedUrl(url);
@@ -2091,6 +2123,7 @@ Lines: ${JSON.stringify(untranslatedTexts)}`
             src={activeUrl}
             controls
             playsInline
+            crossOrigin="anonymous"
             onError={() => {
               console.warn('Direct video playback error, switching to embed iframe fallback');
               setDirectPlaybackFailed(true);
@@ -3650,6 +3683,9 @@ ${JSON.stringify(pagesToTranslate, null, 2)}`;
                 onChange={(e) => {
                   const newLang = e.target.value;
                   setSelectedLanguage(newLang);
+                  try {
+                    localStorage.setItem('student_selected_ebook_language', newLang);
+                  } catch (_) {}
                   if (newLang !== 'en' && activeMaterial) {
                     translateMaterialPagesWithAI(activeMaterial, newLang, false);
                   }

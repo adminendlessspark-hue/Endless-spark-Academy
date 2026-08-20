@@ -8,7 +8,7 @@ export default function GlobalNotification() {
   const [showDbSettings, setShowDbSettings] = useState(false);
   const [customDbId, setCustomDbId] = useState('');
 
-  const defaultDbId = firebaseConfig.firestoreDatabaseId;
+  const defaultDbId = '(default)';
   const currentDbId = localStorage.getItem('firestore_db_id') || defaultDbId;
 
   const handleSwitchDb = (newId: string) => {

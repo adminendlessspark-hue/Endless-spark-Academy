@@ -304,19 +304,8 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
     });
 
     // Load course modules to get topics
-    const unsubModules = onSnapshot(collection(db, 'course_modules'), (snapshot) => {
-      let allModules = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CourseModule));
-      
-      // Sort modules by order/sequence field as per Edit Module Details configuration
-      allModules.sort((a, b) => {
-        const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
-        const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
-        if (orderA !== orderB) return orderA - orderB;
-        return (a.title || '').localeCompare(b.title || '');
-      });
-      
+    const populateTopicsFromModules = (allModules: CourseModule[]) => {
       setCourseModules(allModules);
-      
       const paTopics = allModules.filter(m => m.category === 'production-art-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
       const prTopics = allModules.filter(m => m.category === 'print-ready-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
       const qcTopics = allModules.filter(m => m.category === 'quality-control-engineer').map(m => ({ title: m.title, videoUrl: m.videoUrl }));
@@ -332,18 +321,34 @@ export default function Dashboard({ previewUser }: { previewUser?: User }) {
       setPlateReadyTopics(plateTopics);
       setColourRetouchingTopics(colourTopics);
       setPrintingAndPackagingTopics(crossTopics);
+    };
+
+    // Pre-populate with fallback data immediately so screen is never blank
+    populateTopicsFromModules(FALLBACK_COURSE_MODULES);
+
+    const unsubModules = onSnapshot(collection(db, 'course_modules'), (snapshot) => {
+      let allModules = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CourseModule));
+      console.log(`[Dashboard] Fetched ${allModules.length} modules from live Firestore 'course_modules' on '(default)' database`);
+      
+      if (allModules.length > 0) {
+        // Sort modules by order/sequence field as per Edit Module Details configuration
+        allModules.sort((a, b) => {
+          const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
+          const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.title || '').localeCompare(b.title || '');
+        });
+        
+        populateTopicsFromModules(allModules);
+        try {
+          localStorage.setItem('cached_course_modules', JSON.stringify(allModules));
+        } catch (e) {}
+      } else {
+        populateTopicsFromModules(FALLBACK_COURSE_MODULES);
+      }
     }, (err) => {
-      console.warn("Firestore collection 'course_modules' listener failed in dashboard, keeping blank:", err);
-      setCourseModules([]);
-      
-      setProductionArtTopics([]);
-      setPrintReadyTopics([]);
-      setQualityControlTopics([]);
-      setPackagingTopics([]);
-      setPlateReadyTopics([]);
-      setColourRetouchingTopics([]);
-      setPrintingAndPackagingTopics([]);
-      
+      console.warn("Firestore collection 'course_modules' listener encountered issue in dashboard, maintaining active curriculum state:", err);
+      // Do not clear the existing modules or topics on error
       handleFirestoreError(err, OperationType.GET, 'course_modules');
     });
 

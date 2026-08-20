@@ -283,8 +283,9 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
   // Firestore listener for artwork_projects
   useEffect(() => {
     const unsubArtwork = onSnapshot(collection(db, 'artwork_projects'), (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log(`[DemoOnePager] Fetched ${docs.length} artwork projects from live Firestore 'artwork_projects'`);
       if (!snapshot.empty) {
-        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setArtworkProjects(docs);
       } else {
         setArtworkProjects(DEFAULT_ARTWORK_PROJECTS);
@@ -523,6 +524,7 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
   useEffect(() => {
     const unsubMaster = onSnapshot(collection(db, 'master_projects'), (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log(`[DemoOnePager] Fetched ${docs.length} master projects from live Firestore 'master_projects'`);
       setFirestoreMasterProjects(docs);
     }, (err) => {
       console.warn("Could not fetch live master projects from Firestore:", err.message);
@@ -589,6 +591,7 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
     const q = query(collection(db, 'course_modules'), orderBy('order', 'asc'));
     const unsub = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log(`[DemoOnePager] Fetched ${docs.length} course modules from live Firestore 'course_modules'`);
       setCourseModules(docs);
     }, (err) => {
       console.error("Firestore subscription failed for course modules:", err);
@@ -612,6 +615,7 @@ export default function DemoOnePager({ isAdminMode = false }: DemoOnePagerProps 
 
     const unsub = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log(`[DemoOnePager] Fetched ${docs.length} student projects from live Firestore 'student_projects'`);
       setStudentProjects(docs);
     }, (err) => {
       console.error("Firestore subscription failed for student projects:", err);

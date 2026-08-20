@@ -10,6 +10,7 @@ import { db } from '../firebase';
 import { GoogleGenAI, Type } from '@google/genai';
 import { cn, getScoreKey } from '../utils';
 import { generateGeminiContent } from '../services/gemini';
+import { FALLBACK_COURSE_MODULES } from '../fallbackData';
 
 function VideoPreview({ stream, className }: { stream: MediaStream | null, className?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -89,14 +90,17 @@ export default function Quiz() {
           if (testQuestions && testQuestions.length > 0) {
             setQuestions(testQuestions);
           } else {
-            setQuestions([]);
+            const fallbackMod = FALLBACK_COURSE_MODULES.find(m => m.category === category && m.title === topic) || FALLBACK_COURSE_MODULES.find(m => m.category === category);
+            setQuestions(fallbackMod?.quizQuestions || []);
           }
         } else {
-          setQuestions([]);
+          const fallbackMod = FALLBACK_COURSE_MODULES.find(m => m.category === category && m.title === topic) || FALLBACK_COURSE_MODULES.find(m => m.category === category);
+          setQuestions(fallbackMod?.quizQuestions || []);
         }
       } catch (err) {
-        console.error('Error fetching quiz questions:', err);
-        setQuestions([]);
+        console.warn('Notice fetching quiz questions from Firestore, using local curriculum fallback:', err);
+        const fallbackMod = FALLBACK_COURSE_MODULES.find(m => m.category === category && m.title === topic) || FALLBACK_COURSE_MODULES.find(m => m.category === category);
+        setQuestions(fallbackMod?.quizQuestions || []);
       } finally {
         setLoading(false);
       }

@@ -184,6 +184,7 @@ export default function AdminPanel() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [editingTeamMember, setEditingTeamMember] = useState<TeamMember | null>(null);
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [firestoreSubmissions, setFirestoreSubmissions] = useState<any[]>([]);
   
   useEffect(() => {
     let unsubscribe: any;
@@ -193,6 +194,7 @@ export default function AdminPanel() {
         const q = query(collection(db, 'team_members'), orderBy('order', 'asc'));
         unsubscribe = onSnapshot(q, (snapshot) => {
           const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamMember));
+          console.log(`[AdminPanel] Fetched ${members.length} team members from live Firestore 'team_members'`);
           setTeamMembers(members);
         }, (error) => {
           handleFirestoreError(error, OperationType.GET, 'team_members');
@@ -205,7 +207,9 @@ export default function AdminPanel() {
     fetchTeam();
 
     const unsubBatches = onSnapshot(collection(db, 'batches'), (snapshot) => {
-      setBatches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const batchList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log(`[AdminPanel] Fetched ${batchList.length} batches from live Firestore 'batches'`);
+      setBatches(batchList);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'batches'));
 
     return () => {
@@ -743,10 +747,60 @@ export default function AdminPanel() {
   }, [activeDropdownId]);
 
   useEffect(() => {
-    // Listen to users
+    // Immediate fetch to backend admin API for seamless initial loading & fallback
+    fetch('/api/admin/users')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.users)) {
+          const allUsers = data.users.map((d: any) => {
+            const isAppr = d.isApproved !== undefined ? Boolean(d.isApproved) : (d.applicationStatus !== 'submitted' && d.applicationStatus !== 'pending');
+            return {
+              ...d,
+              name: d.name || d.displayName || d.fullName || d.username || d.email?.split('@')[0] || 'Student',
+              role: d.role || 'student',
+              isApproved: isAppr,
+              requestedCourses: d.requestedCourses || (d.requestedCourse ? [d.requestedCourse] : []),
+              assignedCourses: d.assignedCourses || (d.assignedCourse ? [d.assignedCourse] : []),
+            } as User;
+          });
+          const studentUsers = allUsers.filter((u: User) => !u.role || u.role === 'student');
+          if (studentUsers.length > 0) {
+            setStudents(prev => {
+              const map = new Map<string, User>();
+              prev.forEach(s => map.set(s.id, s));
+              studentUsers.forEach((s: User) => {
+                if (!map.has(s.id)) map.set(s.id, s);
+              });
+              return Array.from(map.values());
+            });
+          }
+          const facs = allUsers.filter((u: User) => u.role === 'faculty');
+          if (facs.length > 0) setFaculty(facs);
+        }
+      })
+      .catch(e => console.warn('Could not pre-fetch /api/admin/users:', e));
+
+    // Listen to users collection
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const allUsers = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
-      setStudents(allUsers.filter(u => u.role === 'student'));
+      const allUsers = snapshot.docs.map(doc => {
+        const d = doc.data();
+        const isAppr = d.isApproved !== undefined ? Boolean(d.isApproved) : (d.applicationStatus !== 'submitted' && d.applicationStatus !== 'pending');
+        return {
+          ...d,
+          id: doc.id,
+          name: d.name || d.displayName || d.fullName || d.username || d.email?.split('@')[0] || 'Student',
+          role: d.role || 'student',
+          isApproved: isAppr,
+          requestedCourses: d.requestedCourses || (d.requestedCourse ? [d.requestedCourse] : []),
+          assignedCourses: d.assignedCourses || (d.assignedCourse ? [d.assignedCourse] : []),
+        } as User;
+      });
+      const studentUsers = allUsers.filter(u => !u.role || u.role === 'student');
+      console.log(`[AdminPanel] Fetched ${allUsers.length} total users (${studentUsers.length} students) from live Firestore 'users' collection`);
+      setStudents(prev => {
+        const existingCustom = prev.filter(p => !allUsers.some(u => u.id === p.id || (u.email && u.email.toLowerCase() === p.email?.toLowerCase())));
+        return [...studentUsers, ...existingCustom];
+      });
       setFaculty(allUsers.filter(u => u.role === 'faculty'));
       setTelecallers(allUsers.filter(u => u.role === 'telecaller'));
       setMarketings(allUsers.filter(u => u.role === 'marketing'));
@@ -754,34 +808,97 @@ export default function AdminPanel() {
       setQCReviewers(allUsers.filter(u => u.role === 'qc'));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
+    // Also listen to 'students' collection if documents exist there
+    const unsubStudentsCol = onSnapshot(collection(db, 'students'), (snapshot) => {
+      if (!snapshot.empty) {
+        const studentDocs = snapshot.docs.map(doc => {
+          const d = doc.data();
+          return {
+            ...d,
+            id: doc.id,
+            name: d.name || d.displayName || d.fullName || d.username || d.email?.split('@')[0] || 'Student',
+            role: 'student',
+            isApproved: d.isApproved !== undefined ? Boolean(d.isApproved) : true,
+            requestedCourses: d.requestedCourses || (d.requestedCourse ? [d.requestedCourse] : []),
+            assignedCourses: d.assignedCourses || (d.assignedCourse ? [d.assignedCourse] : []),
+          } as User;
+        });
+        console.log(`[AdminPanel] Fetched ${studentDocs.length} students from live Firestore 'students' collection`);
+        setStudents(prev => {
+          const map = new Map<string, User>();
+          prev.forEach(s => map.set(s.id, s));
+          studentDocs.forEach(s => {
+            if (!map.has(s.id)) map.set(s.id, s);
+          });
+          return Array.from(map.values());
+        });
+      }
+    }, () => {});
+
     // Listen to holidays
     const unsubHolidays = onSnapshot(collection(db, 'holidays'), (snapshot) => {
-      setHolidays(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Holiday)));
+      const holidaysList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Holiday));
+      console.log(`[AdminPanel] Fetched ${holidaysList.length} holidays from live Firestore 'holidays'`);
+      setHolidays(holidaysList);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'holidays'));
 
-    // Listen to modules
+    // Listen to course_modules
     const unsubModules = onSnapshot(collection(db, 'course_modules'), (snapshot) => {
       const allModules = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CourseModule));
-      allModules.sort((a, b) => {
-        const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
-        const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
-        if (orderA !== orderB) return orderA - orderB;
-        return (a.title || '').localeCompare(b.title || '');
-      });
-      setAllRegisteredModules(allModules);
-      setProductionArtModules(allModules.filter(m => m.category === 'production-art-engineer'));
-      setPrintReadyModules(allModules.filter(m => m.category === 'print-ready-engineer'));
-      setQualityControlModules(allModules.filter(m => m.category === 'quality-control-engineer'));
-      setPackagingEngineerModules(allModules.filter(m => m.category === 'packaging-engineer'));
-      setPlateReadyEngineerModules(allModules.filter(m => m.category === 'plate-ready-engineer'));
-      setColourRetouchingEngineerModules(allModules.filter(m => m.category === 'colour-retouching-engineer'));
-      setCrossCourseModules(allModules.filter(m => m.category === 'printing-and-packaging-cross-courses'));
+      console.log(`[AdminPanel] Fetched ${allModules.length} course modules from live Firestore 'course_modules'`);
+      if (allModules.length > 0) {
+        allModules.sort((a, b) => {
+          const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
+          const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.title || '').localeCompare(b.title || '');
+        });
+        setAllRegisteredModules(allModules);
+        setProductionArtModules(allModules.filter(m => m.category === 'production-art-engineer'));
+        setPrintReadyModules(allModules.filter(m => m.category === 'print-ready-engineer'));
+        setQualityControlModules(allModules.filter(m => m.category === 'quality-control-engineer'));
+        setPackagingEngineerModules(allModules.filter(m => m.category === 'packaging-engineer'));
+        setPlateReadyEngineerModules(allModules.filter(m => m.category === 'plate-ready-engineer'));
+        setColourRetouchingEngineerModules(allModules.filter(m => m.category === 'colour-retouching-engineer'));
+        setCrossCourseModules(allModules.filter(m => m.category === 'printing-and-packaging-cross-courses'));
+      }
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'course_modules'));
+
+    // Also listen to 'modules' collection as fallback
+    const unsubModulesCol = onSnapshot(collection(db, 'modules'), (snapshot) => {
+      if (!snapshot.empty) {
+        const altModules = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CourseModule));
+        console.log(`[AdminPanel] Fetched ${altModules.length} modules from live Firestore 'modules' collection`);
+        setAllRegisteredModules(prev => {
+          const map = new Map<string, CourseModule>();
+          prev.forEach(m => map.set(m.id || m.title, m));
+          altModules.forEach(m => {
+            if (!map.has(m.id || m.title)) map.set(m.id || m.title, m);
+          });
+          const combined = Array.from(map.values());
+          combined.sort((a, b) => {
+            const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
+            const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
+            if (orderA !== orderB) return orderA - orderB;
+            return (a.title || '').localeCompare(b.title || '');
+          });
+          setProductionArtModules(combined.filter(m => m.category === 'production-art-engineer'));
+          setPrintReadyModules(combined.filter(m => m.category === 'print-ready-engineer'));
+          setQualityControlModules(combined.filter(m => m.category === 'quality-control-engineer'));
+          setPackagingEngineerModules(combined.filter(m => m.category === 'packaging-engineer'));
+          setPlateReadyEngineerModules(combined.filter(m => m.category === 'plate-ready-engineer'));
+          setColourRetouchingEngineerModules(combined.filter(m => m.category === 'colour-retouching-engineer'));
+          setCrossCourseModules(combined.filter(m => m.category === 'printing-and-packaging-cross-courses'));
+          return combined;
+        });
+      }
+    }, () => {});
 
     // Listen to settings
     const unsubSettings = onSnapshot(doc(db, 'settings', 'admin'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        console.log(`[AdminPanel] Fetched admin settings from live Firestore 'settings/admin'`);
         setAdminSignature(data.signature || '');
         setLogoUrl(data.logoUrl || '/logo.png');
         setLandingPageTitleImageUrl(data.landingPageTitleImageUrl || '');
@@ -833,6 +950,7 @@ export default function AdminPanel() {
     // Listen to banners collection
     const unsubBanners = onSnapshot(collection(db, 'banners'), (snapshot) => {
       const fetchedBanners = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`[AdminPanel] Fetched ${fetchedBanners.length} banners from live Firestore 'banners'`);
       setBanners(prev => {
         const adminBanners = prev.filter(b => !fetchedBanners.some(fb => fb.id === b.id));
         return [...adminBanners, ...fetchedBanners];
@@ -841,26 +959,35 @@ export default function AdminPanel() {
 
     // Listen to live sessions
     const unsubLiveSessions = onSnapshot(collection(db, 'live_sessions'), (snapshot) => {
-      setLiveSessions(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      const sessions = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`[AdminPanel] Fetched ${sessions.length} live sessions from live Firestore 'live_sessions'`);
+      setLiveSessions(sessions);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'live_sessions'));
 
     // Listen to student projects
     const unsubProjects = onSnapshot(collection(db, 'student_projects'), (snapshot) => {
-      setProjects(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      const projs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`[AdminPanel] Fetched ${projs.length} student projects from live Firestore 'student_projects'`);
+      setProjects(projs);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'student_projects'));
 
     const unsubMasterProjects = onSnapshot(collection(db, 'master_projects'), (snapshot) => {
-      setMasterProjects(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      const masterProjs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`[AdminPanel] Fetched ${masterProjs.length} master projects from live Firestore 'master_projects'`);
+      setMasterProjects(masterProjs);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'master_projects'));
 
     // Listen to invoices
     const unsubInvoices = onSnapshot(collection(db, 'invoices'), (snapshot) => {
-      setInvoices(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      const invoiceList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`[AdminPanel] Fetched ${invoiceList.length} invoices from live Firestore 'invoices'`);
+      setInvoices(invoiceList);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'invoices'));
 
     // Listen to financial settings
     const unsubFinancialSettings = onSnapshot(doc(db, 'settings', 'financial'), (docSnap) => {
       if (docSnap.exists()) {
+        console.log(`[AdminPanel] Fetched financial settings from live Firestore 'settings/financial'`);
         setFinancialSettings({ ...docSnap.data(), id: docSnap.id });
       } else {
         setFinancialSettings({
@@ -879,23 +1006,58 @@ export default function AdminPanel() {
 
     // Listen to software videos
     const unsubSoftwareVideos = onSnapshot(collection(db, 'software_videos'), (snapshot) => {
-      setSoftwareVideos(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      const softVideos = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`[AdminPanel] Fetched ${softVideos.length} software videos from live Firestore 'software_videos'`);
+      setSoftwareVideos(softVideos);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'software_videos'));
 
     // Listen to consultation bookings
     const unsubConsultationBookings = onSnapshot(collection(db, 'consultation_bookings'), (snapshot) => {
-      setConsultationBookings(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      const bookings = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`[AdminPanel] Fetched ${bookings.length} consultation bookings from live Firestore 'consultation_bookings'`);
+      setConsultationBookings(bookings);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'consultation_bookings'));
 
     // Listen to training plans
     const unsubTrainingPlans = onSnapshot(collection(db, 'training_plans'), (snapshot) => {
-      setTrainingPlans(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TrainingPlanRow)));
+      const plans = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TrainingPlanRow));
+      console.log(`[AdminPanel] Fetched ${plans.length} training plans from live Firestore 'training_plans'`);
+      setTrainingPlans(plans);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'training_plans'));
+
+    // Listen to direct submissions collections
+    const unsubSubmissions = onSnapshot(collection(db, 'submissions'), (snapshot) => {
+      if (!snapshot.empty) {
+        const subs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`[AdminPanel] Fetched ${subs.length} direct records from live Firestore 'submissions'`);
+        setFirestoreSubmissions(prev => {
+          const map = new Map<string, any>();
+          prev.forEach(s => map.set(s.id, s));
+          subs.forEach(s => map.set(s.id, s));
+          return Array.from(map.values());
+        });
+      }
+    }, () => {});
+
+    const unsubStudentSubs = onSnapshot(collection(db, 'student_submissions'), (snapshot) => {
+      if (!snapshot.empty) {
+        const subs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`[AdminPanel] Fetched ${subs.length} direct records from live Firestore 'student_submissions'`);
+        setFirestoreSubmissions(prev => {
+          const map = new Map<string, any>();
+          prev.forEach(s => map.set(s.id, s));
+          subs.forEach(s => map.set(s.id, s));
+          return Array.from(map.values());
+        });
+      }
+    }, () => {});
 
     return () => {
       unsubUsers();
+      unsubStudentsCol();
       unsubHolidays();
       unsubModules();
+      unsubModulesCol();
       unsubSettings();
       unsubBanners();
       unsubLiveSessions();
@@ -906,6 +1068,8 @@ export default function AdminPanel() {
       unsubSoftwareVideos();
       unsubConsultationBookings();
       unsubTrainingPlans();
+      unsubSubmissions();
+      unsubStudentSubs();
     };
   }, []);
 
@@ -2059,6 +2223,24 @@ export default function AdminPanel() {
           });
         });
       });
+    });
+
+    // Also incorporate any standalone submissions fetched directly from Firestore
+    firestoreSubmissions.forEach(sub => {
+      const uniqueKey = sub.id || `${sub.studentId}_${sub.topic}_${sub.type}`;
+      if (!submissionsMap.has(uniqueKey)) {
+        submissionsMap.set(uniqueKey, {
+          studentId: sub.studentId,
+          studentName: sub.studentName || sub.studentEmail || 'Student',
+          course: sub.course || 'production-art-engineer',
+          topic: sub.topic || 'General Submission',
+          type: sub.type || 'worksheet',
+          status: sub.status || 'Submitted',
+          fileData: sub.fileData || sub.fileUrl || '',
+          updatedAt: sub.updatedAt || sub.submittedAt || '',
+          ...sub
+        });
+      }
     });
 
     const submissions = Array.from(submissionsMap.values());
@@ -4610,7 +4792,7 @@ export default function AdminPanel() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {students
-                    .filter(s => s.isApproved)
+                    .filter(s => (s.isApproved !== false && s.applicationStatus !== 'submitted' && s.applicationStatus !== 'pending') || s.isApproved === true)
                     .filter(s => {
                       if (facultyFilter === 'all') return true;
                       if (facultyFilter === 'unassigned') return !s.assignedFacultyId;

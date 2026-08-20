@@ -44,7 +44,9 @@ export default function StudentProjects() {
       where('studentId', '==', user.id)
     );
     const unsubProjects = onSnapshot(projectsQuery, (snapshot) => {
-      setProjects(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as StudentProject)));
+      const projList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as StudentProject));
+      console.log(`[StudentProjects] Fetched ${projList.length} student projects for user ${user?.id} from live Firestore 'student_projects'`);
+      setProjects(projList);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'student_projects'));
 
     return () => unsubProjects();

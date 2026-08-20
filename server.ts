@@ -263,9 +263,9 @@ async function activateRazorpay() {
 
 // Initialize Firebase Admin with safe multi-path discovery and fallbacks
 let firebaseConfig: any = {
-  projectId: "ai-studio-5ce0ebf9-ebb5-4648-b703-1dcc1c0b3060",
-  storageBucket: "ai-studio-5ce0ebf9-ebb5-4648-b703-1dcc1c0b3060.firebasestorage.app",
-  firestoreDatabaseId: "ai-studio-5ce0ebf9-ebb5-4648-b703-1dcc1c0b3060"
+  projectId: "project-de027e39-14a0-41d7-9ea",
+  storageBucket: "project-de027e39-14a0-41d7-9ea.firebasestorage.app",
+  firestoreDatabaseId: "(default)"
 };
 
 const configCandidates = [
@@ -302,7 +302,7 @@ if (!admin.apps.length) {
   try {
     admin.initializeApp({
       projectId: firebaseConfig.projectId,
-      storageBucket: firebaseConfig.storageBucket,
+      storageBucket: firebaseConfig.storageBucket || "project-de027e39-14a0-41d7-9ea.firebasestorage.app",
     });
   } catch (initErr) {
     console.warn("Firebase Admin initializeApp error:", initErr);
@@ -318,14 +318,176 @@ const getDb = () => {
   return getFirestore();
 };
 
+// Background helper to ensure production students and faculty are present in Firestore
+async function syncLiveStudentsData() {
+  try {
+    const db = getDb();
+    
+    // Ensure faculty 'Arul' exists
+    const facultySnap = await db.collection("users").where("role", "==", "faculty").get();
+    let arulFacultyId = "faculty-arul";
+    if (!facultySnap.empty) {
+      const found = facultySnap.docs.find(d => (d.data().name || '').toLowerCase().includes('arul'));
+      if (found) {
+        arulFacultyId = found.id;
+      }
+    } else {
+      await db.collection("users").doc("faculty-arul").set({
+        name: "Arul",
+        fullName: "Dr. Arul Kumar",
+        email: "arul@endlesssparkcreativehub.in",
+        username: "arul_faculty",
+        role: "faculty",
+        isApproved: true,
+        applicationStatus: "approved",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+
+    const defaultStudents = [
+      {
+        id: "student-jagadeesh-a",
+        name: "Jagadeesh A",
+        fullName: "Jagadeesh A",
+        email: "jagario93@gmail.com",
+        username: "jagario93",
+        role: "student",
+        isApproved: true,
+        applicationStatus: "approved",
+        status: "active",
+        registeredForDemo: true,
+        requestedCourses: ["print-ready-engineer", "production-art-engineer"],
+        requestedCourse: "print-ready-engineer",
+        assignedCourses: ["print-ready-engineer"],
+        assignedCourse: "print-ready-engineer",
+        nativeLanguage: "tamil",
+        assignedFacultyId: arulFacultyId,
+        assignedFaculty: "Arul",
+        entranceTestStatus: "evaluated",
+        entranceTestMarks: 39,
+        admissionDate: "2026-08-01",
+        createdAt: "2026-08-01T00:00:00.000Z",
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: "student-ajay-lavis",
+        name: "Ajay Lavis",
+        fullName: "Ajay Lavis",
+        email: "ajaylavis018@gmail.com",
+        username: "Ajay",
+        role: "student",
+        isApproved: true,
+        applicationStatus: "approved",
+        status: "active",
+        registeredForDemo: true,
+        requestedCourses: ["quality-control-engineer"],
+        requestedCourse: "quality-control-engineer",
+        assignedCourses: ["quality-control-engineer"],
+        assignedCourse: "quality-control-engineer",
+        nativeLanguage: "english",
+        assignedFacultyId: arulFacultyId,
+        assignedFaculty: "Arul",
+        entranceTestStatus: "pending",
+        admissionDate: "2026-08-05",
+        createdAt: "2026-08-05T00:00:00.000Z",
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: "student-poongodi-thirunarayanan",
+        name: "Poongodi Thirunarayanan",
+        fullName: "Poongodi Thirunarayanan",
+        email: "tpoongodi410@gmail.com",
+        username: "tpoongodi410",
+        role: "student",
+        isApproved: true,
+        applicationStatus: "approved",
+        status: "active",
+        registeredForDemo: true,
+        requestedCourses: ["packaging-engineer", "production-art-engineer"],
+        requestedCourse: "packaging-engineer",
+        assignedCourses: ["production-art-engineer"],
+        assignedCourse: "production-art-engineer",
+        nativeLanguage: "english",
+        assignedFacultyId: arulFacultyId,
+        assignedFaculty: "Arul",
+        entranceTestStatus: "evaluated",
+        entranceTestMarks: 56,
+        admissionDate: "2026-08-10",
+        createdAt: "2026-08-10T00:00:00.000Z",
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: "student-arumugam-palanisamy",
+        name: "Arumugam Palanisamy",
+        fullName: "Arumugam Palanisamy",
+        email: "arumugambsccs@gmail.com",
+        username: "arumugambsccs",
+        role: "student",
+        isApproved: true,
+        applicationStatus: "approved",
+        status: "active",
+        registeredForDemo: true,
+        requestedCourses: ["packaging-engineer", "production-art-engineer"],
+        requestedCourse: "packaging-engineer",
+        assignedCourses: ["production-art-engineer"],
+        assignedCourse: "production-art-engineer",
+        nativeLanguage: "english",
+        assignedFacultyId: arulFacultyId,
+        assignedFaculty: "Arul",
+        entranceTestStatus: "pending",
+        admissionDate: "2026-08-12",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: "student-muthu-veeran",
+        name: "MUTHU VEERAN.R",
+        fullName: "MUTHU VEERAN.R",
+        email: "muthuveeran1397@gmail.com",
+        username: "Muthu",
+        role: "student",
+        isApproved: true,
+        applicationStatus: "approved",
+        status: "active",
+        registeredForDemo: true,
+        requestedCourses: ["production-art-engineer", "packaging-engineer"],
+        requestedCourse: "production-art-engineer",
+        assignedCourses: ["production-art-engineer"],
+        assignedCourse: "production-art-engineer",
+        nativeLanguage: "english",
+        assignedFacultyId: arulFacultyId,
+        assignedFaculty: "Arul",
+        entranceTestStatus: "pending",
+        admissionDate: "2026-08-15",
+        createdAt: "2026-08-15T00:00:00.000Z",
+        updatedAt: new Date().toISOString()
+      }
+    ];
+
+    for (const student of defaultStudents) {
+      const emailQuery = await db.collection("users").where("email", "==", student.email).get();
+      if (emailQuery.empty) {
+        console.log(`Seeding student record into Firestore: ${student.name} (${student.email})`);
+        await db.collection("users").doc(student.id).set(student, { merge: true });
+      }
+    }
+  } catch (err: any) {
+    console.warn("Could not sync live students data in Firestore:", err?.message || err);
+  }
+}
+
 // Helper to get all possible candidate storage bucket names
 function getStorageBucketNames(): string[] {
   const buckets = [
+    "project-de027e39-14a0-41d7-9ea.firebasestorage.app",
+    "project-de027e39-14a0-41d7-9ea.appspot.com",
     firebaseConfig.storageBucket,
-    `${firebaseConfig.projectId}.appspot.com`,
     `${firebaseConfig.projectId}.firebasestorage.app`,
-    `${firebaseConfig.firestoreDatabaseId}.appspot.com`,
+    `${firebaseConfig.projectId}.appspot.com`,
     `${firebaseConfig.firestoreDatabaseId}.firebasestorage.app`,
+    `${firebaseConfig.firestoreDatabaseId}.appspot.com`,
     "ai-studio-5ce0ebf9-ebb5-4648-b703-1dcc1c0b3060.firebasestorage.app",
     "ai-studio-5ce0ebf9-ebb5-4648-b703-1dcc1c0b3060.appspot.com"
   ];
@@ -759,7 +921,35 @@ async function startServer() {
     activateRazorpay().catch(err => {
       console.warn("Background Razorpay activation failed:", err);
     });
+    syncLiveStudentsData().catch(err => {
+      console.warn("Background student synchronization failed:", err);
+    });
   }, 100);
+
+  // Admin users retrieval & synchronization endpoint (using Firebase Admin SDK)
+  app.get("/api/admin/users", async (_req: any, res: any) => {
+    try {
+      const db = getDb();
+      const usersSnap = await db.collection("users").get();
+      const users = usersSnap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      res.status(200).json({ success: true, count: users.length, users });
+    } catch (error: any) {
+      console.error("Error fetching admin users from Firestore:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/admin/sync-live-students", async (_req: any, res: any) => {
+    try {
+      await syncLiveStudentsData();
+      const db = getDb();
+      const usersSnap = await db.collection("users").get();
+      const users = usersSnap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      res.status(200).json({ success: true, count: users.length, users });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
   app.use("/uploads", async (req: any, res: any, next: any) => {
     // Remove leading slash and decode
     const decodedPath = decodeURIComponent(req.path); // e.g. "/course_modules/assignment_papers/xyz.pdf"

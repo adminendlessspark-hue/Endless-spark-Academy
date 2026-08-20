@@ -345,5 +345,9 @@ service cloud.firestore {
       allow create: if true;
       allow read: if isStaff() || (isSignedIn() && (resource.data.customerEmail == request.auth.token.email));
     }
+
+    match /test/{docId} {
+      allow read: if true;
+    }
   }
 }

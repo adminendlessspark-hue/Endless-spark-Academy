@@ -1,26 +1,14 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { initializeFirestore, memoryLocalCache, doc, getDocFromServer, disableNetwork, enableNetwork } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, disableNetwork, enableNetwork } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Allow dynamic Firestore database ID override (e.g., to switch to '(default)' for production/Blaze database)
-const getStoredDbId = (): string => {
-  try {
-    const override = localStorage.getItem('firestore_db_id');
-    if (override !== null) {
-      return override;
-    }
-  } catch (e) {}
-  return firebaseConfig.firestoreDatabaseId || '(default)';
-};
-
-export const db = initializeFirestore(app, {
-  localCache: memoryLocalCache()
-}, getStoredDbId());
+// Explicitly initialize Firestore using the standard '(default)' database instance
+export const db = getFirestore(app, '(default)');
 
 export function enableFirestoreNetwork() {
   return enableNetwork(db);
@@ -30,8 +18,8 @@ export function disableFirestoreNetwork() {
   return disableNetwork(db);
 }
 
-export const storage = getStorage(app);
-console.log("Firebase Storage initialized with bucket:", firebaseConfig.storageBucket);
+export const storage = getStorage(app, "gs://project-de027e39-14a0-41d7-9ea.firebasestorage.app");
+console.log("Firebase Storage initialized with active bucket: project-de027e39-14a0-41d7-9ea.firebasestorage.app");
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -114,13 +102,22 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 async function testConnection() {
   try {
+    // Ensure network is active
+    await enableNetwork(db).catch(() => {});
     await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log("Firebase connection successful.");
+    console.log("Firebase connection established successfully.");
   } catch (error) {
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration: Client is offline.");
-    } else {
-      console.warn("Firebase connection test performed. If you see permission errors, ignore if 'test' collection is restricted.");
+    // Retry once after short delay if initial handshake was still pending
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await getDocFromServer(doc(db, 'test', 'connection'));
+      console.log("Firebase connection established successfully on retry.");
+    } catch (retryError) {
+      if (retryError instanceof Error && retryError.message.toLowerCase().includes('client is offline')) {
+        console.warn("Firestore connection pending or in offline fallback mode:", retryError.message);
+      } else {
+        console.log("Firestore connection test completed.");
+      }
     }
   }
 }

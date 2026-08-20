@@ -33,11 +33,15 @@ export default function AccountsPanel() {
 
   useEffect(() => {
     const unsubInvoices = onSnapshot(collection(db, 'invoices'), (snapshot) => {
-      setInvoices(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Invoice)));
+      const invList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Invoice));
+      console.log(`[AccountsPanel] Fetched ${invList.length} invoices from live Firestore 'invoices'`);
+      setInvoices(invList);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'invoices'));
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      setStudents(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User)));
+      const userList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
+      console.log(`[AccountsPanel] Fetched ${userList.length} users from live Firestore 'users'`);
+      setStudents(userList);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
     const unsubSettings = onSnapshot(doc(db, 'settings', 'financial'), (docSnap) => {

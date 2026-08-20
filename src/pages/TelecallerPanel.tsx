@@ -262,7 +262,9 @@ export default function TelecallerPanel() {
   useEffect(() => {
     const q = query(collection(db, 'leads'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setLeads(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Lead)));
+      const liveLeads = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Lead));
+      console.log(`[TelecallerPanel] Fetched ${liveLeads.length} leads from live Firestore 'leads' on '(default)' database`);
+      setLeads(liveLeads);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'leads'));
 
     // Subscribe to course settings dynamically

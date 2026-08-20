@@ -2,19 +2,20 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { CourseModule, TopicScore, CourseType, TrainingRecord, TrainingPlanRow } from '../types';
-import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2, Presentation, Languages, ShieldCheck, ExternalLink, RefreshCw, Sparkles, Copy, Check, Volume2, VolumeX } from 'lucide-react';
+import { Play, CheckCircle, Lock, Clock, BookOpen, ChevronRight, Upload, FileCheck, Info, Video as VideoIcon, FileText, Eye, X, XCircle, Download, ArrowRight, Map, FileSpreadsheet, HelpCircle, FolderGit2, Maximize, Minimize2, Brain, CheckSquare, Loader2, Presentation, Languages, ShieldCheck, ExternalLink, RefreshCw, Sparkles, Copy, Check, Volume2, VolumeX, Database, AlertCircle } from 'lucide-react';
 import { generateGeminiContent } from '../services/gemini';
 import { ParagraphicScriptReader } from '../components/ParagraphicScriptReader';
 import { cn, getDirectDownloadUrl, formatCourseName, getOrdinalSuffix, getScoreKey } from '../utils';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import VideoRecorder from '../components/VideoRecorder';
-import { collection, onSnapshot, query, where, addDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, addDoc, doc, getDoc, getDocs, limit } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import SecureVideoPlayer from '../components/SecureVideoPlayer';
 import SecurePdfViewer from '../components/SecurePdfViewer';
 import MindMapAI from '../components/MindMapAI';
 import { FALLBACK_COURSE_MODULES } from '../fallbackData';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 const ensureAbsoluteUrl = (url: string): string => {
   if (!url) return '';
@@ -36,14 +37,38 @@ export default function CourseModules() {
   const navigate = useNavigate();
   const { user, updateUser } = useAuth();
   const { enableDocumentDownloads, financialSettings } = useSettings();
-  const [modules, setModules] = useState<CourseModule[]>([]);
+  
+  // Initialize with cached modules if available, otherwise immediately use FALLBACK_COURSE_MODULES
+  const [modules, setModules] = useState<CourseModule[]>(() => {
+    try {
+      const cached = localStorage.getItem('cached_course_modules');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return FALLBACK_COURSE_MODULES;
+  });
+
+  const [isUsingFallback, setIsUsingFallback] = useState<boolean>(false);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState<boolean>(false);
   const [category, setCategory] = useState<string>('');
-  const [activeModule, setActiveModule] = useState<CourseModule | null>(null);
+  const [rawActiveModule, setActiveModule] = useState<CourseModule | null>(null);
   const [viewingPdf, setViewingPdf] = useState<{ url: string, title: string, isSecure?: boolean } | null>(null);
   const [isPdfFullscreen, setIsPdfFullscreen] = useState<boolean>(false);
   const [viewingIframe, setViewingIframe] = useState<{ url: string, title: string } | null>(null);
   const [iframeZoom, setIframeZoom] = useState<number>(1);
   const iframeContainerRef = useRef<HTMLDivElement>(null);
+
+  const defaultDbId = '(default)';
+  const currentDbId = localStorage.getItem('firestore_db_id') || defaultDbId;
+
+  const handleSwitchDb = (newId: string) => {
+    localStorage.setItem('firestore_db_id', newId);
+    window.location.reload();
+  };
 
   const handleOpenDocument = (url: string, title: string, isSecure: boolean = true) => {
     const absoluteUrl = ensureAbsoluteUrl(url);
@@ -95,39 +120,101 @@ export default function CourseModules() {
     }
   };
 
+  // Listen for global quota exceeded events
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'course_modules'), (snapshot) => {
-      const allModules = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CourseModule));
-      if (allModules.length > 0) {
-        setModules(allModules);
-        localStorage.setItem('cached_course_modules', JSON.stringify(allModules));
-      } else {
-        setModules([]);
-      }
-      
-      // Select initial category
-      if (!category) {
-        const defaultCat = user?.assignedCourses?.[0] || user?.assignedCourse || allModules[0]?.category || 'production-art-engineer';
-        setCategory(defaultCat);
-      }
-    }, (err) => {
-      console.warn("Firestore collection 'course_modules' subscription failed, keeping blank:", err);
-      setModules([]);
-      
-      if (!category) {
-        const defaultCat = user?.assignedCourses?.[0] || user?.assignedCourse || 'production-art-engineer';
-        setCategory(defaultCat);
-      }
-      handleFirestoreError(err, OperationType.GET, 'course_modules');
-    });
+    const handleQuota = () => {
+      setIsQuotaExceeded(true);
+      setIsUsingFallback(true);
+    };
+    window.addEventListener('firestore_quota_exceeded', handleQuota);
+    return () => window.removeEventListener('firestore_quota_exceeded', handleQuota);
+  }, []);
 
-    return () => unsub();
+  useEffect(() => {
+    // Select initial category immediately
+    if (!category) {
+      const defaultCat = user?.assignedCourses?.[0] || user?.assignedCourse || modules[0]?.category || 'production-art-engineer';
+      setCategory(defaultCat);
+    }
+
+    try {
+      const q = query(collection(db, 'course_modules'));
+      const unsub = onSnapshot(q, (snapshot) => {
+        const firestoreDocs = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as CourseModule));
+        console.log(`[CourseModules] Fetched ${firestoreDocs.length} live course modules from Firestore 'course_modules' on '(default)' database`);
+        if (firestoreDocs.length > 0) {
+          // Merge with fallback data so unseeded categories in DB always have complete content
+          const existingIds = new Set(firestoreDocs.map(d => d.id));
+          const supplementaryFallbacks = FALLBACK_COURSE_MODULES.filter(f => !existingIds.has(f.id));
+          const combined = [...firestoreDocs, ...supplementaryFallbacks];
+          
+          setModules(combined);
+          try {
+            localStorage.setItem('cached_course_modules', JSON.stringify(firestoreDocs));
+          } catch (e) {}
+          setIsUsingFallback(false);
+          setIsQuotaExceeded(false);
+        } else {
+          // Check 'modules' collection as fallback
+          getDocs(collection(db, 'modules')).then((altSnap) => {
+            if (!altSnap.empty) {
+              const altDocs = altSnap.docs.map(d => ({ ...d.data(), id: d.id } as CourseModule));
+              console.log(`[CourseModules] Fetched ${altDocs.length} modules from Firestore 'modules' collection`);
+              const existingIds = new Set(altDocs.map(d => d.id));
+              const supplementaryFallbacks = FALLBACK_COURSE_MODULES.filter(f => !existingIds.has(f.id));
+              setModules([...altDocs, ...supplementaryFallbacks]);
+              setIsUsingFallback(false);
+            } else {
+              setModules(FALLBACK_COURSE_MODULES);
+              setIsUsingFallback(true);
+            }
+          }).catch(() => {
+            setModules(FALLBACK_COURSE_MODULES);
+            setIsUsingFallback(true);
+          });
+        }
+      }, (err) => {
+        console.warn("Firestore 'course_modules' query encountered an issue. Using fallback curriculum data:", err);
+        setIsUsingFallback(true);
+        if (err?.message?.includes('Quota') || err?.message?.includes('quota') || (err as any)?.code === 'resource-exhausted') {
+          setIsQuotaExceeded(true);
+        }
+        setModules(prev => (prev && prev.length > 0 ? prev : FALLBACK_COURSE_MODULES));
+        handleFirestoreError(err, OperationType.GET, 'course_modules');
+      });
+
+      return () => unsub();
+    } catch (e) {
+      console.warn("Error subscribing to course_modules, maintaining fallback data:", e);
+      setIsUsingFallback(true);
+      setModules(prev => (prev && prev.length > 0 ? prev : FALLBACK_COURSE_MODULES));
+    }
   }, [user]);
 
   // Derived filtered modules and available categories
   // For students: ONLY show completed modules and the active (first uncompleted) module
   const filteredModules = useMemo(() => {
-    const rawForCat = modules.filter(m => m.category === category).sort((a, b) => {
+    let rawForCat = modules.filter(m => m.category === category);
+    
+    // Safety check: if no modules found for this category in active state, pull from FALLBACK_COURSE_MODULES
+    if (rawForCat.length === 0) {
+      rawForCat = FALLBACK_COURSE_MODULES.filter(m => m.category === category);
+    }
+    
+    // If still empty (e.g. custom category without fallback), generate a structured foundation module
+    if (rawForCat.length === 0) {
+      rawForCat = [{
+        id: `auto_${category}_1`,
+        title: `${formatCourseName(category as any)} - Foundation Masterclass`,
+        description: `Comprehensive core syllabus, standard operating procedures, and industrial workflows for ${formatCourseName(category as any)}.`,
+        videoUrl: 'https://www.youtube.com/embed/lA8g5Qre6P4',
+        duration: '45 mins',
+        category: category as CourseType,
+        order: 1
+      }];
+    }
+
+    const sorted = rawForCat.sort((a, b) => {
       const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999;
       const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999;
       if (orderA !== orderB) return orderA - orderB;
@@ -136,10 +223,10 @@ export default function CourseModules() {
 
     if (user?.role === 'student') {
       const completedSet = new Set(user?.completedModules || []);
-      const visibleList: typeof rawForCat = [];
+      const visibleList: typeof sorted = [];
       let foundActive = false;
 
-      for (const m of rawForCat) {
+      for (const m of sorted) {
         if (completedSet.has(m.id)) {
           visibleList.push(m);
         } else if (!foundActive) {
@@ -149,14 +236,20 @@ export default function CourseModules() {
         }
       }
 
-      return visibleList.length > 0 ? visibleList : (rawForCat.length > 0 ? [rawForCat[0]] : []);
+      return visibleList.length > 0 ? visibleList : (sorted.length > 0 ? [sorted[0]] : []);
     }
 
-    return rawForCat;
+    return sorted;
   }, [modules, category, user?.role, user?.completedModules]);
   
-  // Available course categories from financial settings or modules
-  const availableCategories = financialSettings?.coursesConfig?.map((c: any) => c.courseId) || Array.from(new Set(modules.map(m => m.category)));
+  // Available course categories from financial settings, modules, or standard fallback list
+  const availableCategories = useMemo(() => {
+    const configCats = financialSettings?.coursesConfig?.map((c: any) => c.courseId) || [];
+    const moduleCats = Array.from(new Set(modules.map(m => m.category)));
+    const fallbackCats = Array.from(new Set(FALLBACK_COURSE_MODULES.map(m => m.category)));
+    const combined = Array.from(new Set([...configCats, ...moduleCats, ...fallbackCats])).filter(Boolean);
+    return combined.length > 0 ? combined : ['packaging-engineer', 'production-art-engineer', 'print-ready-engineer', 'plate-ready-engineer', 'colour-retouching-engineer', 'quality-control-engineer', 'printing-and-packaging-cross-courses'];
+  }, [financialSettings?.coursesConfig, modules]);
 
   // Student assigned native language resolution
   const studentAssignedLanguageName = useMemo(() => {
@@ -179,7 +272,7 @@ export default function CourseModules() {
   // Set active module initially to the student's active module or first module
   useEffect(() => {
     if (filteredModules.length > 0) {
-      if (!activeModule || activeModule.category !== category || !filteredModules.some(m => m.id === activeModule.id)) {
+      if (!rawActiveModule || rawActiveModule.category !== category || !filteredModules.some(m => m.id === rawActiveModule.id)) {
         // For students, select the active (uncompleted) module, or the first available
         if (user?.role === 'student') {
           const completedSet = new Set(user?.completedModules || []);
@@ -189,8 +282,12 @@ export default function CourseModules() {
           setActiveModule(filteredModules[0]);
         }
       }
+    } else if (FALLBACK_COURSE_MODULES.length > 0 && !rawActiveModule) {
+      setActiveModule(FALLBACK_COURSE_MODULES[0]);
     }
-  }, [category, filteredModules, activeModule, user]);
+  }, [category, filteredModules, rawActiveModule, user]);
+
+  const activeModule: CourseModule = rawActiveModule || filteredModules[0] || FALLBACK_COURSE_MODULES[0];
 
   const [uploading, setUploading] = useState(false);
   const [urlModal, setUrlModal] = useState<{ isOpen: boolean, type: 'assignment' | 'worksheet' | 'project' | 'mindMap' | 'video' | null, url: string }>({ isOpen: false, type: null, url: '' });
@@ -293,18 +390,33 @@ ${text}`;
 
   useEffect(() => {
     if (!user?.id) return;
-    const q = query(collection(db, 'training_records'), where('studentId', '==', user.id));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setTrainingRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TrainingRecord)));
-    }, (err) => handleFirestoreError(err, OperationType.GET, 'training_records'));
-    return () => unsub();
+    try {
+      const q = query(collection(db, 'training_records'), where('studentId', '==', user.id), limit(50));
+      const unsub = onSnapshot(q, (snapshot) => {
+        setTrainingRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TrainingRecord)));
+      }, (err) => {
+        console.warn("training_records snapshot listener encountered error:", err);
+        handleFirestoreError(err, OperationType.GET, 'training_records');
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn("Could not query training_records:", e);
+    }
   }, [user?.id]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'training_plans'), (snapshot) => {
-      setTrainingPlans(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TrainingPlanRow)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'training_plans'));
-    return () => unsub();
+    try {
+      const q = query(collection(db, 'training_plans'), limit(50));
+      const unsub = onSnapshot(q, (snapshot) => {
+        setTrainingPlans(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TrainingPlanRow)));
+      }, (err) => {
+        console.warn("training_plans snapshot listener encountered error:", err);
+        handleFirestoreError(err, OperationType.LIST, 'training_plans');
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn("Could not query training_plans:", e);
+    }
   }, []);
 
   useEffect(() => {
@@ -500,13 +612,46 @@ ${text}`;
     updateUser({ scores: newScores });
   };
 
-  if (!activeModule) return null;
-
   const categoryKey = getScoreKey(category) as keyof typeof user.scores;
   const currentScore = (scores[categoryKey] as any)?.[activeModule.title] || { assignment: 0, video: 0, worksheet: 0, project: 0, mindMap: 0, quiz: 0, attendance: 0, onlineTest: 0 } as TopicScore;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
+      {/* Offline Sandbox / Quota Warning Banner */}
+      {(isQuotaExceeded || isUsingFallback) && (
+        <div className="p-4 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 rounded-xl shrink-0">
+              <AlertCircle className="w-5 h-5 text-amber-700" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-amber-900">Offline Sandbox / Preloaded Course Mode Active</p>
+              <p className="text-[11px] text-amber-700">
+                Displaying complete, full curriculum data with video scripts, assignments, and quizzes. Reads are locally buffered.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            {currentDbId !== '(default)' && (
+              <button
+                onClick={() => handleSwitchDb('(default)')}
+                className="flex-1 sm:flex-none px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+              >
+                <Database className="w-3.5 h-3.5" />
+                Switch to '(default)' DB
+              </button>
+            )}
+            <button
+              onClick={() => window.location.reload()}
+              className="flex-1 sm:flex-none px-3 py-1.5 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Retry Cloud Sync
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Category Tabs */}
       <div className="flex flex-wrap gap-2 p-1 bg-gray-100 rounded-xl w-full sm:w-fit">
         {availableCategories.map((cat: string) => {

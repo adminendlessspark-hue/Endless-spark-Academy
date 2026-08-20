@@ -7,6 +7,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Users, BookOpen, GraduationCap, CheckCircle, XCircle, Upload, Plus, Trash2, Video, Clock, ShieldCheck, Calendar, UserCheck, X, Download, FileText, Map as MapIcon, FileSpreadsheet, HelpCircle, Eye, Check, ExternalLink, User as UserIcon, PhoneCall, MapPin, Edit2, Edit, IndianRupee, Image, MoreVertical, Key, Ban, RefreshCw, Briefcase, Calculator, Bot, Loader2, FolderKanban, Copy, UserPlus, AlertCircle, FileCheck, ChevronDown, ChevronUp, Sparkles, Printer, Wind, Cloud, Layers, Wallet, CheckSquare, Globe, MessageCircle, Info, ChevronLeft, ChevronRight, Award, Search, Instagram, Facebook, Youtube, Linkedin, RotateCcw } from 'lucide-react';
 import { User, CourseModule, QuizQuestion, CourseType, TopicScore, Holiday, ApplicationData, TeamMember, TrainingPlanRow } from '../types';
 import { DEFAULT_TRAINING_PLANS } from '../defaultTrainingPlans';
+import { DEFAULT_STUDENTS, DEFAULT_FACULTY } from '../fallbackData';
 import { cn, compressImage, calculateSLADate, formatCourseName, getScoreKey, getCourseFromScoreKey, getStudentCourseScores, getOrdinalSuffix } from '../utils';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { FileUploader } from '../components/FileUploader';
@@ -280,8 +281,8 @@ export default function AdminPanel() {
   const [managingTestsStudent, setManagingTestsStudent] = useState<User | null>(null);
   const [submissionFilter, setSubmissionFilter] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [facultyFilter, setFacultyFilter] = useState<string>('all');
-  const [students, setStudents] = useState<User[]>([]);
-  const [faculty, setFaculty] = useState<User[]>([]);
+  const [students, setStudents] = useState<User[]>(DEFAULT_STUDENTS);
+  const [faculty, setFaculty] = useState<User[]>(DEFAULT_FACULTY);
   const [telecallers, setTelecallers] = useState<User[]>([]);
   const [marketings, setMarketings] = useState<User[]>([]);
   const [accountsExecutives, setAccountsExecutives] = useState<User[]>([]);

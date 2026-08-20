@@ -7,8 +7,12 @@ import firebaseConfig from '../firebase-applet-config.json';
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Explicitly initialize Firestore using the standard '(default)' database instance
-export const db = getFirestore(app, '(default)');
+// Initialize Firestore using the configured database ID or '(default)'
+const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId || '(default)';
+export const db = firestoreDbId && firestoreDbId !== '(default)'
+  ? getFirestore(app, firestoreDbId)
+  : getFirestore(app);
+console.log(`[Firebase Client] Initialized Firestore with DB ID: ${firestoreDbId}`);
 
 export function enableFirestoreNetwork() {
   return enableNetwork(db);
@@ -18,8 +22,8 @@ export function disableFirestoreNetwork() {
   return disableNetwork(db);
 }
 
-export const storage = getStorage(app, "gs://project-de027e39-14a0-41d7-9ea.firebasestorage.app");
-console.log("Firebase Storage initialized with active bucket: project-de027e39-14a0-41d7-9ea.firebasestorage.app");
+export const storage = getStorage(app, firebaseConfig.storageBucket || "gs://project-de027e39-14a0-41d7-9ea.firebasestorage.app");
+console.log("Firebase Storage initialized with active bucket:", firebaseConfig.storageBucket || "project-de027e39-14a0-41d7-9ea.firebasestorage.app");
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
